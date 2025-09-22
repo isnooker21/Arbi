@@ -36,9 +36,7 @@ class MainWindow:
         # Setup logging
         self.setup_logging()
         
-        # Auto Setup if requested
-        if self.auto_setup:
-            self.root.after(1000, self.auto_connect)
+        # No auto-connect - user will click Connect button manually
     
     def setup_ui(self):
         """Setup modern UI layout"""
@@ -155,6 +153,12 @@ class MainWindow:
         # Control Buttons
         buttons_frame = tk.Frame(control_frame, bg=TradingTheme.COLORS['secondary_bg'])
         buttons_frame.pack(fill='x', padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['md'])
+        
+        # Connect Button
+        self.connect_btn = TradingTheme.create_button_style(
+            buttons_frame, "🔌 CONNECT", self.connect_broker, "info"
+        )
+        self.connect_btn.pack(fill='x', pady=(0, TradingTheme.SPACING['sm']))
         
         # Start/Stop Buttons
         self.start_btn = TradingTheme.create_button_style(
@@ -382,20 +386,33 @@ class MainWindow:
         gui_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
         logging.getLogger().addHandler(gui_handler)
     
-    def auto_connect(self):
-        """Auto connect to broker"""
+    def connect_broker(self):
+        """Connect to broker manually"""
         try:
-            from main import TradingSystem
-            self.trading_system = TradingSystem()
+            self.log_message("Connecting to broker...")
+            self.update_connection_status("connecting")
             
-            if self.trading_system.broker_api and self.trading_system.broker_api.is_connected():
-                self.update_connection_status("connected")
-                self.log_message("Auto-connected to broker successfully")
-            else:
-                self.update_connection_status("disconnected")
-                self.log_message("Failed to auto-connect to broker")
+            # Import in thread to avoid blocking GUI
+            def connect_thread():
+                try:
+                    from main import TradingSystem
+                    self.trading_system = TradingSystem()
+                    
+                    if self.trading_system.broker_api and self.trading_system.broker_api.is_connected():
+                        self.root.after(0, lambda: self.update_connection_status("connected"))
+                        self.root.after(0, lambda: self.log_message("✅ Connected to broker successfully"))
+                    else:
+                        self.root.after(0, lambda: self.update_connection_status("disconnected"))
+                        self.root.after(0, lambda: self.log_message("❌ Failed to connect to broker"))
+                except Exception as e:
+                    self.root.after(0, lambda: self.log_message(f"❌ Connection error: {str(e)}"))
+                    self.root.after(0, lambda: self.update_connection_status("error"))
+            
+            # Run in separate thread
+            threading.Thread(target=connect_thread, daemon=True).start()
+            
         except Exception as e:
-            self.log_message(f"Auto-connect error: {str(e)}")
+            self.log_message(f"❌ Connection error: {str(e)}")
             self.update_connection_status("error")
     
     def update_connection_status(self, status):
@@ -482,17 +499,18 @@ class MainWindow:
         """Start trading system"""
         try:
             if not self.trading_system:
-                self.auto_connect()
+                self.log_message("❌ Please connect to broker first")
+                return
             
-            if self.trading_system and self.trading_system.start():
+            if self.trading_system.start():
                 self.is_trading = True
                 self.update_connection_status("connected")
-                self.log_message("Trading system started")
+                self.log_message("✅ Trading system started")
             else:
-                self.log_message("Failed to start trading system")
+                self.log_message("❌ Failed to start trading system")
                 
         except Exception as e:
-            self.log_message(f"Error starting trading: {str(e)}")
+            self.log_message(f"❌ Error starting trading: {str(e)}")
     
     def stop_trading(self):
         """Stop trading system"""
