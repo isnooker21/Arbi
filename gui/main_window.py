@@ -210,16 +210,20 @@ class MainWindow:
                        foreground=colors['text_primary'],
                        font=('Segoe UI', 9, 'bold'))
         
-        # Notebook styles
-        style.configure('Modern.TNotebook',
+        # Professional notebook styles
+        style.configure('TNotebook',
                        background=colors['bg_primary'],
                        borderwidth=0)
         
-        style.configure('Modern.TNotebook.Tab',
-                       background=colors['bg_secondary'],
-                       foreground=colors['text_secondary'],
-                       padding=[20, 10],
-                       font=('Segoe UI', 9, 'bold'))
+        style.configure('TNotebook.Tab',
+                       background=colors['bg_tertiary'],
+                       foreground=colors['text_primary'],
+                       padding=[15, 8],
+                       font=('Segoe UI', 10, 'bold'))
+        
+        style.map('TNotebook.Tab',
+                 background=[('selected', colors['accent_blue']),
+                           ('active', colors['highlight'])])
         
         # Map hover effects
         style.map('Success.TButton',
@@ -289,7 +293,8 @@ class MainWindow:
         content_frame = ttk.Frame(main_container)
         content_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
         
-        # Connection frame removed - using auto setup
+        # Create connection frame
+        self.create_connection_frame(main_container)
         
         # Create control frame
         self.create_control_frame(main_container)
@@ -306,7 +311,36 @@ class MainWindow:
         # Create log frame
         self.create_log_frame(main_container)
         
-    # Connection frame removed - using auto setup
+    def create_connection_frame(self, parent):
+        """Create professional broker connection controls"""
+        frame = ttk.LabelFrame(parent, text="🔗 Broker Connection", style='Header.TLabel')
+        frame.pack(fill=tk.X, padx=8, pady=8)
+        
+        # Connection controls - compact layout
+        connection_row = ttk.Frame(frame)
+        connection_row.pack(fill=tk.X, padx=8, pady=6)
+        
+        # Connection button
+        ttk.Button(connection_row, text="🔧 Connect", 
+                  command=self.auto_connect, style='Primary.TButton').pack(side=tk.LEFT, padx=10)
+        
+        # Settings button
+        ttk.Button(connection_row, text="⚙️ Settings", 
+                  command=self.open_settings, style='Secondary.TButton').pack(side=tk.LEFT, padx=10)
+        
+        # Status display
+        status_frame = ttk.Frame(frame)
+        status_frame.pack(fill=tk.X, padx=8, pady=4)
+        
+        ttk.Label(status_frame, text="Status:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
+        self.connection_status_label = ttk.Label(status_frame, text="🔴 Disconnected", 
+                                               style='Danger.TLabel')
+        self.connection_status_label.pack(side=tk.LEFT, padx=8)
+        
+        # Account info
+        self.account_info_label = ttk.Label(status_frame, text="Account: Not Connected", 
+                                          style='Muted.TLabel')
+        self.account_info_label.pack(side=tk.RIGHT, padx=5)
     
     def auto_connect(self):
         """Auto connect to MT5 - simplified version"""
@@ -436,7 +470,7 @@ class MainWindow:
         
         # Create notebook for tabs
         notebook = ttk.Notebook(frame)
-        notebook.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        notebook.pack(fill=tk.X, padx=8, pady=8)
         
         # Positions tab
         positions_frame = ttk.Frame(notebook)
@@ -444,39 +478,50 @@ class MainWindow:
         
         # Positions treeview
         columns = ('Symbol', 'Type', 'Volume', 'Price', 'PnL', 'Status')
-        self.positions_tree = ttk.Treeview(positions_frame, columns=columns, show='headings', height=8)
+        self.positions_tree = ttk.Treeview(positions_frame, columns=columns, show='headings', height=6)
         
         for col in columns:
             self.positions_tree.heading(col, text=col)
             self.positions_tree.column(col, width=100)
         
-        self.positions_tree.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        self.positions_tree.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
         
         # Scrollbar for positions
         positions_scrollbar = ttk.Scrollbar(positions_frame, orient="vertical", command=self.positions_tree.yview)
-        positions_scrollbar.grid(row=0, column=1, sticky="ns")
+        positions_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.positions_tree.configure(yscrollcommand=positions_scrollbar.set)
         
         # Performance tab
         performance_frame = ttk.Frame(notebook)
         notebook.add(performance_frame, text="Performance")
         
-        # Performance labels
-        ttk.Label(performance_frame, text="Total PnL:", style='Info.TLabel').grid(row=0, column=0, padx=5, pady=5)
-        self.total_pnl_label = ttk.Label(performance_frame, text="$0.00", style='Info.TLabel')
-        self.total_pnl_label.grid(row=0, column=1, padx=5, pady=5)
+        # Performance labels - compact layout
+        stats_frame = ttk.Frame(performance_frame)
+        stats_frame.pack(fill=tk.X, padx=8, pady=8)
         
-        ttk.Label(performance_frame, text="Win Rate:", style='Info.TLabel').grid(row=0, column=2, padx=5, pady=5)
-        self.win_rate_label = ttk.Label(performance_frame, text="0%", style='Info.TLabel')
-        self.win_rate_label.grid(row=0, column=3, padx=5, pady=5)
+        # Row 1
+        row1 = ttk.Frame(stats_frame)
+        row1.pack(fill=tk.X, pady=4)
         
-        ttk.Label(performance_frame, text="Total Trades:", style='Info.TLabel').grid(row=1, column=0, padx=5, pady=5)
-        self.total_trades_label = ttk.Label(performance_frame, text="0", style='Info.TLabel')
-        self.total_trades_label.grid(row=1, column=1, padx=5, pady=5)
+        ttk.Label(row1, text="Total PnL:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
+        self.total_pnl_label = ttk.Label(row1, text="$0.00", style='Info.TLabel')
+        self.total_pnl_label.pack(side=tk.LEFT, padx=10)
         
-        ttk.Label(performance_frame, text="Active Triangles:", style='Info.TLabel').grid(row=1, column=2, padx=5, pady=5)
-        self.active_triangles_label = ttk.Label(performance_frame, text="0", style='Info.TLabel')
-        self.active_triangles_label.grid(row=1, column=3, padx=5, pady=5)
+        ttk.Label(row1, text="Win Rate:", style='Info.TLabel').pack(side=tk.LEFT, padx=20)
+        self.win_rate_label = ttk.Label(row1, text="0%", style='Info.TLabel')
+        self.win_rate_label.pack(side=tk.LEFT, padx=10)
+        
+        # Row 2
+        row2 = ttk.Frame(stats_frame)
+        row2.pack(fill=tk.X, pady=4)
+        
+        ttk.Label(row2, text="Total Trades:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
+        self.total_trades_label = ttk.Label(row2, text="0", style='Info.TLabel')
+        self.total_trades_label.pack(side=tk.LEFT, padx=10)
+        
+        ttk.Label(row2, text="Active Triangles:", style='Info.TLabel').pack(side=tk.LEFT, padx=20)
+        self.active_triangles_label = ttk.Label(row2, text="0", style='Info.TLabel')
+        self.active_triangles_label.pack(side=tk.LEFT, padx=10)
         
     def create_chart_frame(self, parent):
         """Create professional chart display frame"""
