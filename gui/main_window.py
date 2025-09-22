@@ -59,18 +59,20 @@ class MainWindow:
         # Configure theme
         style.theme_use('clam')
         
-        # Modern color scheme
+        # Beautiful modern color scheme
         colors = {
-            'bg_primary': '#1a1a1a',
-            'bg_secondary': '#2d2d2d',
-            'bg_tertiary': '#3a3a3a',
-            'accent_blue': '#00d4ff',
-            'accent_green': '#00ff88',
-            'accent_red': '#ff4757',
-            'accent_yellow': '#ffa502',
-            'text_primary': '#ffffff',
-            'text_secondary': '#b0b0b0',
-            'text_muted': '#808080'
+            'bg_primary': '#0d1117',
+            'bg_secondary': '#161b22',
+            'bg_tertiary': '#21262d',
+            'accent_blue': '#58a6ff',
+            'accent_green': '#3fb950',
+            'accent_red': '#f85149',
+            'accent_yellow': '#d29922',
+            'accent_purple': '#a5a5ff',
+            'text_primary': '#f0f6fc',
+            'text_secondary': '#c9d1d9',
+            'text_muted': '#8b949e',
+            'border': '#30363d'
         }
         
         # Configure main styles
@@ -89,41 +91,63 @@ class MainWindow:
                        foreground=colors['text_secondary'],
                        font=('Segoe UI', 10, 'bold'))
         
-        # Button styles
+        # Beautiful button styles with hover effects
         style.configure('Success.TButton',
                        background=colors['accent_green'],
                        foreground='#000000',
-                       font=('Segoe UI', 10, 'bold'),
+                       font=('Segoe UI', 11, 'bold'),
                        borderwidth=0,
-                       focuscolor='none')
+                       focuscolor='none',
+                       relief='flat',
+                       padding=(15, 8))
         
         style.configure('Warning.TButton',
                        background=colors['accent_yellow'],
                        foreground='#000000',
-                       font=('Segoe UI', 10, 'bold'),
+                       font=('Segoe UI', 11, 'bold'),
                        borderwidth=0,
-                       focuscolor='none')
+                       focuscolor='none',
+                       relief='flat',
+                       padding=(15, 8))
         
         style.configure('Danger.TButton',
                        background=colors['accent_red'],
                        foreground='#ffffff',
-                       font=('Segoe UI', 10, 'bold'),
+                       font=('Segoe UI', 11, 'bold'),
                        borderwidth=0,
-                       focuscolor='none')
+                       focuscolor='none',
+                       relief='flat',
+                       padding=(15, 8))
         
         style.configure('Primary.TButton',
                        background=colors['accent_blue'],
-                       foreground='#000000',
-                       font=('Segoe UI', 10, 'bold'),
+                       foreground='#ffffff',
+                       font=('Segoe UI', 11, 'bold'),
                        borderwidth=0,
-                       focuscolor='none')
+                       focuscolor='none',
+                       relief='flat',
+                       padding=(15, 8))
         
         style.configure('Secondary.TButton',
                        background=colors['bg_tertiary'],
                        foreground=colors['text_primary'],
-                       font=('Segoe UI', 9),
+                       font=('Segoe UI', 10),
                        borderwidth=1,
-                       focuscolor='none')
+                       focuscolor='none',
+                       relief='flat',
+                       padding=(10, 6))
+        
+        # Add hover effects
+        style.map('Success.TButton',
+                 background=[('active', '#2ea043')])
+        style.map('Warning.TButton',
+                 background=[('active', '#bf8700')])
+        style.map('Danger.TButton',
+                 background=[('active', '#da3633')])
+        style.map('Primary.TButton',
+                 background=[('active', '#1f6feb')])
+        style.map('Secondary.TButton',
+                 background=[('active', colors['bg_secondary'])])
         
         # Label styles
         style.configure('Info.TLabel',
@@ -261,8 +285,7 @@ class MainWindow:
         content_frame = ttk.Frame(main_container)
         content_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
         
-        # Create connection frame
-        self.create_connection_frame(main_container)
+        # Connection frame removed - using auto setup
         
         # Create control frame
         self.create_control_frame(main_container)
@@ -279,75 +302,9 @@ class MainWindow:
         # Create log frame
         self.create_log_frame(main_container)
         
-    def create_connection_frame(self, parent):
-        """Create broker connection controls with Auto Setup"""
-        frame = ttk.LabelFrame(parent, text="🔗 Broker Connection", style='Header.TLabel')
-        frame.pack(fill=tk.X, padx=5, pady=5)
-        
-        # Connection fields
-        connection_row = ttk.Frame(frame)
-        connection_row.pack(fill=tk.X, padx=5, pady=5)
-        
-        ttk.Label(connection_row, text="Broker:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
-        self.broker_var = tk.StringVar(value="MetaTrader5")
-        broker_combo = ttk.Combobox(connection_row, textvariable=self.broker_var, 
-                                  values=["MetaTrader5", "OANDA", "FXCM"], width=15, style='Modern.TCombobox')
-        broker_combo.pack(side=tk.LEFT, padx=5)
-        
-        # Account info display
-        self.account_info_label = ttk.Label(connection_row, text="Account: Not Connected", style='Muted.TLabel')
-        self.account_info_label.pack(side=tk.LEFT, padx=10)
-        
-        # Connection controls
-        ttk.Button(connection_row, text="🔧 Auto Connect", 
-                  command=self.auto_connect, style='Primary.TButton').pack(side=tk.LEFT, padx=5)
-        
-        ttk.Button(connection_row, text="⚙️ Settings", 
-                  command=self.open_settings, style='Secondary.TButton').pack(side=tk.LEFT, padx=5)
-        
-        # Status indicator
-        self.connection_status_label = ttk.Label(connection_row, text="🔴 Disconnected", 
-                                               style='Danger.TLabel')
-        self.connection_status_label.pack(side=tk.RIGHT, padx=5)
+    # Connection frame removed - using auto setup
     
-    def auto_connect(self):
-        """Auto connect to MT5"""
-        def auto_connect_thread():
-            try:
-                self.log_message("กำลังทำ Auto Setup...")
-                
-                # Import and create trading system
-                from main import TradingSystem
-                self.trading_system = TradingSystem(auto_setup=True)
-                
-                # Update connection status
-                self.connection_status = "Connected"
-                self.update_connection_status()
-                
-                # Update account info
-                if self.trading_system.broker_api and self.trading_system.broker_api.account_info:
-                    account = self.trading_system.broker_api.account_info
-                    self.account_info_label.config(text=f"Account: {account.login} | Balance: {account.balance:.2f} {account.currency}")
-                    self.log_message(f"เชื่อมต่อสำเร็จ - Account: {account.login}, Balance: {account.balance:.2f}")
-                else:
-                    self.log_message("เชื่อมต่อสำเร็จ แต่ไม่สามารถดึงข้อมูลบัญชีได้")
-                
-            except Exception as e:
-                self.connection_status = "Failed"
-                self.update_connection_status()
-                self.log_message(f"Auto Setup ล้มเหลว: {str(e)}")
-        
-        # Run in separate thread
-        threading.Thread(target=auto_connect_thread, daemon=True).start()
-    
-    def update_connection_status(self):
-        """Update connection status display"""
-        if self.connection_status == "Connected":
-            self.connection_status_label.config(text="🟢 Connected", style='Success.TLabel')
-        elif self.connection_status == "Failed":
-            self.connection_status_label.config(text="🔴 Failed", style='Danger.TLabel')
-        else:
-            self.connection_status_label.config(text="🔴 Disconnected", style='Danger.TLabel')
+    # Auto connect functionality removed - handled by main.py
     
     def open_settings(self):
         """Open settings window"""
@@ -358,77 +315,87 @@ class MainWindow:
             self.log_message(f"ไม่สามารถเปิดหน้าต่างตั้งค่า: {e}")
         
     def create_control_frame(self, parent):
-        """Create trading control panel"""
+        """Create beautiful trading control panel"""
         frame = ttk.LabelFrame(parent, text="🎮 Trading Control", style='Header.TLabel')
-        frame.pack(fill=tk.X, padx=5, pady=5)
+        frame.pack(fill=tk.X, padx=10, pady=10)
         
-        # System toggles
-        control_row = ttk.Frame(frame)
-        control_row.pack(fill=tk.X, padx=5, pady=5)
+        # System toggles with beautiful layout
+        toggle_frame = ttk.Frame(frame)
+        toggle_frame.pack(fill=tk.X, padx=10, pady=10)
         
         self.arbitrage_enabled = tk.BooleanVar(value=True)
-        ttk.Checkbutton(control_row, text="Arbitrage System", 
-                       variable=self.arbitrage_enabled, style='Info.TLabel').pack(side=tk.LEFT, padx=5)
+        ttk.Checkbutton(toggle_frame, text="🔍 Arbitrage System", 
+                       variable=self.arbitrage_enabled, style='Info.TLabel').pack(side=tk.LEFT, padx=15)
         
         self.correlation_enabled = tk.BooleanVar(value=True)
-        ttk.Checkbutton(control_row, text="Correlation System", 
-                       variable=self.correlation_enabled, style='Info.TLabel').pack(side=tk.LEFT, padx=5)
+        ttk.Checkbutton(toggle_frame, text="📊 Correlation System", 
+                       variable=self.correlation_enabled, style='Info.TLabel').pack(side=tk.LEFT, padx=15)
         
-        # Trading controls
-        ttk.Button(control_row, text="🚀 START TRADING", 
+        # Trading controls with beautiful spacing
+        button_frame = ttk.Frame(frame)
+        button_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        ttk.Button(button_frame, text="🚀 START TRADING", 
                   command=self.start_trading, 
-                  style="Success.TButton").pack(side=tk.LEFT, padx=10)
+                  style="Success.TButton").pack(side=tk.LEFT, padx=15)
         
-        ttk.Button(control_row, text="⏹️ STOP TRADING", 
+        ttk.Button(button_frame, text="⏹️ STOP TRADING", 
                   command=self.stop_trading,
-                  style="Warning.TButton").pack(side=tk.LEFT, padx=10)
+                  style="Warning.TButton").pack(side=tk.LEFT, padx=15)
         
-        ttk.Button(control_row, text="🛑 EMERGENCY STOP", 
+        ttk.Button(button_frame, text="🛑 EMERGENCY STOP", 
                   command=self.emergency_stop,
-                  style="Danger.TButton").pack(side=tk.LEFT, padx=10)
+                  style="Danger.TButton").pack(side=tk.LEFT, padx=15)
         
-        # Status display
-        self.trading_status_label = ttk.Label(control_row, text="⏸️ Stopped", 
+        # Status display with beautiful styling
+        status_frame = ttk.Frame(frame)
+        status_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(status_frame, text="Status:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
+        self.trading_status_label = ttk.Label(status_frame, text="⏸️ Stopped", 
                                             style='Warning.TLabel')
-        self.trading_status_label.pack(side=tk.RIGHT, padx=5)
+        self.trading_status_label.pack(side=tk.LEFT, padx=10)
         
     def create_ai_frame(self, parent):
-        """Create AI control and monitoring"""
+        """Create beautiful AI control and monitoring"""
         frame = ttk.LabelFrame(parent, text="🤖 AI Engine", style='Header.TLabel')
-        frame.pack(fill=tk.X, padx=5, pady=5)
+        frame.pack(fill=tk.X, padx=10, pady=10)
         
-        # AI status
-        ai_row = ttk.Frame(frame)
-        ai_row.pack(fill=tk.X, padx=5, pady=5)
+        # AI status with beautiful layout
+        ai_status_frame = ttk.Frame(frame)
+        ai_status_frame.pack(fill=tk.X, padx=10, pady=10)
         
-        ttk.Label(ai_row, text="AI Status:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
-        self.ai_status_label = ttk.Label(ai_row, text="🟢 Active", style='Success.TLabel')
-        self.ai_status_label.pack(side=tk.LEFT, padx=5)
+        ttk.Label(ai_status_frame, text="AI Status:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
+        self.ai_status_label = ttk.Label(ai_status_frame, text="🟢 Active", style='Success.TLabel')
+        self.ai_status_label.pack(side=tk.LEFT, padx=10)
         
         # Rule counts
-        ttk.Label(ai_row, text="Active Rules:", style='Info.TLabel').pack(side=tk.LEFT, padx=10)
-        self.active_rules_label = ttk.Label(ai_row, text="247", style='Info.TLabel')
+        ttk.Label(ai_status_frame, text="Active Rules:", style='Info.TLabel').pack(side=tk.LEFT, padx=20)
+        self.active_rules_label = ttk.Label(ai_status_frame, text="247", style='Info.TLabel')
         self.active_rules_label.pack(side=tk.LEFT, padx=5)
         
-        # Confidence level
-        ttk.Label(ai_row, text="Confidence:", style='Info.TLabel').pack(side=tk.LEFT, padx=10)
+        # Confidence level with beautiful progress bar
+        confidence_frame = ttk.Frame(frame)
+        confidence_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(confidence_frame, text="Confidence:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
         self.confidence_var = tk.DoubleVar()
-        self.confidence_progress = ttk.Progressbar(ai_row, variable=self.confidence_var, 
-                                                 maximum=100, length=200)
-        self.confidence_progress.pack(side=tk.LEFT, padx=5)
+        self.confidence_progress = ttk.Progressbar(confidence_frame, variable=self.confidence_var, 
+                                                 maximum=100, length=300, style='TProgressbar')
+        self.confidence_progress.pack(side=tk.LEFT, padx=10)
         
-        # Last decision
-        decision_row = ttk.Frame(frame)
-        decision_row.pack(fill=tk.X, padx=5, pady=5)
+        # Last decision with beautiful styling
+        decision_frame = ttk.Frame(frame)
+        decision_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        ttk.Label(decision_row, text="Last Decision:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
-        self.last_decision_label = ttk.Label(decision_row, text="⏳ Waiting...", style='Muted.TLabel')
-        self.last_decision_label.pack(side=tk.LEFT, padx=5)
+        ttk.Label(decision_frame, text="Last Decision:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
+        self.last_decision_label = ttk.Label(decision_frame, text="⏳ Waiting...", style='Muted.TLabel')
+        self.last_decision_label.pack(side=tk.LEFT, padx=10)
         
     def create_monitoring_frame(self, parent):
-        """Create monitoring and statistics frame"""
+        """Create beautiful monitoring and statistics frame"""
         frame = ttk.LabelFrame(parent, text="📊 Trading Monitor", style='Header.TLabel')
-        frame.pack(fill=tk.X, padx=5, pady=5)
+        frame.pack(fill=tk.X, padx=10, pady=10)
         
         # Create notebook for tabs
         notebook = ttk.Notebook(frame)
@@ -475,9 +442,9 @@ class MainWindow:
         self.active_triangles_label.grid(row=1, column=3, padx=5, pady=5)
         
     def create_chart_frame(self, parent):
-        """Create chart display frame"""
+        """Create beautiful chart display frame"""
         frame = ttk.LabelFrame(parent, text="📊 Charts", style='Header.TLabel')
-        frame.pack(fill=tk.X, padx=5, pady=5)
+        frame.pack(fill=tk.X, padx=10, pady=10)
         
         # Placeholder for charts
         self.chart_label = ttk.Label(frame, text="📊 Charts will be displayed here\n\nReal-time price charts and analysis will appear in this area.", 
@@ -494,18 +461,19 @@ class MainWindow:
                   style='Secondary.TButton').pack(side=tk.LEFT, padx=(10, 0))
         
     def create_log_frame(self, parent):
-        """Create log display frame"""
+        """Create beautiful log display frame"""
         frame = ttk.LabelFrame(parent, text="📝 System Log", style='Header.TLabel')
-        frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Log text area
-        self.log_text = scrolledtext.ScrolledText(frame, height=8, bg='#2d2d2d', 
-                                                fg='#ffffff', font=('Consolas', 9), insertbackground='#00d4ff')
-        self.log_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # Beautiful log text area
+        self.log_text = scrolledtext.ScrolledText(frame, height=8, bg='#0d1117', 
+                                                fg='#f0f6fc', font=('Consolas', 10), insertbackground='#58a6ff',
+                                                selectbackground='#264f78', selectforeground='#f0f6fc')
+        self.log_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Clear log button
-        ttk.Button(frame, text="Clear Log", 
-                  command=self.clear_log, style='Secondary.TButton').pack(padx=5, pady=5)
+        # Clear log button with beautiful styling
+        ttk.Button(frame, text="🗑️ Clear Log", 
+                  command=self.clear_log, style='Secondary.TButton').pack(padx=10, pady=5)
     
     def open_charts(self):
         """Open charts window"""
