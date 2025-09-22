@@ -519,7 +519,7 @@ class MainWindow:
         try:
             if self.trading_system:
                 self.trading_system.stop()
-            self.is_trading = False
+                self.is_trading = False
                 self.update_connection_status("disconnected")
                 self.log_message("Trading system stopped")
             else:
@@ -531,16 +531,16 @@ class MainWindow:
     def emergency_stop(self):
         """Emergency stop all trading"""
         if messagebox.askyesno("EMERGENCY STOP", "This will immediately stop all trading activities. Continue?"):
-        try:
-            if self.trading_system:
-                self.trading_system.emergency_stop()
-            self.is_trading = False
+            try:
+                if self.trading_system:
+                    self.trading_system.emergency_stop()
+                    self.is_trading = False
                     self.update_connection_status("disconnected")
                     self.log_message("🚨 EMERGENCY STOP ACTIVATED")
                 else:
                     self.log_message("Trading system not available")
-            
-        except Exception as e:
+                
+            except Exception as e:
                 self.log_message(f"Emergency stop error: {str(e)}")
     
     def show_settings(self):
@@ -565,7 +565,7 @@ class MainWindow:
     
     def run(self):
         """Run the GUI"""
-            self.root.mainloop()
+        self.root.mainloop()
             
 def main():
     """Main function to run the GUI"""
