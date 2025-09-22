@@ -29,9 +29,9 @@ class MainWindow:
     def __init__(self, auto_setup=True):
         self.root = tk.Tk()
         self.root.title("🎯 Forex Arbitrage AI Trading System")
-        self.root.geometry("1600x900")
+        self.root.geometry("1200x700")
         self.root.configure(bg='#000000')
-        self.root.minsize(1200, 700)
+        self.root.minsize(1000, 600)
         
         # Initialize variables
         self.trading_system = None
@@ -59,21 +59,24 @@ class MainWindow:
         # Configure theme
         style.theme_use('clam')
         
-        # Beautiful dark theme color scheme
+        # Professional dark theme color scheme
         colors = {
-            'bg_primary': '#000000',
-            'bg_secondary': '#111111',
-            'bg_tertiary': '#1a1a1a',
-            'accent_blue': '#00bfff',
-            'accent_green': '#00ff88',
-            'accent_red': '#ff4757',
-            'accent_yellow': '#ffa502',
-            'accent_purple': '#9c88ff',
+            'bg_primary': '#0a0a0a',
+            'bg_secondary': '#1a1a1a',
+            'bg_tertiary': '#2a2a2a',
+            'accent_blue': '#007acc',
+            'accent_green': '#28a745',
+            'accent_red': '#dc3545',
+            'accent_yellow': '#ffc107',
+            'accent_orange': '#fd7e14',
             'text_primary': '#ffffff',
-            'text_secondary': '#e0e0e0',
-            'text_muted': '#a0a0a0',
-            'border': '#333333',
-            'highlight': '#1e1e1e'
+            'text_secondary': '#d1d5db',
+            'text_muted': '#9ca3af',
+            'border': '#374151',
+            'highlight': '#1f2937',
+            'success': '#10b981',
+            'warning': '#f59e0b',
+            'danger': '#ef4444'
         }
         
         # Configure main styles
@@ -92,61 +95,61 @@ class MainWindow:
                        foreground=colors['text_secondary'],
                        font=('Segoe UI', 10, 'bold'))
         
-        # Beautiful button styles with hover effects
+        # Professional button styles
         style.configure('Success.TButton',
-                       background=colors['accent_green'],
-                       foreground='#000000',
-                       font=('Segoe UI', 12, 'bold'),
+                       background=colors['success'],
+                       foreground='#ffffff',
+                       font=('Segoe UI', 11, 'bold'),
                        borderwidth=0,
                        focuscolor='none',
                        relief='flat',
-                       padding=(20, 10))
+                       padding=(16, 8))
         
         style.configure('Warning.TButton',
-                       background=colors['accent_yellow'],
+                       background=colors['warning'],
                        foreground='#000000',
-                       font=('Segoe UI', 12, 'bold'),
+                       font=('Segoe UI', 11, 'bold'),
                        borderwidth=0,
                        focuscolor='none',
                        relief='flat',
-                       padding=(20, 10))
+                       padding=(16, 8))
         
         style.configure('Danger.TButton',
-                       background=colors['accent_red'],
+                       background=colors['danger'],
                        foreground='#ffffff',
-                       font=('Segoe UI', 12, 'bold'),
+                       font=('Segoe UI', 11, 'bold'),
                        borderwidth=0,
                        focuscolor='none',
                        relief='flat',
-                       padding=(20, 10))
+                       padding=(16, 8))
         
         style.configure('Primary.TButton',
                        background=colors['accent_blue'],
                        foreground='#ffffff',
-                       font=('Segoe UI', 12, 'bold'),
+                       font=('Segoe UI', 11, 'bold'),
                        borderwidth=0,
                        focuscolor='none',
                        relief='flat',
-                       padding=(20, 10))
+                       padding=(16, 8))
         
         style.configure('Secondary.TButton',
                        background=colors['bg_tertiary'],
                        foreground=colors['text_primary'],
-                       font=('Segoe UI', 11),
+                       font=('Segoe UI', 10),
                        borderwidth=1,
                        focuscolor='none',
                        relief='flat',
-                       padding=(15, 8))
+                       padding=(12, 6))
         
-        # Add beautiful hover effects
+        # Professional hover effects
         style.map('Success.TButton',
-                 background=[('active', '#00e676')])
+                 background=[('active', '#059669')])
         style.map('Warning.TButton',
-                 background=[('active', '#ffb74d')])
+                 background=[('active', '#d97706')])
         style.map('Danger.TButton',
-                 background=[('active', '#ff5722')])
+                 background=[('active', '#b91c1c')])
         style.map('Primary.TButton',
-                 background=[('active', '#0099ff')])
+                 background=[('active', '#0056b3')])
         style.map('Secondary.TButton',
                  background=[('active', colors['highlight'])])
         
@@ -278,13 +281,13 @@ class MainWindow:
         
     def setup_ui(self):
         """Setup the main user interface"""
-        # Create main container with modern layout
+        # Create main container with professional layout
         main_container = ttk.Frame(self.root, style='Card.TFrame')
-        main_container.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # Create main content area
         content_frame = ttk.Frame(main_container)
-        content_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+        content_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
         
         # Connection frame removed - using auto setup
         
@@ -349,87 +352,87 @@ class MainWindow:
             self.log_message(f"ไม่สามารถเปิดหน้าต่างตั้งค่า: {e}")
         
     def create_control_frame(self, parent):
-        """Create beautiful trading control panel"""
+        """Create professional trading control panel"""
         frame = ttk.LabelFrame(parent, text="🎮 Trading Control", style='Header.TLabel')
-        frame.pack(fill=tk.X, padx=10, pady=10)
+        frame.pack(fill=tk.X, padx=8, pady=8)
         
-        # System toggles with beautiful layout
+        # System toggles - compact layout
         toggle_frame = ttk.Frame(frame)
-        toggle_frame.pack(fill=tk.X, padx=10, pady=10)
+        toggle_frame.pack(fill=tk.X, padx=8, pady=6)
         
         self.arbitrage_enabled = tk.BooleanVar(value=True)
-        ttk.Checkbutton(toggle_frame, text="🔍 Arbitrage System", 
-                       variable=self.arbitrage_enabled, style='Info.TLabel').pack(side=tk.LEFT, padx=15)
+        ttk.Checkbutton(toggle_frame, text="Arbitrage System", 
+                       variable=self.arbitrage_enabled, style='Info.TLabel').pack(side=tk.LEFT, padx=10)
         
         self.correlation_enabled = tk.BooleanVar(value=True)
-        ttk.Checkbutton(toggle_frame, text="📊 Correlation System", 
-                       variable=self.correlation_enabled, style='Info.TLabel').pack(side=tk.LEFT, padx=15)
+        ttk.Checkbutton(toggle_frame, text="Correlation System", 
+                       variable=self.correlation_enabled, style='Info.TLabel').pack(side=tk.LEFT, padx=10)
         
-        # Trading controls with beautiful spacing
+        # Trading controls - compact layout
         button_frame = ttk.Frame(frame)
-        button_frame.pack(fill=tk.X, padx=10, pady=10)
+        button_frame.pack(fill=tk.X, padx=8, pady=6)
         
-        ttk.Button(button_frame, text="🚀 START TRADING", 
+        ttk.Button(button_frame, text="▶️ START", 
                   command=self.start_trading, 
-                  style="Success.TButton").pack(side=tk.LEFT, padx=15)
+                  style="Success.TButton").pack(side=tk.LEFT, padx=8)
         
-        ttk.Button(button_frame, text="⏹️ STOP TRADING", 
+        ttk.Button(button_frame, text="⏸️ STOP", 
                   command=self.stop_trading,
-                  style="Warning.TButton").pack(side=tk.LEFT, padx=15)
+                  style="Warning.TButton").pack(side=tk.LEFT, padx=8)
         
-        ttk.Button(button_frame, text="🛑 EMERGENCY STOP", 
+        ttk.Button(button_frame, text="🛑 EMERGENCY", 
                   command=self.emergency_stop,
-                  style="Danger.TButton").pack(side=tk.LEFT, padx=15)
+                  style="Danger.TButton").pack(side=tk.LEFT, padx=8)
         
-        # Status display with beautiful styling
+        # Status display - compact
         status_frame = ttk.Frame(frame)
-        status_frame.pack(fill=tk.X, padx=10, pady=5)
+        status_frame.pack(fill=tk.X, padx=8, pady=4)
         
         ttk.Label(status_frame, text="Status:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
         self.trading_status_label = ttk.Label(status_frame, text="⏸️ Stopped", 
                                             style='Warning.TLabel')
-        self.trading_status_label.pack(side=tk.LEFT, padx=10)
+        self.trading_status_label.pack(side=tk.LEFT, padx=8)
         
     def create_ai_frame(self, parent):
-        """Create beautiful AI control and monitoring"""
+        """Create professional AI control and monitoring"""
         frame = ttk.LabelFrame(parent, text="🤖 AI Engine", style='Header.TLabel')
-        frame.pack(fill=tk.X, padx=10, pady=10)
+        frame.pack(fill=tk.X, padx=8, pady=8)
         
-        # AI status with beautiful layout
+        # AI status - compact layout
         ai_status_frame = ttk.Frame(frame)
-        ai_status_frame.pack(fill=tk.X, padx=10, pady=10)
+        ai_status_frame.pack(fill=tk.X, padx=8, pady=6)
         
-        ttk.Label(ai_status_frame, text="AI Status:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
+        ttk.Label(ai_status_frame, text="Status:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
         self.ai_status_label = ttk.Label(ai_status_frame, text="🟢 Active", style='Success.TLabel')
-        self.ai_status_label.pack(side=tk.LEFT, padx=10)
+        self.ai_status_label.pack(side=tk.LEFT, padx=8)
         
         # Rule counts
-        ttk.Label(ai_status_frame, text="Active Rules:", style='Info.TLabel').pack(side=tk.LEFT, padx=20)
+        ttk.Label(ai_status_frame, text="Rules:", style='Info.TLabel').pack(side=tk.LEFT, padx=15)
         self.active_rules_label = ttk.Label(ai_status_frame, text="247", style='Info.TLabel')
         self.active_rules_label.pack(side=tk.LEFT, padx=5)
         
-        # Confidence level with beautiful progress bar
+        # Confidence level - compact
         confidence_frame = ttk.Frame(frame)
-        confidence_frame.pack(fill=tk.X, padx=10, pady=5)
+        confidence_frame.pack(fill=tk.X, padx=8, pady=4)
         
         ttk.Label(confidence_frame, text="Confidence:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
         self.confidence_var = tk.DoubleVar()
         self.confidence_progress = ttk.Progressbar(confidence_frame, variable=self.confidence_var, 
-                                                 maximum=100, length=300, style='TProgressbar')
-        self.confidence_progress.pack(side=tk.LEFT, padx=10)
+                                                 maximum=100, length=200, style='TProgressbar')
+        self.confidence_progress.pack(side=tk.LEFT, padx=8)
         
-        # Last decision with beautiful styling
+        # Last decision - compact
         decision_frame = ttk.Frame(frame)
-        decision_frame.pack(fill=tk.X, padx=10, pady=5)
+        decision_frame.pack(fill=tk.X, padx=8, pady=4)
         
-        ttk.Label(decision_frame, text="Last Decision:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
+        ttk.Label(decision_frame, text="Decision:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
         self.last_decision_label = ttk.Label(decision_frame, text="⏳ Waiting...", style='Muted.TLabel')
-        self.last_decision_label.pack(side=tk.LEFT, padx=10)
+        self.last_decision_label.pack(side=tk.LEFT, padx=8)
         
     def create_monitoring_frame(self, parent):
-        """Create beautiful monitoring and statistics frame"""
+        """Create professional monitoring and statistics frame"""
         frame = ttk.LabelFrame(parent, text="📊 Trading Monitor", style='Header.TLabel')
-        frame.pack(fill=tk.X, padx=10, pady=10)
+        frame.pack(fill=tk.X, padx=8, pady=8)
         
         # Create notebook for tabs
         notebook = ttk.Notebook(frame)
@@ -476,9 +479,9 @@ class MainWindow:
         self.active_triangles_label.grid(row=1, column=3, padx=5, pady=5)
         
     def create_chart_frame(self, parent):
-        """Create beautiful chart display frame"""
+        """Create professional chart display frame"""
         frame = ttk.LabelFrame(parent, text="📊 Charts", style='Header.TLabel')
-        frame.pack(fill=tk.X, padx=10, pady=10)
+        frame.pack(fill=tk.X, padx=8, pady=8)
         
         # Placeholder for charts
         self.chart_label = ttk.Label(frame, text="📊 Charts will be displayed here\n\nReal-time price charts and analysis will appear in this area.", 
@@ -495,20 +498,20 @@ class MainWindow:
                   style='Secondary.TButton').pack(side=tk.LEFT, padx=(10, 0))
         
     def create_log_frame(self, parent):
-        """Create beautiful log display frame"""
+        """Create professional log display frame"""
         frame = ttk.LabelFrame(parent, text="📝 System Log", style='Header.TLabel')
-        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
         
-        # Beautiful log text area with dark theme
-        self.log_text = scrolledtext.ScrolledText(frame, height=8, bg='#000000', 
-                                                fg='#ffffff', font=('Consolas', 11), insertbackground='#00bfff',
-                                                selectbackground='#333333', selectforeground='#ffffff',
+        # Professional log text area
+        self.log_text = scrolledtext.ScrolledText(frame, height=6, bg='#0a0a0a', 
+                                                fg='#ffffff', font=('Consolas', 10), insertbackground='#007acc',
+                                                selectbackground='#374151', selectforeground='#ffffff',
                                                 relief='flat', borderwidth=0)
-        self.log_text.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        self.log_text.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
         
-        # Clear log button with beautiful styling
-        ttk.Button(frame, text="🗑️ Clear Log", 
-                  command=self.clear_log, style='Secondary.TButton').pack(padx=10, pady=5)
+        # Clear log button - compact
+        ttk.Button(frame, text="🗑️ Clear", 
+                  command=self.clear_log, style='Secondary.TButton').pack(padx=8, pady=4)
     
     def open_charts(self):
         """Open charts window"""
