@@ -62,8 +62,14 @@ class CorrelationManager:
                 self.logger.error(f"Error in correlation monitoring loop: {e}")
                 threading.Event().wait(60)
     
-    def calculate_correlations(self, lookback_hours: int = 24):
-        """Calculate correlation matrix for all pairs"""
+    def calculate_correlations(self, lookback_days: int = 30, timeframes: List[str] = ['H1', 'H4', 'D1']):
+        """
+        คำนวณ correlation matrix แบบขยายด้วย multiple timeframes และ weighted correlation
+        
+        Parameters:
+        - lookback_days: จำนวนวันที่ใช้ในการคำนวณ (default: 30 วัน)
+        - timeframes: รายการ timeframes ที่ใช้ ['H1', 'H4', 'D1']
+        """
         try:
             pairs = self.broker.get_available_pairs()
             
@@ -75,27 +81,42 @@ class CorrelationManager:
             
             for pair1 in pairs:
                 correlations[pair1] = {}
-                data1 = self.broker.get_historical_data(pair1, 'H1', lookback_hours)
-                
-                if data1 is None or len(data1) < 10:
-                    continue
                 
                 for pair2 in pairs:
                     if pair1 != pair2:
-                        data2 = self.broker.get_historical_data(pair2, 'H1', lookback_hours)
+                        # คำนวณ correlation สำหรับแต่ละ timeframe
+                        correlation_scores = []
+                        weights = []
                         
-                        if data2 is None or len(data2) < 10:
-                            continue
+                        for tf in timeframes:
+                            # คำนวณจำนวนชั่วโมงสำหรับแต่ละ timeframe
+                            hours = lookback_days * 24 if tf == 'H1' else (lookback_days * 6 if tf == 'H4' else lookback_days)
+                            
+                            data1 = self.broker.get_historical_data(pair1, tf, hours)
+                            data2 = self.broker.get_historical_data(pair2, tf, hours)
+                            
+                            if self._validate_correlation_data(data1, data2):
+                                # คำนวณ weighted correlation สำหรับ timeframe นี้
+                                correlation = self._calculate_weighted_correlation(data1, data2)
+                                correlation_scores.append(correlation)
+                                
+                                # กำหนด weight: H1=0.5, H4=0.3, D1=0.2
+                                weight = 0.5 if tf == 'H1' else (0.3 if tf == 'H4' else 0.2)
+                                weights.append(weight)
                         
-                        corr = self.calculate_pair_correlation(data1, data2)
-                        correlations[pair1][pair2] = corr
+                        # คำนวณ weighted average correlation
+                        if correlation_scores:
+                            final_correlation = sum(c*w for c, w in zip(correlation_scores, weights)) / sum(weights)
+                            correlations[pair1][pair2] = final_correlation
+                        else:
+                            correlations[pair1][pair2] = 0.0
             
             self.correlation_matrix = correlations
-            self.logger.info(f"Updated correlation matrix for {len(pairs)} pairs")
+            self.logger.info(f"Updated enhanced correlation matrix for {len(pairs)} pairs using {lookback_days} days")
             return correlations
             
         except Exception as e:
-            self.logger.error(f"Error calculating correlations: {e}")
+            self.logger.error(f"Error calculating enhanced correlations: {e}")
             return {}
     
     def calculate_pair_correlation(self, data1: pd.DataFrame, data2: pd.DataFrame) -> float:
@@ -126,6 +147,95 @@ class CorrelationManager:
             
         except Exception as e:
             self.logger.error(f"Error calculating pair correlation: {e}")
+            return 0.0
+    
+    def _validate_correlation_data(self, data1: pd.DataFrame, data2: pd.DataFrame) -> bool:
+        """
+        ตรวจสอบความถูกต้องของข้อมูลสำหรับการคำนวณ correlation
+        
+        Parameters:
+        - data1, data2: ข้อมูล DataFrame
+        
+        Returns:
+        - True ถ้าข้อมูลถูกต้อง, False ถ้าไม่ถูกต้อง
+        """
+        try:
+            if data1 is None or data2 is None:
+                return False
+            
+            if len(data1) < 10 or len(data2) < 10:
+                return False
+            
+            if len(data1) != len(data2):
+                return False
+            
+            # ตรวจสอบข้อมูลที่ไม่มีค่า
+            if data1['close'].isna().any() or data2['close'].isna().any():
+                return False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error validating correlation data: {e}")
+            return False
+    
+    def _calculate_weighted_correlation(self, data1: pd.DataFrame, data2: pd.DataFrame, 
+                                      decay_factor: float = 0.1) -> float:
+        """
+        คำนวณ weighted correlation โดยให้ความสำคัญกับข้อมูลล่าสุดมากขึ้น
+        
+        Parameters:
+        - data1, data2: ข้อมูล DataFrame
+        - decay_factor: ปัจจัยการลดลง (ยิ่งมากยิ่งให้ความสำคัญกับข้อมูลล่าสุด)
+        
+        Returns:
+        - Weighted correlation coefficient
+        """
+        try:
+            # Align data by timestamp
+            merged = pd.merge(data1[['close']], data2[['close']], 
+                            left_index=True, right_index=True, 
+                            suffixes=('_1', '_2'))
+            
+            if len(merged) < 10:
+                return 0.0
+            
+            # Calculate returns
+            returns1 = merged['close_1'].pct_change().dropna()
+            returns2 = merged['close_2'].pct_change().dropna()
+            
+            # Align returns
+            aligned_returns = pd.merge(returns1, returns2, left_index=True, right_index=True)
+            
+            if len(aligned_returns) < 5:
+                return 0.0
+            
+            # Create weights (ข้อมูลล่าสุดมี weight สูงกว่า)
+            n = len(aligned_returns)
+            weights = np.exp(-decay_factor * np.arange(n-1, -1, -1))
+            weights = weights / weights.sum()  # Normalize weights
+            
+            # Calculate weighted correlation
+            data1_array = aligned_returns['close_1'].values
+            data2_array = aligned_returns['close_2'].values
+            
+            # Weighted covariance
+            mean1 = np.average(data1_array, weights=weights)
+            mean2 = np.average(data2_array, weights=weights)
+            
+            cov = np.average((data1_array - mean1) * (data2_array - mean2), weights=weights)
+            var1 = np.average((data1_array - mean1) ** 2, weights=weights)
+            var2 = np.average((data2_array - mean2) ** 2, weights=weights)
+            
+            if var1 == 0 or var2 == 0:
+                return 0.0
+            
+            correlation = cov / np.sqrt(var1 * var2)
+            
+            return correlation if not np.isnan(correlation) else 0.0
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating weighted correlation: {e}")
             return 0.0
     
     def find_recovery_opportunities(self, stuck_positions: List[Dict]) -> List[Dict]:

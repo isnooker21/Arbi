@@ -192,9 +192,9 @@ class TradingSystem:
             self.broker_api = BrokerAPI()
             self.logger.info("Broker API initialized")
             
-            # Initialize risk manager
+            # Initialize risk manager (enhanced)
             self.risk_manager = RiskManager()
-            self.logger.info("Risk manager initialized")
+            self.logger.info("Enhanced risk manager initialized")
             
             # Initialize position manager
             self.position_manager = PositionManager(self.broker_api, self.risk_manager)
@@ -373,11 +373,22 @@ class TradingSystem:
                     if self.market_analyzer:
                         market_conditions = self.market_analyzer.analyze_market_conditions()
                     
-                    # Check risk management
-                    if self.risk_manager and self.risk_manager.should_stop_trading():
-                        self.logger.warning("Risk management triggered - stopping trading")
-                        self.stop()
-                        break
+                    # Check enhanced risk management (includes circuit breaker)
+                    if self.risk_manager:
+                        account_balance = self.broker_api.get_account_balance() if self.broker_api else 10000
+                        current_pnl = self.position_manager.get_total_pnl() if self.position_manager else 0
+                        
+                        # Check circuit breaker
+                        if not self.risk_manager.check_circuit_breaker(current_pnl, account_balance):
+                            self.logger.warning("Circuit breaker triggered - stopping trading")
+                            self.stop()
+                            break
+                        
+                        # Check traditional risk management
+                        if self.risk_manager.should_stop_trading():
+                            self.logger.warning("Risk management triggered - stopping trading")
+                            self.stop()
+                            break
                     
                     # Update performance tracking
                     self._update_performance_tracking()
@@ -439,7 +450,8 @@ class TradingSystem:
                     'correlation_manager': self.correlation_manager is not None,
                     'position_manager': self.position_manager is not None,
                     'ai_engine': self.decision_engine is not None,
-                    'data_feed': self.data_feed is not None
+                    'data_feed': self.data_feed is not None,
+                    'enhanced_risk_manager': self.risk_manager is not None
                 }
             }
             

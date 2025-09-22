@@ -33,6 +33,21 @@ class RiskManager:
         self.peak_balance = 0.0
         self.risk_limits = self.config.get('risk_management', {})
         
+        # Enhanced Risk Management
+        self.max_exposure_per_pair = self.risk_limits.get('max_exposure_per_pair', 0.02)  # 2%
+        self.max_total_exposure = self.risk_limits.get('max_total_exposure', 0.1)        # 10%
+        self.current_exposures = {}  # {symbol: exposure_percent}
+        self.active_positions = {}   # {symbol: [position_data]}
+        self.volatility_data = {}    # {symbol: volatility}
+        
+        # Circuit Breaker
+        self.is_tripped = False
+        self.trip_time = None
+        self.trip_reason = None
+        self.error_count = 0
+        self.total_operations = 0
+        self.cooldown_minutes = self.risk_limits.get('cooldown_minutes', 30)
+        
     def _load_config(self, config_file: str) -> Dict:
         """Load configuration from JSON file"""
         try:
@@ -309,3 +324,238 @@ class RiskManager:
             
         except Exception as e:
             self.logger.error(f"Error logging trade: {e}")
+    
+    # Enhanced Risk Management Functions
+    def check_position_limits(self, symbol: str, proposed_volume: float, 
+                            account_balance: float) -> tuple[bool, str]:
+        """ตรวจสอบขีดจำกัดตำแหน่ง"""
+        try:
+            # ตรวจสอบการเปิดเผยต่อคู่เงิน
+            current_exposure = self.current_exposures.get(symbol, 0)
+            proposed_exposure = (proposed_volume * self.get_contract_value(symbol)) / account_balance
+            
+            if current_exposure + proposed_exposure > self.max_exposure_per_pair:
+                return False, f"Per-pair exposure limit exceeded for {symbol}"
+            
+            # ตรวจสอบการเปิดเผยรวม
+            total_exposure = sum(self.current_exposures.values()) + proposed_exposure
+            if total_exposure > self.max_total_exposure:
+                return False, "Total exposure limit exceeded"
+            
+            # ตรวจสอบตำแหน่งซ้ำซ้อน
+            if self.has_conflicting_position(symbol, proposed_volume):
+                return False, f"Conflicting position exists for {symbol}"
+            
+            return True, "Position approved"
+            
+        except Exception as e:
+            self.logger.error(f"Error checking position limits for {symbol}: {e}")
+            return False, f"Error checking position limits: {str(e)}"
+    
+    def calculate_position_size(self, symbol: str, risk_percent: float, 
+                              stop_loss_pips: float, account_balance: float) -> float:
+        """คำนวณขนาดตำแหน่งแบบ Dynamic"""
+        try:
+            # คำนวณความผันผวน
+            volatility = self.get_symbol_volatility(symbol)
+            volatility_adjustment = min(1.0, 1.0 / (volatility * 100))
+            
+            # คำนวณขนาดตำแหน่งพื้นฐาน
+            risk_amount = account_balance * (risk_percent / 100)
+            pip_value = self.get_pip_value(symbol)
+            base_position_size = risk_amount / (stop_loss_pips * pip_value)
+            
+            # ปรับตามความผันผวน
+            adjusted_size = base_position_size * volatility_adjustment
+            
+            # ใช้ขีดจำกัดตำแหน่ง
+            max_allowed = (account_balance * self.max_exposure_per_pair) / self.get_contract_value(symbol)
+            final_size = min(adjusted_size, max_allowed)
+            
+            # จำกัดขนาดขั้นต่ำและสูงสุด
+            min_size = 0.01
+            max_size = 10.0
+            final_size = max(min_size, min(final_size, max_size))
+            
+            return round(final_size, 2)
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating position size for {symbol}: {e}")
+            return 0.01
+    
+    def update_exposure(self, symbol: str, volume: float, action: str = "add"):
+        """อัปเดตการเปิดเผยความเสี่ยง"""
+        try:
+            contract_value = self.get_contract_value(symbol) * volume
+            account_balance = self.get_account_balance()
+            exposure = contract_value / account_balance if account_balance > 0 else 0
+            
+            if action == "add":
+                self.current_exposures[symbol] = self.current_exposures.get(symbol, 0) + exposure
+            elif action == "remove":
+                self.current_exposures[symbol] = max(0, self.current_exposures.get(symbol, 0) - exposure)
+            
+        except Exception as e:
+            self.logger.error(f"Error updating exposure for {symbol}: {e}")
+    
+    def has_conflicting_position(self, symbol: str, volume: float) -> bool:
+        """ตรวจสอบว่ามีตำแหน่งขัดแย้งหรือไม่"""
+        try:
+            if symbol not in self.active_positions:
+                return False
+            
+            for pos in self.active_positions[symbol]:
+                if pos.get('status') == 'active':
+                    pos_volume = pos.get('volume', 0)
+                    if abs(pos_volume + volume) < abs(pos_volume):
+                        return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Error checking conflicting position for {symbol}: {e}")
+            return False
+    
+    def get_symbol_volatility(self, symbol: str) -> float:
+        """รับความผันผวนของสัญลักษณ์"""
+        return self.volatility_data.get(symbol, 0.5)
+    
+    def get_contract_value(self, symbol: str) -> float:
+        """รับมูลค่าสัญญาของสัญลักษณ์"""
+        return 100000  # Standard lot
+    
+    def get_pip_value(self, symbol: str) -> float:
+        """รับมูลค่า pip ของสัญลักษณ์"""
+        return 10.0  # Standard pip value
+    
+    def get_account_balance(self) -> float:
+        """รับยอดเงินในบัญชี"""
+        return getattr(self, 'account_balance', 10000.0)
+    
+    def update_account_balance(self, balance: float):
+        """อัปเดตยอดเงินในบัญชี"""
+        self.account_balance = balance
+    
+    # Circuit Breaker Functions
+    def check_circuit_breaker(self, current_pnl: float, account_balance: float) -> bool:
+        """ตรวจสอบเงื่อนไข Circuit Breaker"""
+        try:
+            # ตรวจสอบการขาดทุนรายวัน
+            if abs(current_pnl) > self.risk_limits.get('max_daily_loss', 1000):
+                self.trip_circuit_breaker("Daily loss limit exceeded")
+                return False
+            
+            # ตรวจสอบ drawdown
+            if account_balance > 0:
+                if account_balance > self.peak_balance:
+                    self.peak_balance = account_balance
+                
+                drawdown_percent = (self.peak_balance - account_balance) / self.peak_balance * 100
+                if drawdown_percent > self.risk_limits.get('max_drawdown_percent', 30):
+                    self.trip_circuit_breaker("Drawdown limit exceeded")
+                    return False
+            
+            # ตรวจสอบ error rate
+            if self.total_operations > 0:
+                error_rate = (self.error_count / self.total_operations) * 100
+                if error_rate > self.risk_limits.get('max_error_rate', 50):
+                    self.trip_circuit_breaker("Error rate too high")
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error checking circuit breaker: {e}")
+            return False
+    
+    def trip_circuit_breaker(self, reason: str):
+        """Trip ระบบ Circuit Breaker"""
+        try:
+            if not self.is_tripped:
+                self.is_tripped = True
+                self.trip_time = datetime.now()
+                self.trip_reason = reason
+                self.logger.critical(f"CIRCUIT BREAKER TRIPPED: {reason}")
+                
+        except Exception as e:
+            self.logger.error(f"Error tripping circuit breaker: {e}")
+    
+    def can_trade(self) -> bool:
+        """ตรวจสอบว่าสามารถเทรดได้หรือไม่"""
+        try:
+            if not self.is_tripped:
+                return True
+            
+            # ตรวจสอบ cooldown period
+            if self.trip_time and datetime.now() - self.trip_time > timedelta(minutes=self.cooldown_minutes):
+                self.reset_circuit_breaker()
+                return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Error checking if can trade: {e}")
+            return False
+    
+    def reset_circuit_breaker(self):
+        """รีเซ็ตระบบ Circuit Breaker"""
+        try:
+            self.is_tripped = False
+            self.trip_time = None
+            self.trip_reason = None
+            self.error_count = 0
+            self.total_operations = 0
+            self.logger.info("Circuit breaker reset")
+            
+        except Exception as e:
+            self.logger.error(f"Error resetting circuit breaker: {e}")
+    
+    def record_operation(self, success: bool = True):
+        """บันทึกการดำเนินงาน"""
+        try:
+            self.total_operations += 1
+            if not success:
+                self.error_count += 1
+                
+        except Exception as e:
+            self.logger.error(f"Error recording operation: {e}")
+    
+    def get_enhanced_status(self) -> Dict:
+        """รับสถานะ Enhanced Risk Manager"""
+        try:
+            current_drawdown = 0.0
+            if self.peak_balance > 0:
+                current_drawdown = (self.peak_balance - self.get_account_balance()) / self.peak_balance * 100
+            
+            error_rate = 0.0
+            if self.total_operations > 0:
+                error_rate = (self.error_count / self.total_operations) * 100
+            
+            return {
+                'is_tripped': self.is_tripped,
+                'trip_time': self.trip_time.isoformat() if self.trip_time else None,
+                'trip_reason': self.trip_reason,
+                'can_trade': self.can_trade(),
+                'daily_pnl': self.daily_pnl,
+                'daily_trades': self.daily_trades,
+                'error_count': self.error_count,
+                'total_operations': self.total_operations,
+                'error_rate': error_rate,
+                'current_balance': self.get_account_balance(),
+                'peak_balance': self.peak_balance,
+                'current_drawdown': current_drawdown,
+                'current_exposures': self.current_exposures,
+                'active_positions': {symbol: len(positions) for symbol, positions in self.active_positions.items()},
+                'limits': {
+                    'max_daily_loss': self.risk_limits.get('max_daily_loss', 1000),
+                    'max_drawdown_percent': self.risk_limits.get('max_drawdown_percent', 30),
+                    'max_error_rate': self.risk_limits.get('max_error_rate', 50),
+                    'cooldown_minutes': self.cooldown_minutes,
+                    'max_exposure_per_pair': self.max_exposure_per_pair,
+                    'max_total_exposure': self.max_total_exposure
+                }
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error getting enhanced status: {e}")
+            return {}

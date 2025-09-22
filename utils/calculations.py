@@ -21,34 +21,76 @@ import pandas as pd
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime, timedelta
 import math
+import logging
 
 class TradingCalculations:
     """Utility class for trading calculations"""
     
     @staticmethod
     def calculate_arbitrage_percentage(pair1_price: float, pair2_price: float, 
-                                     pair3_price: float) -> float:
-        """Calculate triangular arbitrage percentage"""
+                                     pair3_price: float, spread1: float = 0, 
+                                     spread2: float = 0, spread3: float = 0,
+                                     commission_rate: float = 0.0001, 
+                                     slippage_percent: float = 0.05,
+                                     minimum_threshold: float = 0.1) -> float:
+        """
+        คำนวณเปอร์เซ็นต์ Arbitrage แบบสามเหลี่ยมรวมต้นทุนการเทรดจริง
+        
+        Parameters:
+        - pair1_price, pair2_price, pair3_price: ราคาคู่เงิน
+        - spread1, spread2, spread3: Spread ของแต่ละคู่เงิน (pips)
+        - commission_rate: อัตราค่าคอมมิชชั่น (0.0001 = 0.01%)
+        - slippage_percent: เปอร์เซ็นต์ Slippage (0.05 = 0.05%)
+        - minimum_threshold: ขั้นต่ำที่ต้องทำกำไร (0.1 = 0.1%)
+        
+        Returns:
+        - Net arbitrage percentage หลังจากหักต้นทุนแล้ว
+        """
         try:
-            if pair1_price <= 0 or pair2_price <= 0 or pair3_price <= 0:
+            # ตรวจสอบข้อมูลพื้นฐานด้วย DataValidator
+            if not DataValidator.validate_arbitrage_data(pair1_price, pair2_price, pair3_price):
                 return 0.0
             
-            # Calculate theoretical price
+            # คำนวณราคาทางทฤษฎี
             theoretical_price = pair1_price * pair2_price
             
-            # Calculate arbitrage percentage
-            arbitrage_percent = (pair3_price - theoretical_price) / theoretical_price * 100
+            if theoretical_price == 0:
+                return 0.0
             
-            return arbitrage_percent
+            # คำนวณ theoretical arbitrage
+            theoretical_arbitrage = (pair3_price - theoretical_price) / theoretical_price * 100
             
-        except Exception:
+            # คำนวณต้นทุนรวม
+            # 1. Spread cost (แปลงจาก pips เป็นเปอร์เซ็นต์)
+            spread_cost = ((spread1 + spread2 + spread3) / pair3_price) * 100
+            
+            # 2. Commission cost (3 legs)
+            commission_cost = commission_rate * 3 * 100
+            
+            # 3. Slippage cost
+            slippage_cost = slippage_percent
+            
+            # ต้นทุนรวม
+            total_cost = spread_cost + commission_cost + slippage_cost
+            
+            # Arbitrage ที่แท้จริง = theoretical - ต้นทุน
+            net_arbitrage = theoretical_arbitrage - total_cost
+            
+            # Return เฉพาะเมื่อ net_arbitrage > minimum_threshold
+            return net_arbitrage if net_arbitrage > minimum_threshold else 0.0
+            
+        except Exception as e:
+            # Log error for debugging
+            import logging
+            logging.getLogger(__name__).error(f"Error calculating arbitrage: {e}")
             return 0.0
     
     @staticmethod
     def calculate_correlation(prices1: List[float], prices2: List[float]) -> float:
         """Calculate correlation between two price series"""
         try:
-            if len(prices1) != len(prices2) or len(prices1) < 2:
+            # ตรวจสอบข้อมูลด้วย DataValidator
+            if not DataValidator.validate_correlation_data(prices1, prices2):
                 return 0.0
             
             # Convert to numpy arrays
@@ -511,3 +553,158 @@ class TradingCalculations:
             
         except Exception:
             return 0, 0
+
+
+class DataValidator:
+    """คลาสสำหรับตรวจสอบความถูกต้องของข้อมูลก่อนใช้งาน"""
+    
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+    
+    @staticmethod
+    def validate_price_data(prices: List[float], symbol: str = "Unknown") -> bool:
+        """
+        ตรวจสอบความถูกต้องของข้อมูลราคา
+        
+        Parameters:
+        - prices: รายการราคา
+        - symbol: ชื่อสัญลักษณ์ (สำหรับ log)
+        
+        Returns:
+        - True ถ้าข้อมูลถูกต้อง, False ถ้าไม่ถูกต้อง
+        """
+        try:
+            if not prices or len(prices) == 0:
+                raise ValueError(f"Empty price data for {symbol}")
+            
+            # ตรวจสอบราคาที่ไม่ถูกต้อง (<= 0)
+            if any(p <= 0 for p in prices):
+                raise ValueError(f"Invalid price (<= 0) for {symbol}")
+            
+            # ตรวจสอบการเปลี่ยนแปลงราคาที่ไม่สมเหตุสมผล (> 10% ในหนึ่ง tick)
+            for i in range(1, len(prices)):
+                if prices[i-1] > 0:  # ตรวจสอบหารด้วยศูนย์
+                    change_percent = abs(prices[i] - prices[i-1]) / prices[i-1] * 100
+                    if change_percent > 10:
+                        raise ValueError(f"Unrealistic price change {change_percent:.2f}% for {symbol}")
+            
+            return True
+            
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Price validation failed for {symbol}: {e}")
+            return False
+    
+    @staticmethod
+    def validate_correlation_data(data1: List[float], data2: List[float]) -> bool:
+        """
+        ตรวจสอบความถูกต้องของข้อมูลสำหรับการคำนวณ correlation
+        
+        Parameters:
+        - data1, data2: ข้อมูลสองชุดสำหรับคำนวณ correlation
+        
+        Returns:
+        - True ถ้าข้อมูลถูกต้อง, False ถ้าไม่ถูกต้อง
+        """
+        try:
+            if len(data1) != len(data2):
+                raise ValueError("Correlation data length mismatch")
+            
+            if len(data1) < 10:
+                raise ValueError("Insufficient data for correlation (min 10 points)")
+            
+            # ตรวจสอบข้อมูลที่ว่างเปล่า
+            if not data1 or not data2:
+                raise ValueError("Empty correlation data")
+            
+            # ตรวจสอบข้อมูลที่ไม่มีค่า (NaN)
+            if any(math.isnan(x) for x in data1) or any(math.isnan(x) for x in data2):
+                raise ValueError("NaN values found in correlation data")
+            
+            # ตรวจสอบข้อมูลที่ไม่มีค่า (infinity)
+            if any(math.isinf(x) for x in data1) or any(math.isinf(x) for x in data2):
+                raise ValueError("Infinite values found in correlation data")
+            
+            return True
+            
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Correlation data validation failed: {e}")
+            return False
+    
+    @staticmethod
+    def validate_arbitrage_data(pair1_price: float, pair2_price: float, 
+                               pair3_price: float) -> bool:
+        """
+        ตรวจสอบความถูกต้องของข้อมูลสำหรับการคำนวณ arbitrage
+        
+        Parameters:
+        - pair1_price, pair2_price, pair3_price: ราคาคู่เงินทั้งสาม
+        
+        Returns:
+        - True ถ้าข้อมูลถูกต้อง, False ถ้าไม่ถูกต้อง
+        """
+        try:
+            # ตรวจสอบราคาที่ไม่ถูกต้อง
+            if pair1_price <= 0 or pair2_price <= 0 or pair3_price <= 0:
+                raise ValueError("Invalid price data (<= 0)")
+            
+            # ตรวจสอบราคาที่ไม่มีค่า
+            if (math.isnan(pair1_price) or math.isnan(pair2_price) or 
+                math.isnan(pair3_price)):
+                raise ValueError("NaN values in price data")
+            
+            # ตรวจสอบราคาที่ไม่มีค่า (infinity)
+            if (math.isinf(pair1_price) or math.isinf(pair2_price) or 
+                math.isinf(pair3_price)):
+                raise ValueError("Infinite values in price data")
+            
+            # ตรวจสอบราคาที่ไม่สมเหตุสมผล (มากเกินไปหรือน้อยเกินไป)
+            if (pair1_price > 1000 or pair2_price > 1000 or pair3_price > 1000 or
+                pair1_price < 0.0001 or pair2_price < 0.0001 or pair3_price < 0.0001):
+                raise ValueError("Unrealistic price values")
+            
+            return True
+            
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Arbitrage data validation failed: {e}")
+            return False
+    
+    @staticmethod
+    def validate_trading_parameters(volume: float, stop_loss: float, 
+                                  take_profit: float, symbol: str = "Unknown") -> bool:
+        """
+        ตรวจสอบพารามิเตอร์การเทรด
+        
+        Parameters:
+        - volume: ขนาดตำแหน่ง
+        - stop_loss: ระดับ stop loss
+        - take_profit: ระดับ take profit
+        - symbol: ชื่อสัญลักษณ์
+        
+        Returns:
+        - True ถ้าพารามิเตอร์ถูกต้อง, False ถ้าไม่ถูกต้อง
+        """
+        try:
+            # ตรวจสอบ volume
+            if volume <= 0 or volume > 100:
+                raise ValueError(f"Invalid volume {volume} for {symbol}")
+            
+            # ตรวจสอบ stop loss
+            if stop_loss <= 0:
+                raise ValueError(f"Invalid stop loss {stop_loss} for {symbol}")
+            
+            # ตรวจสอบ take profit
+            if take_profit <= 0:
+                raise ValueError(f"Invalid take profit {take_profit} for {symbol}")
+            
+            # ตรวจสอบ stop loss และ take profit ที่สมเหตุสมผล
+            if stop_loss > 1000:  # มากกว่า 1000 pips
+                raise ValueError(f"Stop loss too large {stop_loss} for {symbol}")
+            
+            if take_profit > 1000:  # มากกว่า 1000 pips
+                raise ValueError(f"Take profit too large {take_profit} for {symbol}")
+            
+            return True
+            
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Trading parameters validation failed for {symbol}: {e}")
+            return False

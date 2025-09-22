@@ -183,16 +183,9 @@ class TriangleArbitrageDetector:
     
     def calculate_arbitrage(self, triangle: Tuple[str, str, str]) -> Optional[float]:
         """
-        คำนวณเปอร์เซ็นต์ Arbitrage แบบสามเหลี่ยม
+        คำนวณเปอร์เซ็นต์ Arbitrage แบบสามเหลี่ยมรวมต้นทุนการเทรดจริง
         
-        สูตร: (ราคาจริง - ราคาทางทฤษฎี) / ราคาทางทฤษฎี × 100
-        
-        ตัวอย่าง:
-        - EUR/USD = 1.1000
-        - USD/JPY = 110.00  
-        - EUR/JPY = 121.50 (ราคาจริง)
-        - ราคาทางทฤษฎี = 1.1000 × 110.00 = 121.00
-        - Arbitrage = (121.50 - 121.00) / 121.00 × 100 = 0.41%
+        ใช้สูตรใหม่ที่รวม Spread, Commission, และ Slippage
         """
         try:
             pair1, pair2, pair3 = triangle
@@ -205,15 +198,28 @@ class TriangleArbitrageDetector:
             if price1 is None or price2 is None or price3 is None:
                 return None
             
-            # Calculate theoretical vs actual
-            theoretical = price1 * price2
-            actual = price3
+            # Get spreads
+            spread1 = self.broker.get_spread(pair1) if hasattr(self.broker, 'get_spread') else 0
+            spread2 = self.broker.get_spread(pair2) if hasattr(self.broker, 'get_spread') else 0
+            spread3 = self.broker.get_spread(pair3) if hasattr(self.broker, 'get_spread') else 0
             
-            if theoretical == 0:
-                return None
-                
-            arbitrage_percent = (actual - theoretical) / theoretical * 100
-            return arbitrage_percent
+            # Import TradingCalculations
+            from utils.calculations import TradingCalculations
+            
+            # Calculate arbitrage with real trading costs
+            arbitrage_percent = TradingCalculations.calculate_arbitrage_percentage(
+                pair1_price=price1,
+                pair2_price=price2,
+                pair3_price=price3,
+                spread1=spread1,
+                spread2=spread2,
+                spread3=spread3,
+                commission_rate=0.0001,  # 0.01%
+                slippage_percent=0.05,   # 0.05%
+                minimum_threshold=0.1    # 0.1%
+            )
+            
+            return arbitrage_percent if arbitrage_percent > 0 else None
             
         except Exception as e:
             self.logger.error(f"Error calculating arbitrage for {triangle}: {e}")
