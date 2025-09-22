@@ -118,22 +118,37 @@ class TriangleArbitrageDetector:
     def detect_opportunities(self):
         """Main detection method with multi-timeframe analysis"""
         try:
+            triangles_checked = 0
+            opportunities_found = 0
+            
             for triangle in self.triangle_combinations:
                 if not self.is_running:
                     break
-                    
-                # Multi-timeframe analysis
+                
+                triangles_checked += 1
+                
+                # Calculate arbitrage percentage first (faster check)
+                arbitrage_percent = self.calculate_arbitrage(triangle, triangles_checked)
+                
+                if arbitrage_percent is None:
+                    continue
+                
+                opportunities_found += 1
+                
+                # Log every 50 triangles checked
+                if triangles_checked % 50 == 0:
+                    self.logger.info(f"Checked {triangles_checked} triangles, found {opportunities_found} opportunities")
+                
+                # Only do full analysis for opportunities > 0.01%
+                if arbitrage_percent < 0.01:
+                    continue
+                
+                # Multi-timeframe analysis (only for promising opportunities)
                 h1_analysis = self.analyze_timeframe(triangle, 'H1')
                 m30_analysis = self.analyze_timeframe(triangle, 'M30')
                 m15_analysis = self.analyze_timeframe(triangle, 'M15')
                 m5_analysis = self.analyze_timeframe(triangle, 'M5')
                 m1_analysis = self.analyze_timeframe(triangle, 'M1')
-                
-                # Calculate arbitrage percentage
-                arbitrage_percent = self.calculate_arbitrage(triangle)
-                
-                if arbitrage_percent is None:
-                    continue
                 
                 # Create opportunity context
                 opportunity = {
@@ -165,6 +180,8 @@ class TriangleArbitrageDetector:
                     
         except Exception as e:
             self.logger.error(f"Error in detect_opportunities: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
     
     def analyze_timeframe(self, triangle: Tuple[str, str, str], timeframe: str) -> Dict:
         """Analyze triangle for specific timeframe"""
@@ -217,7 +234,7 @@ class TriangleArbitrageDetector:
             self.logger.error(f"Error analyzing timeframe {timeframe} for {triangle}: {e}")
             return {'status': 'error', 'error': str(e)}
     
-    def calculate_arbitrage(self, triangle: Tuple[str, str, str]) -> Optional[float]:
+    def calculate_arbitrage(self, triangle: Tuple[str, str, str], triangles_checked: int = 0) -> Optional[float]:
         """
         คำนวณเปอร์เซ็นต์ Arbitrage แบบสามเหลี่ยมรวมต้นทุนการเทรดจริง
         
@@ -232,6 +249,9 @@ class TriangleArbitrageDetector:
             price3 = self.broker.get_current_price(pair3)
             
             if price1 is None or price2 is None or price3 is None:
+                # Log missing prices for first few triangles to debug
+                if triangles_checked < 5:
+                    self.logger.warning(f"Missing prices for {triangle}: {pair1}={price1}, {pair2}={price2}, {pair3}={price3}")
                 return None
             
             # Get spreads
