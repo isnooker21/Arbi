@@ -505,7 +505,7 @@ class MainWindow:
                 return
             
             if self.trading_system.start():
-            self.is_trading = True
+                self.is_trading = True
                 self.update_connection_status("connected")
                 self.log_message("✅ Trading system started")
             else:
