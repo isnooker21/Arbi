@@ -75,11 +75,25 @@ class CorrelationManager:
         - timeframes: รายการ timeframes ที่ใช้ ['H1', 'H4', 'D1']
         """
         try:
-            pairs = self.broker.get_available_pairs()
+            all_pairs = self.broker.get_available_pairs()
             
-            if not pairs:
+            if not all_pairs:
                 self.logger.warning("No pairs available for correlation calculation")
                 return {}
+            
+            # Filter only Major and Minor pairs
+            major_minor_currencies = ['EUR', 'USD', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD']
+            pairs = []
+            
+            for pair in all_pairs:
+                # Check if pair contains only major/minor currencies
+                if len(pair) == 6:  # Standard pair format like EURUSD
+                    currency1 = pair[:3]
+                    currency2 = pair[3:]
+                    if currency1 in major_minor_currencies and currency2 in major_minor_currencies:
+                        pairs.append(pair)
+            
+            self.logger.info(f"Filtered {len(pairs)} Major/Minor pairs for correlation analysis")
             
             correlations = {}
             

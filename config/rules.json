@@ -74,8 +74,8 @@
       "weight": 0.8,
       "confidence": 0.75,
       "conditions": [
-        "volatility > 0.5",
-        "arbitrage_percent > 0.3",
+        "volatility > 0.2",
+        "arbitrage_percent > 0.05",
         "spread_acceptable == true"
       ],
       "actions": [
@@ -91,14 +91,30 @@
       "weight": 0.7,
       "confidence": 0.9,
       "conditions": [
-        "arbitrage_percent > 0.2",
-        "spread < 0.1",
+        "arbitrage_percent > 0.05",
+        "spread < 1.0",
         "market_condition == 'stable'"
       ],
       "actions": [
         "SET arbitrage_confidence = 0.9",
         "SET proceed_to_entry = true",
         "SET position_size_multiplier = 1.0"
+      ]
+    },
+    {
+      "id": "AD-004",
+      "name": "Any Time Arbitrage",
+      "category": "arbitrage_detection",
+      "weight": 0.6,
+      "confidence": 0.6,
+      "conditions": [
+        "arbitrage_percent > 0.05",
+        "spread < 2.0"
+      ],
+      "actions": [
+        "SET arbitrage_confidence = 0.6",
+        "SET proceed_to_entry = true",
+        "SET position_size_multiplier = 0.8"
       ]
     }
   ],

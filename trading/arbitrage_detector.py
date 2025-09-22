@@ -32,30 +32,57 @@ class TriangleArbitrageDetector:
         self.is_running = False
         self.logger = logging.getLogger(__name__)
         
+        # Log triangle combinations count
+        self.logger.info(f"Generated {len(self.triangle_combinations)} triangle combinations (Major & Minor pairs only)")
+        
     def _generate_triangle_combinations(self) -> List[Tuple[str, str, str]]:
         """
-        สร้างรายการคู่เงินทั้งหมดที่เป็นไปได้สำหรับ Triangular Arbitrage
+        สร้างรายการคู่เงิน Major และ Minor เท่านั้นสำหรับ Triangular Arbitrage
+        
+        Major Pairs: EUR, USD, GBP, JPY, CHF, AUD, CAD, NZD
+        Minor Pairs: EUR, GBP, JPY, CHF, AUD, CAD, NZD (ไม่รวม USD)
         
         ตัวอย่าง:
-        - EUR/USD, USD/JPY, EUR/JPY
-        - GBP/USD, USD/CHF, GBP/CHF
-        - AUD/USD, USD/CAD, AUD/CAD
+        - EUR/USD, USD/JPY, EUR/JPY (Major)
+        - GBP/USD, USD/CHF, GBP/CHF (Major)
+        - EUR/GBP, GBP/JPY, EUR/JPY (Minor)
+        - AUD/CAD, CAD/CHF, AUD/CHF (Minor)
         
         หลักการ: A/B × B/C = A/C (ราคาทางทฤษฎี)
         """
-        # Major currency pairs for triangular arbitrage
-        majors = ['EUR', 'USD', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD']
+        # Major currency pairs (8 currencies)
+        major_currencies = ['EUR', 'USD', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD']
+        
+        # Minor currency pairs (7 currencies, no USD)
+        minor_currencies = ['EUR', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD']
+        
         combinations = []
         
-        for base in majors:
-            for quote1 in majors:
-                for quote2 in majors:
+        # Generate Major pairs triangles (USD-based)
+        for base in major_currencies:
+            if base != 'USD':
+                for quote in major_currencies:
+                    if quote != 'USD' and quote != base:
+                        # Create triangle: base/USD, USD/quote, base/quote
+                        pair1 = f"{base}USD"
+                        pair2 = f"USD{quote}"
+                        pair3 = f"{base}{quote}"
+                        combinations.append((pair1, pair2, pair3))
+        
+        # Generate Minor pairs triangles (non-USD)
+        for base in minor_currencies:
+            for quote1 in minor_currencies:
+                for quote2 in minor_currencies:
                     if base != quote1 and quote1 != quote2 and base != quote2:
                         # Create triangle: base/quote1, quote1/quote2, base/quote2
                         pair1 = f"{base}{quote1}"
                         pair2 = f"{quote1}{quote2}"
                         pair3 = f"{base}{quote2}"
                         combinations.append((pair1, pair2, pair3))
+        
+        # Remove duplicates and sort
+        combinations = list(set(combinations))
+        combinations.sort()
         
         return combinations
     
@@ -80,8 +107,8 @@ class TriangleArbitrageDetector:
         while self.is_running:
             try:
                 self.detect_opportunities()
-                # Sleep for 100ms between detection cycles
-                threading.Event().wait(0.1)
+                # Sleep for 50ms between detection cycles (faster scanning)
+                threading.Event().wait(0.05)
             except Exception as e:
                 self.logger.error(f"Detection error: {e}")
                 threading.Event().wait(1)
@@ -125,11 +152,16 @@ class TriangleArbitrageDetector:
                 # AI evaluation
                 ai_decision = self.ai.evaluate_arbitrage_opportunity(opportunity)
                 
-                if ai_decision.should_act and ai_decision.confidence > 0.7:
-                    self.logger.info(f"Arbitrage opportunity detected: {triangle}, "
+                if ai_decision.should_act and ai_decision.confidence > 0.5:
+                    self.logger.info(f"🎯 ARBITRAGE OPPORTUNITY: {triangle}, "
                                    f"Percent: {arbitrage_percent:.4f}%, "
                                    f"Confidence: {ai_decision.confidence:.2f}")
                     self.execute_triangle_entry(triangle, ai_decision)
+                elif arbitrage_percent and arbitrage_percent > 0.02:
+                    # Log opportunities that are close but don't meet criteria
+                    self.logger.info(f"🔍 Near opportunity: {triangle}, "
+                                   f"Percent: {arbitrage_percent:.4f}%, "
+                                   f"Confidence: {ai_decision.confidence:.2f}")
                     
         except Exception as e:
             self.logger.error(f"Error in detect_opportunities: {e}")
