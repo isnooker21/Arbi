@@ -100,18 +100,18 @@ class TradingSystem:
             # Import BrokerAPI
             from trading.broker_api import BrokerAPI
             
-            # สร้าง BrokerAPI instance
-            broker_api = BrokerAPI("MetaTrader5")
+            # สร้าง BrokerAPI instance และเก็บไว้ใน self.broker_api
+            self.broker_api = BrokerAPI("MetaTrader5")
             
             print("กำลังตรวจสอบการเชื่อมต่อ MT5...")
             
             # ลองเชื่อมต่อแบบ auto
-            if broker_api.connect():
+            if self.broker_api.connect():
                 print("เชื่อมต่อ MT5 สำเร็จ!")
                 
                 # แสดงข้อมูลบัญชี
-                if broker_api.account_info:
-                    account = broker_api.account_info
+                if self.broker_api.account_info:
+                    account = self.broker_api.account_info
                     print(f"\nข้อมูลบัญชี:")
                     print(f"   หมายเลขบัญชี: {account.login}")
                     print(f"   เซิร์ฟเวอร์: {account.server}")
@@ -127,7 +127,7 @@ class TradingSystem:
                     # แสดงคู่เงินที่ใช้ได้
                     print(f"\nกำลังตรวจสอบคู่เงินที่ใช้ได้...")
                     try:
-                        symbols = broker_api.get_available_pairs()
+                        symbols = self.broker_api.get_available_pairs()
                         if symbols:
                             print(f"   พบคู่เงิน {len(symbols)} คู่")
                             print(f"   ตัวอย่าง: {', '.join(symbols[:5])}")
@@ -241,11 +241,14 @@ class TradingSystem:
         
         # Only setup signal handlers in main thread
         try:
-            signal.signal(signal.SIGINT, signal_handler)
-            signal.signal(signal.SIGTERM, signal_handler)
-        except ValueError:
-            # Signal handlers can only be set in main thread
-            self.logger.warning("Cannot set signal handlers in non-main thread")
+            import threading
+            if threading.current_thread() is threading.main_thread():
+                signal.signal(signal.SIGINT, signal_handler)
+                signal.signal(signal.SIGTERM, signal_handler)
+            else:
+                self.logger.warning("Cannot set signal handlers in non-main thread")
+        except Exception as e:
+            self.logger.warning(f"Cannot set signal handlers: {e}")
     
     def connect_broker(self, broker_type: str = "MetaTrader5", 
                       login: int = None, password: str = None, server: str = None) -> bool:
@@ -286,9 +289,17 @@ class TradingSystem:
                 self.logger.warning("Trading system already running")
                 return True
             
-            if not self.broker_api.is_connected():
-                self.logger.error("Not connected to broker")
-                return False
+            if not self.broker_api or not self.broker_api.is_connected():
+                self.logger.error("Not connected to broker - trying to connect...")
+                # Try to connect if not connected
+                if not self.broker_api:
+                    self.broker_api = BrokerAPI("MetaTrader5")
+                
+                if not self.broker_api.connect():
+                    self.logger.error("Failed to connect to broker")
+                    return False
+                else:
+                    self.logger.info("Successfully connected to broker")
             
             self.logger.info("Starting trading system...")
             

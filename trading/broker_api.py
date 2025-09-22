@@ -100,11 +100,52 @@ class BrokerAPI:
                                    f"Server: {account_info.server}, Balance: {account_info.balance}")
                     return True
             
+            # Try to connect with config credentials
+            mt5_config = self.config.get('MetaTrader5', {})
+            if mt5_config.get('login') and mt5_config.get('password') and mt5_config.get('server'):
+                self.logger.info("Attempting to connect with config credentials...")
+                if self._connect_with_credentials():
+                    return True
+            
             self.logger.warning("Could not auto-connect to MT5 - will try manual connection")
             return False
             
         except Exception as e:
             self.logger.error(f"Error in auto-connect MT5: {e}")
+            return False
+    
+    def _connect_with_credentials(self) -> bool:
+        """Connect to MT5 using credentials from config"""
+        try:
+            mt5_config = self.config.get('MetaTrader5', {})
+            login = mt5_config.get('login')
+            password = mt5_config.get('password')
+            server = mt5_config.get('server')
+            timeout = mt5_config.get('timeout', 30000)
+            
+            if not all([login, password, server]):
+                self.logger.error("Missing MT5 credentials in config")
+                return False
+            
+            # Attempt to login
+            if mt5.login(login, password=password, server=server, timeout=timeout):
+                account_info = mt5.account_info()
+                if account_info:
+                    self.account_info = account_info
+                    self._connected = True
+                    self.logger.info(f"Successfully connected to MT5 - Account: {account_info.login}, "
+                                   f"Server: {account_info.server}, Balance: {account_info.balance}")
+                    return True
+                else:
+                    self.logger.error("Login successful but no account info received")
+                    return False
+            else:
+                error_code = mt5.last_error()
+                self.logger.error(f"MT5 login failed with error code: {error_code}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Error connecting with credentials: {e}")
             return False
     
     def auto_detect_mt5_config(self) -> bool:
