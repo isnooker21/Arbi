@@ -94,8 +94,8 @@ class TradingSystem:
     def _auto_setup(self):
         """Auto Setup ระบบโดยอัตโนมัติ"""
         try:
-            self.logger.info("🔧 กำลังทำ Auto Setup...")
-            print("🔧 กำลังทำ Auto Setup...")
+            self.logger.info("กำลังทำ Auto Setup...")
+            print("กำลังทำ Auto Setup...")
             
             # Import BrokerAPI
             from trading.broker_api import BrokerAPI
@@ -103,16 +103,16 @@ class TradingSystem:
             # สร้าง BrokerAPI instance
             broker_api = BrokerAPI("MetaTrader5")
             
-            print("📡 กำลังตรวจสอบการเชื่อมต่อ MT5...")
+            print("กำลังตรวจสอบการเชื่อมต่อ MT5...")
             
             # ลองเชื่อมต่อแบบ auto
             if broker_api.connect():
-                print("✅ เชื่อมต่อ MT5 สำเร็จ!")
+                print("เชื่อมต่อ MT5 สำเร็จ!")
                 
                 # แสดงข้อมูลบัญชี
                 if broker_api.account_info:
                     account = broker_api.account_info
-                    print(f"\n📊 ข้อมูลบัญชี:")
+                    print(f"\nข้อมูลบัญชี:")
                     print(f"   หมายเลขบัญชี: {account.login}")
                     print(f"   เซิร์ฟเวอร์: {account.server}")
                     print(f"   ยอดเงิน: {account.balance:.2f} {account.currency}")
@@ -120,12 +120,12 @@ class TradingSystem:
                     print(f"   Leverage: 1:{account.leverage}")
                     
                     # ตรวจสอบการตั้งค่า
-                    print(f"\n⚙️  การตั้งค่า:")
-                    print(f"   Auto-detect สำเร็จ: ✅")
-                    print(f"   Config file อัปเดตแล้ว: ✅")
+                    print(f"\nการตั้งค่า:")
+                    print(f"   Auto-detect สำเร็จ: OK")
+                    print(f"   Config file อัปเดตแล้ว: OK")
                     
                     # แสดงคู่เงินที่ใช้ได้
-                    print(f"\n💱 กำลังตรวจสอบคู่เงินที่ใช้ได้...")
+                    print(f"\nกำลังตรวจสอบคู่เงินที่ใช้ได้...")
                     try:
                         symbols = broker_api.get_available_pairs()
                         if symbols:
@@ -134,30 +134,30 @@ class TradingSystem:
                         else:
                             print("   ไม่พบคู่เงิน")
                     except Exception as e:
-                        print(f"   ⚠️  ไม่สามารถดึงข้อมูลคู่เงิน: {e}")
+                        print(f"   ไม่สามารถดึงข้อมูลคู่เงิน: {e}")
                     
-                    print(f"\n🎉 Auto Setup เสร็จสิ้น!")
+                    print(f"\nAuto Setup เสร็จสิ้น!")
                     print(f"   ระบบพร้อมใช้งานแล้ว")
                     
                 else:
-                    print("❌ ไม่สามารถดึงข้อมูลบัญชีได้")
+                    print("ไม่สามารถดึงข้อมูลบัญชีได้")
                     self.logger.warning("Could not get account info during auto setup")
                     
             else:
-                print("❌ ไม่สามารถเชื่อมต่อ MT5 ได้")
-                print("\n🔧 วิธีแก้ไข:")
+                print("ไม่สามารถเชื่อมต่อ MT5 ได้")
+                print("\nวิธีแก้ไข:")
                 print("   1. ตรวจสอบว่า MT5 เปิดอยู่และ login แล้ว")
                 print("   2. ตรวจสอบว่า MT5 อนุญาตให้ Expert Advisors ทำงาน")
                 print("   3. ตรวจสอบการตั้งค่าใน Tools → Options → Expert Advisors")
                 self.logger.warning("Could not connect to MT5 during auto setup")
                 
         except ImportError as e:
-            print(f"❌ ไม่สามารถ import modules ได้: {e}")
+            print(f"ไม่สามารถ import modules ได้: {e}")
             print("   ลองติดตั้ง dependencies: pip install -r requirements.txt")
             self.logger.error(f"Import error during auto setup: {e}")
             
         except Exception as e:
-            print(f"❌ เกิดข้อผิดพลาดใน Auto Setup: {e}")
+            print(f"เกิดข้อผิดพลาดใน Auto Setup: {e}")
             self.logger.error(f"Error during auto setup: {e}")
     
     def _setup_logging(self) -> logging.Logger:
@@ -475,7 +475,7 @@ def main():
     """Main application entry point with Auto Setup"""
     try:
         print("=" * 60)
-        print("🎯 ระบบเทรด Forex AI")
+        print("ระบบเทรด Forex AI")
         print("   Triangular Arbitrage & Correlation Recovery")
         print("   พร้อม AI Engine และ Auto Setup")
         print("=" * 60)
@@ -484,34 +484,34 @@ def main():
         if len(sys.argv) > 1:
             if sys.argv[1] == '--cli':
                 # Run command line mode
-                print("🖥️  เริ่มต้น Command Line Mode...")
+                print("เริ่มต้น Command Line Mode...")
                 trading_system = TradingSystem(auto_setup=True)
-                print("📋 ระบบเทรดพร้อมใช้งาน")
-                print("📝 ใช้ --gui เพื่อเปิดหน้าจอ GUI")
+                print("ระบบเทรดพร้อมใช้งาน")
+                print("ใช้ --gui เพื่อเปิดหน้าจอ GUI")
             elif sys.argv[1] == '--no-auto-setup':
                 # Run without auto setup
-                print("🚀 เริ่มต้นระบบโดยไม่ทำ Auto Setup...")
+                print("เริ่มต้นระบบโดยไม่ทำ Auto Setup...")
                 trading_system = TradingSystem(auto_setup=False)
-                app = MainWindow()
+                app = MainWindow(auto_setup=False)
                 app.run()
             else:
-                print(f"❌ ไม่รู้จักคำสั่ง: {sys.argv[1]}")
-                print("📝 ใช้ --cli สำหรับ Command Line หรือ --no-auto-setup สำหรับ GUI")
+                print(f"ไม่รู้จักคำสั่ง: {sys.argv[1]}")
+                print("ใช้ --cli สำหรับ Command Line หรือ --no-auto-setup สำหรับ GUI")
         else:
             # Default: Run GUI mode with Auto Setup
-            print("🚀 เริ่มต้น GUI Mode พร้อม Auto Setup...")
+            print("เริ่มต้น GUI Mode พร้อม Auto Setup...")
             
             # Initialize trading system with auto setup
             trading_system = TradingSystem(auto_setup=True)
             
-            # Start GUI
-            app = MainWindow()
+            # Start GUI (ไม่ทำ Auto Setup ซ้ำ)
+            app = MainWindow(auto_setup=False)
             app.run()
     
     except KeyboardInterrupt:
-        print("\n👋 ปิดระบบตามคำขอของผู้ใช้")
+        print("\nปิดระบบตามคำขอของผู้ใช้")
     except Exception as e:
-        print(f"❌ เกิดข้อผิดพลาด: {e}")
+        print(f"เกิดข้อผิดพลาด: {e}")
         sys.exit(1)
 
 

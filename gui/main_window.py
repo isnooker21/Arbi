@@ -213,7 +213,7 @@ class MainWindow:
         """Auto connect to MT5"""
         def auto_connect_thread():
             try:
-                self.log_message("🔧 กำลังทำ Auto Setup...")
+                self.log_message("กำลังทำ Auto Setup...")
                 
                 # Import and create trading system
                 from main import TradingSystem
@@ -227,14 +227,14 @@ class MainWindow:
                 if self.trading_system.broker_api and self.trading_system.broker_api.account_info:
                     account = self.trading_system.broker_api.account_info
                     self.account_info_label.config(text=f"Account: {account.login} | Balance: {account.balance:.2f} {account.currency}")
-                    self.log_message(f"✅ เชื่อมต่อสำเร็จ - Account: {account.login}, Balance: {account.balance:.2f}")
+                    self.log_message(f"เชื่อมต่อสำเร็จ - Account: {account.login}, Balance: {account.balance:.2f}")
                 else:
-                    self.log_message("⚠️ เชื่อมต่อสำเร็จ แต่ไม่สามารถดึงข้อมูลบัญชีได้")
+                    self.log_message("เชื่อมต่อสำเร็จ แต่ไม่สามารถดึงข้อมูลบัญชีได้")
                 
             except Exception as e:
                 self.connection_status = "Failed"
                 self.update_connection_status()
-                self.log_message(f"❌ Auto Setup ล้มเหลว: {str(e)}")
+                self.log_message(f"Auto Setup ล้มเหลว: {str(e)}")
         
         # Run in separate thread
         threading.Thread(target=auto_connect_thread, daemon=True).start()
@@ -257,24 +257,9 @@ class MainWindow:
         main_container = ttk.Frame(self.root, style='Card.TFrame')
         main_container.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
         
-        # Create header
-        self.create_header(main_container)
-        
         # Create main content area
         content_frame = ttk.Frame(main_container)
         content_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
-        
-        # Create left panel
-        left_panel = ttk.Frame(content_frame, style='Card.TFrame')
-        left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
-        
-        # Create right panel
-        right_panel = ttk.Frame(content_frame, style='Card.TFrame')
-        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        
-        # Setup panels
-        self.create_left_panel(left_panel)
-        self.create_right_panel(right_panel)
         
         # Create connection frame
         self.create_connection_frame(main_container)
@@ -326,7 +311,7 @@ class MainWindow:
         """Auto connect to MT5"""
         def auto_connect_thread():
             try:
-                self.log_message("🔧 กำลังทำ Auto Setup...")
+                self.log_message("กำลังทำ Auto Setup...")
                 
                 # Import and create trading system
                 from main import TradingSystem
@@ -340,14 +325,14 @@ class MainWindow:
                 if self.trading_system.broker_api and self.trading_system.broker_api.account_info:
                     account = self.trading_system.broker_api.account_info
                     self.account_info_label.config(text=f"Account: {account.login} | Balance: {account.balance:.2f} {account.currency}")
-                    self.log_message(f"✅ เชื่อมต่อสำเร็จ - Account: {account.login}, Balance: {account.balance:.2f}")
+                    self.log_message(f"เชื่อมต่อสำเร็จ - Account: {account.login}, Balance: {account.balance:.2f}")
                 else:
-                    self.log_message("⚠️ เชื่อมต่อสำเร็จ แต่ไม่สามารถดึงข้อมูลบัญชีได้")
+                    self.log_message("เชื่อมต่อสำเร็จ แต่ไม่สามารถดึงข้อมูลบัญชีได้")
                 
             except Exception as e:
                 self.connection_status = "Failed"
                 self.update_connection_status()
-                self.log_message(f"❌ Auto Setup ล้มเหลว: {str(e)}")
+                self.log_message(f"Auto Setup ล้มเหลว: {str(e)}")
         
         # Run in separate thread
         threading.Thread(target=auto_connect_thread, daemon=True).start()
@@ -367,7 +352,7 @@ class MainWindow:
             from gui.settings import SettingsWindow
             settings_window = SettingsWindow(self.root)
         except Exception as e:
-            self.log_message(f"❌ ไม่สามารถเปิดหน้าต่างตั้งค่า: {e}")
+            self.log_message(f"ไม่สามารถเปิดหน้าต่างตั้งค่า: {e}")
         
     def create_control_frame(self, parent):
         """Create trading control panel"""
@@ -517,40 +502,40 @@ class MainWindow:
             if self.trading_system and self.trading_system.broker_api:
                 charts_window = RealTimeCharts(self.root, self.trading_system.broker_api)
             else:
-                self.log_message("❌ ไม่สามารถเปิดกราฟได้ - ยังไม่ได้เชื่อมต่อ Broker")
+                self.log_message("ไม่สามารถเปิดกราฟได้ - ยังไม่ได้เชื่อมต่อ Broker")
         except Exception as e:
-            self.log_message(f"❌ ไม่สามารถเปิดกราฟได้: {e}")
+            self.log_message(f"ไม่สามารถเปิดกราฟได้: {e}")
     
     def refresh_charts(self):
         """Refresh charts"""
-        self.log_message("🔄 กำลังรีเฟรชกราฟ...")
+        self.log_message("กำลังรีเฟรชกราฟ...")
     
     def start_trading(self):
         """Start trading"""
         if not self.trading_system:
-            self.log_message("❌ ยังไม่ได้เชื่อมต่อ Broker")
+            self.log_message("ยังไม่ได้เชื่อมต่อ Broker")
             return
         
         self.is_trading = True
         self.trading_status_label.config(text="🟢 Running", style='Success.TLabel')
-        self.log_message("🚀 เริ่มต้นการเทรด")
+        self.log_message("เริ่มต้นการเทรด")
     
     def stop_trading(self):
         """Stop trading"""
         self.is_trading = False
         self.trading_status_label.config(text="⏸️ Stopped", style='Warning.TLabel')
-        self.log_message("⏹️ หยุดการเทรด")
+        self.log_message("หยุดการเทรด")
     
     def emergency_stop(self):
         """Emergency stop"""
         self.is_trading = False
         self.trading_status_label.config(text="🛑 Emergency Stop", style='Danger.TLabel')
-        self.log_message("🛑 EMERGENCY STOP - หยุดการเทรดทันที!")
+        self.log_message("EMERGENCY STOP - หยุดการเทรดทันที!")
     
     def clear_log(self):
         """Clear log text"""
         self.log_text.delete(1.0, tk.END)
-        self.log_message("📝 ล้าง Log แล้ว")
+        self.log_message("ล้าง Log แล้ว")
     
     def log_message(self, message):
         """Add message to log"""
