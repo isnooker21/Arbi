@@ -443,8 +443,8 @@ class MainWindow:
     def update_positions(self):
         """Update positions display"""
         # Clear existing items
-            for item in self.positions_tree.get_children():
-                self.positions_tree.delete(item)
+        for item in self.positions_tree.get_children():
+            self.positions_tree.delete(item)
             
         try:
             if self.trading_system and self.trading_system.position_manager:
