@@ -535,8 +535,9 @@ def main():
             # Initialize trading system with auto setup
             trading_system = TradingSystem(auto_setup=True)
             
-            # Start GUI (ไม่ทำ Auto Setup ซ้ำ)
+            # Start GUI and pass trading_system
             app = MainWindow(auto_setup=False)
+            app.trading_system = trading_system  # Pass the initialized system
             app.run()
     
     except KeyboardInterrupt:

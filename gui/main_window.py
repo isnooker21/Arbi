@@ -389,28 +389,30 @@ class MainWindow:
     def connect_broker(self):
         """Connect to broker manually"""
         try:
-            self.log_message("Connecting to broker...")
+            self.log_message("Checking broker connection...")
             self.update_connection_status("connecting")
             
-            # Import in thread to avoid blocking GUI
-            def connect_thread():
-                try:
-                    from main import TradingSystem
-                    self.trading_system = TradingSystem()
-                    
-                    if self.trading_system.broker_api and self.trading_system.broker_api.is_connected():
-                        self.root.after(0, lambda: self.update_connection_status("connected"))
-                        self.root.after(0, lambda: self.log_message("✅ Connected to broker successfully"))
+            # Check if trading_system already exists from auto-setup
+            if self.trading_system and self.trading_system.broker_api:
+                if self.trading_system.broker_api.is_connected():
+                    self.update_connection_status("connected")
+                    self.log_message("✅ Already connected to broker")
+                    if self.trading_system.broker_api.account_info:
+                        account = self.trading_system.broker_api.account_info
+                        self.log_message(f"Account: {account.login} | Server: {account.server}")
+                        self.log_message(f"Balance: ${account.balance:.2f} | Equity: ${account.equity:.2f}")
+                else:
+                    # Try to reconnect
+                    if self.trading_system.broker_api.connect():
+                        self.update_connection_status("connected")
+                        self.log_message("✅ Reconnected to broker successfully")
                     else:
-                        self.root.after(0, lambda: self.update_connection_status("disconnected"))
-                        self.root.after(0, lambda: self.log_message("❌ Failed to connect to broker"))
-                except Exception as e:
-                    self.root.after(0, lambda: self.log_message(f"❌ Connection error: {str(e)}"))
-                    self.root.after(0, lambda: self.update_connection_status("error"))
-            
-            # Run in separate thread
-            threading.Thread(target=connect_thread, daemon=True).start()
-            
+                        self.update_connection_status("disconnected")
+                        self.log_message("❌ Failed to reconnect to broker")
+            else:
+                self.update_connection_status("disconnected")
+                self.log_message("❌ Trading system not available")
+                
         except Exception as e:
             self.log_message(f"❌ Connection error: {str(e)}")
             self.update_connection_status("error")
@@ -441,9 +443,9 @@ class MainWindow:
     def update_positions(self):
         """Update positions display"""
         # Clear existing items
-        for item in self.positions_tree.get_children():
-            self.positions_tree.delete(item)
-        
+            for item in self.positions_tree.get_children():
+                self.positions_tree.delete(item)
+            
         try:
             if self.trading_system and self.trading_system.position_manager:
                 positions = self.trading_system.position_manager.get_active_positions()
@@ -490,9 +492,9 @@ class MainWindow:
                     # Implementation would go here
                     self.log_message("All positions closed")
                     self.update_positions()
-                else:
+            else:
                     self.log_message("Trading system not available")
-            except Exception as e:
+        except Exception as e:
                 self.log_message(f"Error closing positions: {str(e)}")
     
     def start_trading(self):
@@ -503,12 +505,12 @@ class MainWindow:
                 return
             
             if self.trading_system.start():
-                self.is_trading = True
+            self.is_trading = True
                 self.update_connection_status("connected")
                 self.log_message("✅ Trading system started")
             else:
                 self.log_message("❌ Failed to start trading system")
-                
+            
         except Exception as e:
             self.log_message(f"❌ Error starting trading: {str(e)}")
     
@@ -517,28 +519,28 @@ class MainWindow:
         try:
             if self.trading_system:
                 self.trading_system.stop()
-                self.is_trading = False
+            self.is_trading = False
                 self.update_connection_status("disconnected")
                 self.log_message("Trading system stopped")
             else:
                 self.log_message("Trading system not available")
-                
+            
         except Exception as e:
             self.log_message(f"Error stopping trading: {str(e)}")
     
     def emergency_stop(self):
         """Emergency stop all trading"""
         if messagebox.askyesno("EMERGENCY STOP", "This will immediately stop all trading activities. Continue?"):
-            try:
-                if self.trading_system:
-                    self.trading_system.emergency_stop()
-                    self.is_trading = False
+        try:
+            if self.trading_system:
+                self.trading_system.emergency_stop()
+            self.is_trading = False
                     self.update_connection_status("disconnected")
                     self.log_message("🚨 EMERGENCY STOP ACTIVATED")
                 else:
                     self.log_message("Trading system not available")
-                    
-            except Exception as e:
+            
+        except Exception as e:
                 self.log_message(f"Emergency stop error: {str(e)}")
     
     def show_settings(self):
@@ -563,8 +565,8 @@ class MainWindow:
     
     def run(self):
         """Run the GUI"""
-        self.root.mainloop()
-
+            self.root.mainloop()
+            
 def main():
     """Main function to run the GUI"""
     app = MainWindow()
