@@ -194,6 +194,8 @@ class TradingSystem:
             
             # Initialize risk manager (enhanced)
             self.risk_manager = RiskManager()
+            # Pass broker_api to risk_manager for balance access
+            self.risk_manager.broker_api = self.broker_api
             self.logger.info("Enhanced risk manager initialized")
             
             # Initialize position manager
@@ -293,6 +295,7 @@ class TradingSystem:
                 self.logger.error("Not connected to broker - trying to connect...")
                 # Try to connect if not connected
                 if not self.broker_api:
+                    from trading.broker_api import BrokerAPI
                     self.broker_api = BrokerAPI("MetaTrader5")
                 
                 if not self.broker_api.connect():

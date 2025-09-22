@@ -347,6 +347,23 @@ class BrokerAPI:
             self.logger.error(f"Error getting current price for {symbol}: {e}")
             return None
     
+    def get_account_balance(self) -> Optional[float]:
+        """Get account balance"""
+        try:
+            if not self._connected:
+                return None
+            
+            if self.broker_type == "MetaTrader5":
+                account_info = mt5.account_info()
+                if account_info:
+                    return account_info.balance
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Error getting account balance: {e}")
+            return None
+    
     def get_spread(self, symbol: str) -> Optional[float]:
         """Get current spread for a symbol"""
         try:

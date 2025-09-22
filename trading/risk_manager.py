@@ -430,7 +430,18 @@ class RiskManager:
     
     def get_account_balance(self) -> float:
         """รับยอดเงินในบัญชี"""
-        return getattr(self, 'account_balance', 10000.0)
+        try:
+            # Try to get balance from broker if available
+            if hasattr(self, 'broker_api') and self.broker_api and self.broker_api.is_connected():
+                balance = self.broker_api.get_account_balance()
+                if balance is not None:
+                    return balance
+            
+            # Fallback to stored balance
+            return getattr(self, 'account_balance', 10000.0)
+        except Exception as e:
+            self.logger.error(f"Error getting account balance: {e}")
+            return getattr(self, 'account_balance', 10000.0)
     
     def update_account_balance(self, balance: float):
         """อัปเดตยอดเงินในบัญชี"""
