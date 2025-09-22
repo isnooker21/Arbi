@@ -17,6 +17,14 @@ import argparse
 import logging
 from datetime import datetime
 
+# Set UTF-8 encoding for Windows
+if sys.platform == "win32":
+    try:
+        # Set console code page to UTF-8
+        os.system("chcp 65001 >nul 2>&1")
+    except:
+        pass
+
 # เพิ่ม path ของโปรเจค
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -25,14 +33,33 @@ def setup_logging():
     # สร้างโฟลเดอร์ logs
     os.makedirs("logs", exist_ok=True)
     
+    # Setup console handler with UTF-8 encoding
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    
+    # Try to set UTF-8 encoding for console output
+    try:
+        if hasattr(console_handler.stream, 'reconfigure'):
+            console_handler.stream.reconfigure(encoding='utf-8')
+    except Exception:
+        pass  # Fallback to default encoding
+    
+    # Setup file handler with UTF-8 encoding
+    file_handler = logging.FileHandler(
+        f"logs/run_{datetime.now().strftime('%Y%m%d')}.log",
+        encoding='utf-8'
+    )
+    file_handler.setLevel(logging.INFO)
+    
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(formatter)
+    file_handler.setFormatter(formatter)
+    
     # ตั้งค่า logging
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(f"logs/run_{datetime.now().strftime('%Y%m%d')}.log"),
-            logging.StreamHandler(sys.stdout)
-        ]
+        handlers=[file_handler, console_handler]
     )
     
     return logging.getLogger(__name__)
