@@ -1,0 +1,15 @@
+MetaTrader5>=5.0.0
+pandas>=1.3.0
+numpy>=1.21.0
+scikit-learn>=1.0.0
+matplotlib>=3.4.0
+asyncio>=3.4.0
+websockets>=10.0
+schedule>=1.1.0
+tkinter
+PyQt5>=5.15.0
+sqlite3
+logging
+threading
+json
+xml

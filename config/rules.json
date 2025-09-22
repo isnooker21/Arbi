@@ -1,0 +1,170 @@
+{
+  "market_analysis_rules": [
+    {
+      "id": "MA-001",
+      "name": "Asian Session Classification",
+      "category": "market_analysis",
+      "weight": 0.8,
+      "confidence": 0.9,
+      "conditions": [
+        "current_time >= '00:00' AND current_time <= '08:00'",
+        "day_of_week NOT IN ['saturday', 'sunday']"
+      ],
+      "actions": [
+        "SET session_type = 'asian'",
+        "SET volatility_expected = 'low'", 
+        "SET arbitrage_threshold = 0.2"
+      ]
+    },
+    {
+      "id": "MA-002",
+      "name": "London Session Classification",
+      "category": "market_analysis",
+      "weight": 0.9,
+      "confidence": 0.95,
+      "conditions": [
+        "current_time >= '08:00' AND current_time <= '16:00'",
+        "day_of_week NOT IN ['saturday', 'sunday']"
+      ],
+      "actions": [
+        "SET session_type = 'london'",
+        "SET volatility_expected = 'high'",
+        "SET arbitrage_threshold = 0.15"
+      ]
+    },
+    {
+      "id": "MA-003",
+      "name": "New York Session Classification",
+      "category": "market_analysis",
+      "weight": 0.9,
+      "confidence": 0.95,
+      "conditions": [
+        "current_time >= '13:00' AND current_time <= '21:00'",
+        "day_of_week NOT IN ['saturday', 'sunday']"
+      ],
+      "actions": [
+        "SET session_type = 'new_york'",
+        "SET volatility_expected = 'high'",
+        "SET arbitrage_threshold = 0.15"
+      ]
+    }
+  ],
+  "arbitrage_rules": [
+    {
+      "id": "AD-001", 
+      "name": "Multi-Timeframe Confirmation",
+      "category": "arbitrage_detection",
+      "weight": 0.9,
+      "confidence": 0.85,
+      "conditions": [
+        "h1_trend == 'bullish'",
+        "m30_structure == 'support'",
+        "m15_condition == 'normal'",
+        "m5_signal == 'strong'"
+      ],
+      "actions": [
+        "SET arbitrage_confidence = 0.85",
+        "SET proceed_to_entry = true"
+      ]
+    },
+    {
+      "id": "AD-002",
+      "name": "High Volatility Arbitrage",
+      "category": "arbitrage_detection",
+      "weight": 0.8,
+      "confidence": 0.75,
+      "conditions": [
+        "volatility > 0.5",
+        "arbitrage_percent > 0.3",
+        "spread_acceptable == true"
+      ],
+      "actions": [
+        "SET arbitrage_confidence = 0.75",
+        "SET proceed_to_entry = true",
+        "SET position_size_multiplier = 1.2"
+      ]
+    },
+    {
+      "id": "AD-003",
+      "name": "Low Risk Arbitrage",
+      "category": "arbitrage_detection",
+      "weight": 0.7,
+      "confidence": 0.9,
+      "conditions": [
+        "arbitrage_percent > 0.2",
+        "spread < 0.1",
+        "market_condition == 'stable'"
+      ],
+      "actions": [
+        "SET arbitrage_confidence = 0.9",
+        "SET proceed_to_entry = true",
+        "SET position_size_multiplier = 1.0"
+      ]
+    }
+  ],
+  "correlation_rules": [
+    {
+      "id": "CR-001",
+      "name": "High Correlation Recovery",
+      "category": "correlation_recovery",
+      "weight": 0.8,
+      "confidence": 0.8,
+      "conditions": [
+        "correlation > 0.7",
+        "base_pair_loss > 50",
+        "recovery_pair_trend == 'opposite'"
+      ],
+      "actions": [
+        "SET recovery_confidence = 0.8",
+        "SET proceed_to_recovery = true"
+      ]
+    },
+    {
+      "id": "CR-002",
+      "name": "Grid Recovery Strategy",
+      "category": "correlation_recovery",
+      "weight": 0.7,
+      "confidence": 0.75,
+      "conditions": [
+        "correlation > 0.6",
+        "position_age > 3600",
+        "market_volatility < 0.3"
+      ],
+      "actions": [
+        "SET recovery_confidence = 0.75",
+        "SET proceed_to_recovery = true",
+        "SET grid_levels = 5"
+      ]
+    }
+  ],
+  "risk_management_rules": [
+    {
+      "id": "RM-001",
+      "name": "Daily Loss Limit",
+      "category": "risk_management",
+      "weight": 1.0,
+      "confidence": 1.0,
+      "conditions": [
+        "daily_pnl < -1000"
+      ],
+      "actions": [
+        "SET stop_trading = true",
+        "SET close_all_positions = true"
+      ]
+    },
+    {
+      "id": "RM-002",
+      "name": "Drawdown Protection",
+      "category": "risk_management",
+      "weight": 1.0,
+      "confidence": 1.0,
+      "conditions": [
+        "drawdown_percent > 30"
+      ],
+      "actions": [
+        "SET reduce_position_sizes = true",
+        "SET increase_confidence_threshold = true"
+      ]
+    }
+  ]
+}

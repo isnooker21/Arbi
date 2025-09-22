@@ -1,0 +1,21 @@
+{
+  "MetaTrader5": {
+    "server": "YourBroker-Server",
+    "login": 0,
+    "password": "",
+    "timeout": 30000,
+    "portable": false
+  },
+  "OANDA": {
+    "account_id": "",
+    "access_token": "",
+    "environment": "practice",
+    "timeout": 30
+  },
+  "FXCM": {
+    "username": "",
+    "password": "",
+    "environment": "demo",
+    "timeout": 30
+  }
+}
