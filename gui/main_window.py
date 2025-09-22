@@ -282,30 +282,33 @@ class MainWindow:
     def create_connection_frame(self, parent):
         """Create broker connection controls with Auto Setup"""
         frame = ttk.LabelFrame(parent, text="🔗 Broker Connection", style='Header.TLabel')
-        frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        frame.pack(fill=tk.X, padx=5, pady=5)
         
         # Connection fields
-        ttk.Label(frame, text="Broker:", style='Info.TLabel').grid(row=0, column=0, padx=5, pady=5)
+        connection_row = ttk.Frame(frame)
+        connection_row.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Label(connection_row, text="Broker:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
         self.broker_var = tk.StringVar(value="MetaTrader5")
-        broker_combo = ttk.Combobox(frame, textvariable=self.broker_var, 
+        broker_combo = ttk.Combobox(connection_row, textvariable=self.broker_var, 
                                   values=["MetaTrader5", "OANDA", "FXCM"], width=15, style='Modern.TCombobox')
-        broker_combo.grid(row=0, column=1, padx=5, pady=5)
+        broker_combo.pack(side=tk.LEFT, padx=5)
         
         # Account info display
-        self.account_info_label = ttk.Label(frame, text="Account: Not Connected", style='Muted.TLabel')
-        self.account_info_label.grid(row=0, column=2, columnspan=3, padx=5, pady=5)
+        self.account_info_label = ttk.Label(connection_row, text="Account: Not Connected", style='Muted.TLabel')
+        self.account_info_label.pack(side=tk.LEFT, padx=10)
         
         # Connection controls
-        ttk.Button(frame, text="🔧 Auto Connect", 
-                  command=self.auto_connect, style='Primary.TButton').grid(row=0, column=5, padx=5, pady=5)
+        ttk.Button(connection_row, text="🔧 Auto Connect", 
+                  command=self.auto_connect, style='Primary.TButton').pack(side=tk.LEFT, padx=5)
         
-        ttk.Button(frame, text="⚙️ Settings", 
-                  command=self.open_settings, style='Secondary.TButton').grid(row=0, column=6, padx=5, pady=5)
+        ttk.Button(connection_row, text="⚙️ Settings", 
+                  command=self.open_settings, style='Secondary.TButton').pack(side=tk.LEFT, padx=5)
         
         # Status indicator
-        self.connection_status_label = ttk.Label(frame, text="🔴 Disconnected", 
+        self.connection_status_label = ttk.Label(connection_row, text="🔴 Disconnected", 
                                                style='Danger.TLabel')
-        self.connection_status_label.grid(row=0, column=7, padx=5, pady=5)
+        self.connection_status_label.pack(side=tk.RIGHT, padx=5)
     
     def auto_connect(self):
         """Auto connect to MT5"""
@@ -357,66 +360,75 @@ class MainWindow:
     def create_control_frame(self, parent):
         """Create trading control panel"""
         frame = ttk.LabelFrame(parent, text="🎮 Trading Control", style='Header.TLabel')
-        frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        frame.pack(fill=tk.X, padx=5, pady=5)
         
         # System toggles
+        control_row = ttk.Frame(frame)
+        control_row.pack(fill=tk.X, padx=5, pady=5)
+        
         self.arbitrage_enabled = tk.BooleanVar(value=True)
-        ttk.Checkbutton(frame, text="Arbitrage System", 
-                       variable=self.arbitrage_enabled, style='Info.TLabel').grid(row=0, column=0, padx=5, pady=5)
+        ttk.Checkbutton(control_row, text="Arbitrage System", 
+                       variable=self.arbitrage_enabled, style='Info.TLabel').pack(side=tk.LEFT, padx=5)
         
         self.correlation_enabled = tk.BooleanVar(value=True)
-        ttk.Checkbutton(frame, text="Correlation System", 
-                       variable=self.correlation_enabled, style='Info.TLabel').grid(row=0, column=1, padx=5, pady=5)
+        ttk.Checkbutton(control_row, text="Correlation System", 
+                       variable=self.correlation_enabled, style='Info.TLabel').pack(side=tk.LEFT, padx=5)
         
         # Trading controls
-        ttk.Button(frame, text="🚀 START TRADING", 
+        ttk.Button(control_row, text="🚀 START TRADING", 
                   command=self.start_trading, 
-                  style="Success.TButton").grid(row=0, column=2, padx=10, pady=5)
+                  style="Success.TButton").pack(side=tk.LEFT, padx=10)
         
-        ttk.Button(frame, text="⏹️ STOP TRADING", 
+        ttk.Button(control_row, text="⏹️ STOP TRADING", 
                   command=self.stop_trading,
-                  style="Warning.TButton").grid(row=0, column=3, padx=10, pady=5)
+                  style="Warning.TButton").pack(side=tk.LEFT, padx=10)
         
-        ttk.Button(frame, text="🛑 EMERGENCY STOP", 
+        ttk.Button(control_row, text="🛑 EMERGENCY STOP", 
                   command=self.emergency_stop,
-                  style="Danger.TButton").grid(row=0, column=4, padx=10, pady=5)
+                  style="Danger.TButton").pack(side=tk.LEFT, padx=10)
         
         # Status display
-        self.trading_status_label = ttk.Label(frame, text="⏸️ Stopped", 
+        self.trading_status_label = ttk.Label(control_row, text="⏸️ Stopped", 
                                             style='Warning.TLabel')
-        self.trading_status_label.grid(row=0, column=5, padx=5, pady=5)
+        self.trading_status_label.pack(side=tk.RIGHT, padx=5)
         
     def create_ai_frame(self, parent):
         """Create AI control and monitoring"""
         frame = ttk.LabelFrame(parent, text="🤖 AI Engine", style='Header.TLabel')
-        frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        frame.pack(fill=tk.X, padx=5, pady=5)
         
         # AI status
-        ttk.Label(frame, text="AI Status:", style='Info.TLabel').grid(row=0, column=0, padx=5, pady=5)
-        self.ai_status_label = ttk.Label(frame, text="🟢 Active", style='Success.TLabel')
-        self.ai_status_label.grid(row=0, column=1, padx=5, pady=5)
+        ai_row = ttk.Frame(frame)
+        ai_row.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Label(ai_row, text="AI Status:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
+        self.ai_status_label = ttk.Label(ai_row, text="🟢 Active", style='Success.TLabel')
+        self.ai_status_label.pack(side=tk.LEFT, padx=5)
         
         # Rule counts
-        ttk.Label(frame, text="Active Rules:", style='Info.TLabel').grid(row=0, column=2, padx=5, pady=5)
-        self.active_rules_label = ttk.Label(frame, text="247", style='Info.TLabel')
-        self.active_rules_label.grid(row=0, column=3, padx=5, pady=5)
+        ttk.Label(ai_row, text="Active Rules:", style='Info.TLabel').pack(side=tk.LEFT, padx=10)
+        self.active_rules_label = ttk.Label(ai_row, text="247", style='Info.TLabel')
+        self.active_rules_label.pack(side=tk.LEFT, padx=5)
         
         # Confidence level
-        ttk.Label(frame, text="Confidence:", style='Info.TLabel').grid(row=0, column=4, padx=5, pady=5)
+        ttk.Label(ai_row, text="Confidence:", style='Info.TLabel').pack(side=tk.LEFT, padx=10)
         self.confidence_var = tk.DoubleVar()
-        self.confidence_progress = ttk.Progressbar(frame, variable=self.confidence_var, 
+        self.confidence_progress = ttk.Progressbar(ai_row, variable=self.confidence_var, 
                                                  maximum=100, length=200)
-        self.confidence_progress.grid(row=0, column=5, padx=5, pady=5)
+        self.confidence_progress.pack(side=tk.LEFT, padx=5)
         
         # Last decision
-        ttk.Label(frame, text="Last Decision:", style='Info.TLabel').grid(row=1, column=0, padx=5, pady=5)
-        self.last_decision_label = ttk.Label(frame, text="⏳ Waiting...", style='Muted.TLabel')
-        self.last_decision_label.grid(row=1, column=1, columnspan=4, sticky="w", padx=5, pady=5)
+        decision_row = ttk.Frame(frame)
+        decision_row.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Label(decision_row, text="Last Decision:", style='Info.TLabel').pack(side=tk.LEFT, padx=5)
+        self.last_decision_label = ttk.Label(decision_row, text="⏳ Waiting...", style='Muted.TLabel')
+        self.last_decision_label.pack(side=tk.LEFT, padx=5)
         
     def create_monitoring_frame(self, parent):
         """Create monitoring and statistics frame"""
         frame = ttk.LabelFrame(parent, text="📊 Trading Monitor", style='Header.TLabel')
-        frame.grid(row=3, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        frame.pack(fill=tk.X, padx=5, pady=5)
         
         # Create notebook for tabs
         notebook = ttk.Notebook(frame)
@@ -465,16 +477,16 @@ class MainWindow:
     def create_chart_frame(self, parent):
         """Create chart display frame"""
         frame = ttk.LabelFrame(parent, text="📊 Charts", style='Header.TLabel')
-        frame.grid(row=4, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        frame.pack(fill=tk.X, padx=5, pady=5)
         
         # Placeholder for charts
         self.chart_label = ttk.Label(frame, text="📊 Charts will be displayed here\n\nReal-time price charts and analysis will appear in this area.", 
                                    style='Muted.TLabel', anchor=tk.CENTER)
-        self.chart_label.grid(row=0, column=0, padx=5, pady=20)
+        self.chart_label.pack(padx=5, pady=20)
         
         # Chart controls
         chart_controls = ttk.Frame(frame)
-        chart_controls.grid(row=1, column=0, padx=5, pady=5)
+        chart_controls.pack(padx=5, pady=5)
         
         ttk.Button(chart_controls, text="Open Charts", command=self.open_charts, 
                   style='Primary.TButton').pack(side=tk.LEFT)
@@ -484,16 +496,16 @@ class MainWindow:
     def create_log_frame(self, parent):
         """Create log display frame"""
         frame = ttk.LabelFrame(parent, text="📝 System Log", style='Header.TLabel')
-        frame.grid(row=5, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Log text area
         self.log_text = scrolledtext.ScrolledText(frame, height=8, bg='#2d2d2d', 
                                                 fg='#ffffff', font=('Consolas', 9), insertbackground='#00d4ff')
-        self.log_text.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        self.log_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Clear log button
         ttk.Button(frame, text="Clear Log", 
-                  command=self.clear_log, style='Secondary.TButton').grid(row=1, column=0, padx=5, pady=5)
+                  command=self.clear_log, style='Secondary.TButton').pack(padx=5, pady=5)
     
     def open_charts(self):
         """Open charts window"""

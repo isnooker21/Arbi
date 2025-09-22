@@ -94,7 +94,7 @@ class TradingSystem:
     def _auto_setup(self):
         """Auto Setup ระบบโดยอัตโนมัติ"""
         try:
-            self.logger.info("กำลังทำ Auto Setup...")
+            self.logger.info("Starting Auto Setup...")
             print("กำลังทำ Auto Setup...")
             
             # Import BrokerAPI
