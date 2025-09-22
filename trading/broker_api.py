@@ -30,7 +30,7 @@ class BrokerAPI:
         self.broker_type = broker_type
         self.logger = logging.getLogger(__name__)
         self.config = self._load_config(config_file)
-        self.is_connected = False
+        self._connected = False
         self.account_info = None
         
     def _load_config(self, config_file: str) -> Dict:
@@ -76,7 +76,7 @@ class BrokerAPI:
             if account_info is not None:
                 self.logger.info("MT5 already connected - using existing connection")
                 self.account_info = account_info
-                self.is_connected = True
+                self._connected = True
                 
                 # Auto-detect and save config
                 self.auto_detect_mt5_config()
@@ -91,7 +91,7 @@ class BrokerAPI:
                 account_info = mt5.account_info()
                 if account_info is not None:
                     self.account_info = account_info
-                    self.is_connected = True
+                    self._connected = True
                     
                     # Auto-detect and save config
                     self.auto_detect_mt5_config()
@@ -162,7 +162,7 @@ class BrokerAPI:
             if account_info is not None:
                 self.logger.info("MT5 already connected - using existing connection")
                 self.account_info = account_info
-                self.is_connected = True
+                self._connected = True
                 self.logger.info(f"Using existing MT5 connection - Account: {account_info.login}, "
                                f"Balance: {account_info.balance}")
                 return True
@@ -181,7 +181,7 @@ class BrokerAPI:
                     account_info = mt5.account_info()
                     if account_info is not None:
                         self.account_info = account_info
-                        self.is_connected = True
+                        self._connected = True
                         self.logger.info(f"Connected using MT5 terminal - Account: {account_info.login}, "
                                        f"Balance: {account_info.balance}")
                         return True
@@ -198,7 +198,7 @@ class BrokerAPI:
                     self.logger.error("Failed to get account info")
                     return False
                 
-                self.is_connected = True
+                self._connected = True
                 self.logger.info(f"Connected to MT5 - Account: {self.account_info.login}, "
                                f"Balance: {self.account_info.balance}")
                 return True
@@ -238,7 +238,7 @@ class BrokerAPI:
             if self.broker_type == "MetaTrader5":
                 mt5.shutdown()
             
-            self.is_connected = False
+            self._connected = False
             self.account_info = None
             self.logger.info("Disconnected from broker")
             
@@ -248,7 +248,7 @@ class BrokerAPI:
     def get_account_info(self) -> Optional[Dict]:
         """Get account information"""
         try:
-            if not self.is_connected:
+            if not self._connected:
                 return None
             
             if self.broker_type == "MetaTrader5":
@@ -275,7 +275,7 @@ class BrokerAPI:
     def get_available_pairs(self) -> List[str]:
         """Get list of available trading pairs"""
         try:
-            if not self.is_connected:
+            if not self._connected:
                 return []
             
             if self.broker_type == "MetaTrader5":
@@ -292,7 +292,7 @@ class BrokerAPI:
     def get_current_price(self, symbol: str) -> Optional[float]:
         """Get current price for a symbol"""
         try:
-            if not self.is_connected:
+            if not self._connected:
                 return None
             
             if self.broker_type == "MetaTrader5":
@@ -309,7 +309,7 @@ class BrokerAPI:
     def get_spread(self, symbol: str) -> Optional[float]:
         """Get current spread for a symbol"""
         try:
-            if not self.is_connected:
+            if not self._connected:
                 return None
             
             if self.broker_type == "MetaTrader5":
@@ -326,7 +326,7 @@ class BrokerAPI:
     def get_historical_data(self, symbol: str, timeframe: str, count: int) -> Optional[pd.DataFrame]:
         """Get historical data for a symbol"""
         try:
-            if not self.is_connected:
+            if not self._connected:
                 return None
             
             if self.broker_type == "MetaTrader5":
@@ -366,7 +366,7 @@ class BrokerAPI:
                    price: float = None, sl: float = None, tp: float = None) -> Optional[Dict]:
         """Place an order"""
         try:
-            if not self.is_connected:
+            if not self._connected:
                 return None
             
             if self.broker_type == "MetaTrader5":
@@ -434,7 +434,7 @@ class BrokerAPI:
     def close_order(self, order_id: int) -> bool:
         """Close an order by ID"""
         try:
-            if not self.is_connected:
+            if not self._connected:
                 return False
             
             if self.broker_type == "MetaTrader5":
@@ -485,7 +485,7 @@ class BrokerAPI:
     def get_all_positions(self) -> List[Dict]:
         """Get all open positions"""
         try:
-            if not self.is_connected:
+            if not self._connected:
                 return []
             
             if self.broker_type == "MetaTrader5":
@@ -542,7 +542,7 @@ class BrokerAPI:
     def cancel_order(self, order_id: int) -> bool:
         """Cancel a pending order"""
         try:
-            if not self.is_connected:
+            if not self._connected:
                 return False
             
             if self.broker_type == "MetaTrader5":
@@ -577,7 +577,7 @@ class BrokerAPI:
     def get_tick_data(self) -> Dict:
         """Get latest tick data for all symbols"""
         try:
-            if not self.is_connected:
+            if not self._connected:
                 return {}
             
             if self.broker_type == "MetaTrader5":
@@ -605,4 +605,4 @@ class BrokerAPI:
     
     def is_connected(self) -> bool:
         """Check if connected to broker"""
-        return self.is_connected
+        return self._connected
