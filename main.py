@@ -78,6 +78,7 @@ class TradingSystem:
         self.is_running = False
         self.is_initialized = False
         self.emergency_stop = False
+        self.trading_thread = None
         
         # Auto Setup if requested
         if auto_setup:
@@ -316,8 +317,9 @@ class TradingSystem:
             
             self.logger.info("Trading system started successfully")
             
-            # Start main trading loop
-            self._trading_loop()
+            # Start main trading loop in background thread
+            self.trading_thread = threading.Thread(target=self._trading_loop, daemon=True)
+            self.trading_thread.start()
             
             return True
             
@@ -348,6 +350,12 @@ class TradingSystem:
                 self.data_feed.stop()
             
             self.is_running = False
+            
+            # Wait for trading thread to finish (with timeout)
+            if hasattr(self, 'trading_thread') and self.trading_thread.is_alive():
+                self.trading_thread.join(timeout=5.0)
+                if self.trading_thread.is_alive():
+                    self.logger.warning("Trading thread did not stop within timeout")
             
             self.logger.info("Trading system stopped")
             

@@ -392,30 +392,61 @@ class MainWindow:
             self.log_message("Checking broker connection...")
             self.update_connection_status("connecting")
             
-            # Check if trading_system already exists from auto-setup
-            if self.trading_system and self.trading_system.broker_api:
-                if self.trading_system.broker_api.is_connected():
-                    self.update_connection_status("connected")
-                    self.log_message("✅ Already connected to broker")
-                    if self.trading_system.broker_api.account_info:
-                        account = self.trading_system.broker_api.account_info
-                        self.log_message(f"Account: {account.login} | Server: {account.server}")
-                        self.log_message(f"Balance: ${account.balance:.2f} | Equity: ${account.equity:.2f}")
-                else:
-                    # Try to reconnect
-                    if self.trading_system.broker_api.connect():
-                        self.update_connection_status("connected")
-                        self.log_message("✅ Reconnected to broker successfully")
+            # Connect in background thread to avoid blocking GUI
+            def connect_thread():
+                try:
+                    # Check if trading_system already exists from auto-setup
+                    if self.trading_system and self.trading_system.broker_api:
+                        if self.trading_system.broker_api.is_connected():
+                            # Update GUI in main thread
+                            self.root.after(0, self._on_already_connected)
+                        else:
+                            # Try to reconnect
+                            if self.trading_system.broker_api.connect():
+                                self.root.after(0, self._on_reconnected)
+                            else:
+                                self.root.after(0, self._on_reconnect_failed)
                     else:
-                        self.update_connection_status("disconnected")
-                        self.log_message("❌ Failed to reconnect to broker")
-            else:
-                self.update_connection_status("disconnected")
-                self.log_message("❌ Trading system not available")
+                        self.root.after(0, self._on_system_not_available)
+                        
+                except Exception as e:
+                    self.root.after(0, lambda: self._on_connection_error(str(e)))
+            
+            # Start background thread
+            threading.Thread(target=connect_thread, daemon=True).start()
                 
         except Exception as e:
             self.log_message(f"❌ Connection error: {str(e)}")
             self.update_connection_status("error")
+    
+    def _on_already_connected(self):
+        """Called when already connected to broker"""
+        self.update_connection_status("connected")
+        self.log_message("✅ Already connected to broker")
+        if self.trading_system.broker_api.account_info:
+            account = self.trading_system.broker_api.account_info
+            self.log_message(f"Account: {account.login} | Server: {account.server}")
+            self.log_message(f"Balance: ${account.balance:.2f} | Equity: ${account.equity:.2f}")
+    
+    def _on_reconnected(self):
+        """Called when reconnected to broker"""
+        self.update_connection_status("connected")
+        self.log_message("✅ Reconnected to broker successfully")
+    
+    def _on_reconnect_failed(self):
+        """Called when reconnect to broker failed"""
+        self.update_connection_status("disconnected")
+        self.log_message("❌ Failed to reconnect to broker")
+    
+    def _on_system_not_available(self):
+        """Called when trading system not available"""
+        self.update_connection_status("disconnected")
+        self.log_message("❌ Trading system not available")
+    
+    def _on_connection_error(self, error_msg):
+        """Called when connection error occurs"""
+        self.log_message(f"❌ Connection error: {error_msg}")
+        self.update_connection_status("error")
     
     def update_connection_status(self, status):
         """Update connection status"""
@@ -504,29 +535,70 @@ class MainWindow:
                 self.log_message("❌ Please connect to broker first")
                 return
             
-            if self.trading_system.start():
-                self.is_trading = True
-                self.update_connection_status("connected")
-                self.log_message("✅ Trading system started")
-            else:
-                self.log_message("❌ Failed to start trading system")
+            # Start trading in background thread to avoid blocking GUI
+            def start_trading_thread():
+                try:
+                    if self.trading_system.start():
+                        # Update GUI in main thread
+                        self.root.after(0, self._on_trading_started_success)
+                    else:
+                        self.root.after(0, self._on_trading_started_failed)
+                except Exception as e:
+                    self.root.after(0, lambda: self._on_trading_error(str(e)))
+            
+            # Start background thread
+            threading.Thread(target=start_trading_thread, daemon=True).start()
+            self.log_message("🔄 Starting trading system...")
             
         except Exception as e:
             self.log_message(f"❌ Error starting trading: {str(e)}")
     
+    def _on_trading_started_success(self):
+        """Called when trading system started successfully"""
+        self.is_trading = True
+        self.update_connection_status("connected")
+        self.log_message("✅ Trading system started")
+    
+    def _on_trading_started_failed(self):
+        """Called when trading system failed to start"""
+        self.log_message("❌ Failed to start trading system")
+    
+    def _on_trading_error(self, error_msg):
+        """Called when trading system encountered an error"""
+        self.log_message(f"❌ Error starting trading: {error_msg}")
+    
     def stop_trading(self):
         """Stop trading system"""
         try:
-            if self.trading_system:
-                self.trading_system.stop()
-                self.is_trading = False
-                self.update_connection_status("disconnected")
-                self.log_message("Trading system stopped")
-            else:
+            if not self.trading_system:
                 self.log_message("Trading system not available")
+                return
+            
+            # Stop trading in background thread to avoid blocking GUI
+            def stop_trading_thread():
+                try:
+                    self.trading_system.stop()
+                    # Update GUI in main thread
+                    self.root.after(0, self._on_trading_stopped)
+                except Exception as e:
+                    self.root.after(0, lambda: self._on_stop_error(str(e)))
+            
+            # Start background thread
+            threading.Thread(target=stop_trading_thread, daemon=True).start()
+            self.log_message("🔄 Stopping trading system...")
             
         except Exception as e:
             self.log_message(f"Error stopping trading: {str(e)}")
+    
+    def _on_trading_stopped(self):
+        """Called when trading system stopped successfully"""
+        self.is_trading = False
+        self.update_connection_status("disconnected")
+        self.log_message("Trading system stopped")
+    
+    def _on_stop_error(self, error_msg):
+        """Called when trading system encountered an error during stop"""
+        self.log_message(f"Error stopping trading: {error_msg}")
     
     def emergency_stop(self):
         """Emergency stop all trading"""
