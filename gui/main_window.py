@@ -50,7 +50,7 @@ class MainWindow:
         
         # Auto Setup if requested
         if self.auto_setup:
-            self.auto_connect()
+            self.root.after(1000, self.auto_connect)  # Delay 1 second to ensure GUI is ready
         
     def setup_styles(self):
         """Configure custom styles for the application"""
@@ -59,24 +59,24 @@ class MainWindow:
         # Configure theme
         style.theme_use('clam')
         
-        # Professional dark theme color scheme
+        # Smooth professional dark theme color scheme
         colors = {
-            'bg_primary': '#0a0a0a',
-            'bg_secondary': '#1a1a1a',
-            'bg_tertiary': '#2a2a2a',
-            'accent_blue': '#007acc',
-            'accent_green': '#28a745',
-            'accent_red': '#dc3545',
-            'accent_yellow': '#ffc107',
+            'bg_primary': '#0d1117',
+            'bg_secondary': '#161b22',
+            'bg_tertiary': '#21262d',
+            'accent_blue': '#58a6ff',
+            'accent_green': '#3fb950',
+            'accent_red': '#f85149',
+            'accent_yellow': '#d29922',
             'accent_orange': '#fd7e14',
-            'text_primary': '#ffffff',
-            'text_secondary': '#d1d5db',
-            'text_muted': '#9ca3af',
-            'border': '#374151',
+            'text_primary': '#f0f6fc',
+            'text_secondary': '#c9d1d9',
+            'text_muted': '#8b949e',
+            'border': '#30363d',
             'highlight': '#1f2937',
-            'success': '#10b981',
-            'warning': '#f59e0b',
-            'danger': '#ef4444'
+            'success': '#3fb950',
+            'warning': '#d29922',
+            'danger': '#f85149'
         }
         
         # Configure main styles
@@ -198,32 +198,41 @@ class MainWindow:
                        borderwidth=1,
                        arrowcolor=colors['accent_blue'])
         
-        # Treeview styles
-        style.configure('Modern.Treeview',
-                       background=colors['bg_tertiary'],
-                       foreground=colors['text_primary'],
-                       fieldbackground=colors['bg_tertiary'],
-                       borderwidth=0)
-        
-        style.configure('Modern.Treeview.Heading',
+        # Smooth treeview styles
+        style.configure('Treeview',
                        background=colors['bg_secondary'],
                        foreground=colors['text_primary'],
-                       font=('Segoe UI', 9, 'bold'))
+                       fieldbackground=colors['bg_secondary'],
+                       font=('Segoe UI', 10),
+                       borderwidth=0)
         
-        # Professional notebook styles
+        style.configure('Treeview.Heading',
+                       background=colors['bg_tertiary'],
+                       foreground=colors['text_primary'],
+                       font=('Segoe UI', 10, 'bold'),
+                       borderwidth=0)
+        
+        style.map('Treeview',
+                 background=[('selected', colors['accent_blue'])],
+                 foreground=[('selected', colors['text_primary'])])
+        
+        # Smooth notebook styles
         style.configure('TNotebook',
                        background=colors['bg_primary'],
                        borderwidth=0)
         
         style.configure('TNotebook.Tab',
-                       background=colors['bg_tertiary'],
-                       foreground=colors['text_primary'],
-                       padding=[15, 8],
-                       font=('Segoe UI', 10, 'bold'))
+                       background=colors['bg_secondary'],
+                       foreground=colors['text_secondary'],
+                       padding=[20, 10],
+                       font=('Segoe UI', 10, 'bold'),
+                       borderwidth=0)
         
         style.map('TNotebook.Tab',
                  background=[('selected', colors['accent_blue']),
-                           ('active', colors['highlight'])])
+                           ('active', colors['bg_tertiary'])],
+                 foreground=[('selected', colors['text_primary']),
+                           ('active', colors['text_primary'])])
         
         # Map hover effects
         style.map('Success.TButton',
@@ -367,15 +376,25 @@ class MainWindow:
         self.connection_status = "Connected"
         self.log_message("เชื่อมต่อสำเร็จ!")
         
+        # Update connection status display
+        self.connection_status_label.config(text="🟢 Connected", style='Success.TLabel')
+        
         # Update account info if available
         if self.trading_system and self.trading_system.broker_api and self.trading_system.broker_api.account_info:
             account = self.trading_system.broker_api.account_info
+            self.account_info_label.config(text=f"Account: {account.login} | Balance: {account.balance:.2f} {account.currency}")
             self.log_message(f"Account: {account.login} | Balance: {account.balance:.2f} {account.currency}")
+        else:
+            self.account_info_label.config(text="Account: Connected")
     
     def _update_connection_failed(self, error_msg):
         """Update connection status on failure - called from main thread"""
         self.connection_status = "Failed"
         self.log_message(f"Auto Setup ล้มเหลว: {error_msg}")
+        
+        # Update connection status display
+        self.connection_status_label.config(text="🔴 Failed", style='Danger.TLabel')
+        self.account_info_label.config(text="Account: Connection Failed")
     
     def open_settings(self):
         """Open settings window"""
