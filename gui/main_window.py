@@ -386,6 +386,9 @@ class MainWindow:
             self.log_message(f"Account: {account.login} | Balance: {account.balance:.2f} {account.currency}")
         else:
             self.account_info_label.config(text="Account: Connected")
+        
+        # Update positions with real data
+        self.update_positions()
     
     def _update_connection_failed(self, error_msg):
         """Update connection status on failure - called from main thread"""
@@ -495,7 +498,7 @@ class MainWindow:
         positions_frame = ttk.Frame(notebook)
         notebook.add(positions_frame, text="Positions")
         
-        # Positions treeview
+        # Positions treeview - empty initially, will be populated with real data
         columns = ('Symbol', 'Type', 'Volume', 'Price', 'PnL', 'Status')
         self.positions_tree = ttk.Treeview(positions_frame, columns=columns, show='headings', height=6)
         
@@ -505,10 +508,18 @@ class MainWindow:
         
         self.positions_tree.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
         
+        # Add placeholder message for empty positions
+        self.positions_tree.insert('', 'end', values=('', '', '', '', '', 'No active positions'))
+        
         # Scrollbar for positions
         positions_scrollbar = ttk.Scrollbar(positions_frame, orient="vertical", command=self.positions_tree.yview)
         positions_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.positions_tree.configure(yscrollcommand=positions_scrollbar.set)
+        
+        # Refresh button for positions
+        refresh_positions_btn = ttk.Button(positions_frame, text="🔄 Refresh Positions", 
+                                         command=self.update_positions, style='Secondary.TButton')
+        refresh_positions_btn.pack(pady=5)
         
         # Performance tab
         performance_frame = ttk.Frame(notebook)
@@ -592,21 +603,41 @@ class MainWindow:
         """Refresh charts"""
         self.log_message("กำลังรีเฟรชกราฟ...")
     
-    def start_trading(self):
-        """Start trading"""
-        if not self.trading_system:
-            self.log_message("ยังไม่ได้เชื่อมต่อ Broker")
-            return
-        
-        self.is_trading = True
-        self.trading_status_label.config(text="🟢 Running", style='Success.TLabel')
-        self.log_message("เริ่มต้นการเทรด")
+    def update_positions(self):
+        """Update positions table with real data"""
+        try:
+            # Clear existing data
+            for item in self.positions_tree.get_children():
+                self.positions_tree.delete(item)
+            
+            # Get real positions from trading system
+            if self.trading_system and self.trading_system.position_manager:
+                positions = self.trading_system.position_manager.get_all_positions()
+                
+                if positions:
+                    for pos in positions:
+                        self.positions_tree.insert('', 'end', values=(
+                            pos.get('symbol', ''),
+                            pos.get('type', ''),
+                            pos.get('volume', ''),
+                            pos.get('price', ''),
+                            pos.get('pnl', ''),
+                            pos.get('status', '')
+                        ))
+                else:
+                    # No positions found
+                    self.positions_tree.insert('', 'end', values=('', '', '', '', '', 'No active positions'))
+            else:
+                # Trading system not available
+                self.positions_tree.insert('', 'end', values=('', '', '', '', '', 'Trading system not connected'))
+                
+        except Exception as e:
+            self.log_message(f"Error updating positions: {str(e)}", "ERROR")
+            self.positions_tree.insert('', 'end', values=('', '', '', '', '', 'Error loading positions'))
     
-    def stop_trading(self):
-        """Stop trading"""
-        self.is_trading = False
-        self.trading_status_label.config(text="⏸️ Stopped", style='Warning.TLabel')
-        self.log_message("หยุดการเทรด")
+    # start_trading function moved below to avoid duplication
+    
+    # stop_trading function moved below to avoid duplication
     
     def emergency_stop(self):
         """Emergency stop"""
@@ -681,17 +712,16 @@ class MainWindow:
                 messagebox.showerror("Error", "Please connect to broker first")
                 return
             
-            # Initialize trading system
-            from main import TradingSystem
-            
-            self.trading_system = TradingSystem()
+            if not self.trading_system:
+                self.log_message("Trading system not initialized", "ERROR")
+                return
             
             # Start trading in separate thread
             trading_thread = threading.Thread(target=self._start_trading_thread, daemon=True)
             trading_thread.start()
             
             self.is_trading = True
-            self.trading_status_label.config(text="Running", style='Success.TLabel')
+            self.trading_status_label.config(text="🟢 Running", style='Success.TLabel')
             self.log_message("Trading system started", "INFO")
             
         except Exception as e:
@@ -702,7 +732,11 @@ class MainWindow:
         """Start trading system in separate thread"""
         try:
             if self.trading_system:
-                self.trading_system.start()
+                result = self.trading_system.start()
+                if result:
+                    self.log_message("Trading system started successfully", "INFO")
+                else:
+                    self.log_message("Failed to start trading system", "ERROR")
         except Exception as e:
             self.log_message(f"Trading thread error: {str(e)}", "ERROR")
     
