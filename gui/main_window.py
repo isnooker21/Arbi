@@ -492,9 +492,9 @@ class MainWindow:
                     # Implementation would go here
                     self.log_message("All positions closed")
                     self.update_positions()
-            else:
+                else:
                     self.log_message("Trading system not available")
-        except Exception as e:
+            except Exception as e:
                 self.log_message(f"Error closing positions: {str(e)}")
     
     def start_trading(self):
