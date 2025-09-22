@@ -28,10 +28,12 @@ class TriangleArbitrageDetector:
         self.broker = broker_api
         self.ai = ai_engine
         self.active_triangles = {}
-        self.available_pairs = self._get_available_pairs()
-        self.triangle_combinations = self._generate_triangle_combinations()
         self.is_running = False
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize pairs and combinations after logger is set
+        self.available_pairs = self._get_available_pairs()
+        self.triangle_combinations = self._generate_triangle_combinations()
         
         # Log triangle combinations count
         self.logger.info(f"Available pairs: {len(self.available_pairs)}")
