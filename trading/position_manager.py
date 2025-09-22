@@ -376,3 +376,46 @@ class PositionManager:
         except Exception as e:
             self.logger.error(f"Error adding comment to position {position_id}: {e}")
             return False
+    
+    def get_total_pnl(self) -> float:
+        """Get total PnL of all positions"""
+        try:
+            total_pnl = 0.0
+            
+            for position_id, position in self.positions.items():
+                if 'pnl' in position:
+                    total_pnl += position['pnl']
+            
+            return total_pnl
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating total PnL: {e}")
+            return 0.0
+    
+    def get_position_count(self) -> int:
+        """Get total number of active positions"""
+        try:
+            return len(self.positions)
+        except Exception as e:
+            self.logger.error(f"Error getting position count: {e}")
+            return 0
+    
+    def get_positions_summary(self) -> dict:
+        """Get summary of all positions"""
+        try:
+            total_pnl = self.get_total_pnl()
+            position_count = self.get_position_count()
+            
+            return {
+                'total_positions': position_count,
+                'total_pnl': total_pnl,
+                'positions': list(self.positions.keys())
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error getting positions summary: {e}")
+            return {
+                'total_positions': 0,
+                'total_pnl': 0.0,
+                'positions': []
+            }
