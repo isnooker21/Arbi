@@ -28,57 +28,89 @@ class TriangleArbitrageDetector:
         self.broker = broker_api
         self.ai = ai_engine
         self.active_triangles = {}
+        self.available_pairs = self._get_available_pairs()
         self.triangle_combinations = self._generate_triangle_combinations()
         self.is_running = False
         self.logger = logging.getLogger(__name__)
         
         # Log triangle combinations count
+        self.logger.info(f"Available pairs: {len(self.available_pairs)}")
         self.logger.info(f"Generated {len(self.triangle_combinations)} triangle combinations (Major & Minor pairs only)")
+    
+    def _get_available_pairs(self) -> List[str]:
+        """Get list of available trading pairs from broker"""
+        try:
+            all_pairs = self.broker.get_available_pairs()
+            if not all_pairs:
+                self.logger.warning("No pairs available from broker")
+                return []
+            
+            # Filter only Major and Minor pairs
+            major_minor_currencies = ['EUR', 'USD', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD']
+            available_pairs = []
+            
+            for pair in all_pairs:
+                # Check if pair contains only major/minor currencies
+                if len(pair) == 6:  # Standard pair format like EURUSD
+                    currency1 = pair[:3]
+                    currency2 = pair[3:]
+                    if currency1 in major_minor_currencies and currency2 in major_minor_currencies:
+                        available_pairs.append(pair)
+            
+            self.logger.info(f"Filtered {len(available_pairs)} Major/Minor pairs from broker")
+            if len(available_pairs) <= 20:  # Show all if small number
+                self.logger.info(f"Available pairs: {', '.join(available_pairs)}")
+            else:  # Show first 20 if many
+                self.logger.info(f"Available pairs (first 20): {', '.join(available_pairs[:20])}")
+            return available_pairs
+            
+        except Exception as e:
+            self.logger.error(f"Error getting available pairs: {e}")
+            return []
         
     def _generate_triangle_combinations(self) -> List[Tuple[str, str, str]]:
         """
-        สร้างรายการคู่เงิน Major และ Minor เท่านั้นสำหรับ Triangular Arbitrage
-        
-        Major Pairs: EUR, USD, GBP, JPY, CHF, AUD, CAD, NZD
-        Minor Pairs: EUR, GBP, JPY, CHF, AUD, CAD, NZD (ไม่รวม USD)
-        
-        ตัวอย่าง:
-        - EUR/USD, USD/JPY, EUR/JPY (Major)
-        - GBP/USD, USD/CHF, GBP/CHF (Major)
-        - EUR/GBP, GBP/JPY, EUR/JPY (Minor)
-        - AUD/CAD, CAD/CHF, AUD/CHF (Minor)
+        สร้างรายการคู่เงินสามเหลี่ยมจากคู่เงินที่มีจริงในบัญชีเท่านั้น
         
         หลักการ: A/B × B/C = A/C (ราคาทางทฤษฎี)
         """
-        # Major currency pairs (8 currencies)
-        major_currencies = ['EUR', 'USD', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD']
-        
-        # Minor currency pairs (7 currencies, no USD)
-        minor_currencies = ['EUR', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD']
-        
         combinations = []
         
-        # Generate Major pairs triangles (USD-based)
-        for base in major_currencies:
-            if base != 'USD':
-                for quote in major_currencies:
-                    if quote != 'USD' and quote != base:
-                        # Create triangle: base/USD, USD/quote, base/quote
-                        pair1 = f"{base}USD"
-                        pair2 = f"USD{quote}"
-                        pair3 = f"{base}{quote}"
-                        combinations.append((pair1, pair2, pair3))
+        # Only use pairs that are actually available in the account
+        available_pairs_set = set(self.available_pairs)
         
-        # Generate Minor pairs triangles (non-USD)
-        for base in minor_currencies:
-            for quote1 in minor_currencies:
-                for quote2 in minor_currencies:
-                    if base != quote1 and quote1 != quote2 and base != quote2:
-                        # Create triangle: base/quote1, quote1/quote2, base/quote2
-                        pair1 = f"{base}{quote1}"
-                        pair2 = f"{quote1}{quote2}"
-                        pair3 = f"{base}{quote2}"
-                        combinations.append((pair1, pair2, pair3))
+        # Generate triangles from available pairs
+        for pair1 in self.available_pairs:
+            currency1_base = pair1[:3]
+            currency1_quote = pair1[3:]
+            
+            for pair2 in self.available_pairs:
+                if pair2 == pair1:
+                    continue
+                    
+                currency2_base = pair2[:3]
+                currency2_quote = pair2[3:]
+                
+                # Check if pair1 and pair2 can form a triangle
+                if currency1_quote == currency2_base:
+                    # pair1 = A/B, pair2 = B/C, so we need A/C
+                    currency3_base = currency1_base
+                    currency3_quote = currency2_quote
+                    pair3 = f"{currency3_base}{currency3_quote}"
+                    
+                    if pair3 in available_pairs_set:
+                        triangle = (pair1, pair2, pair3)
+                        combinations.append(triangle)
+                
+                elif currency1_base == currency2_quote:
+                    # pair1 = A/B, pair2 = C/A, so we need C/B
+                    currency3_base = currency2_base
+                    currency3_quote = currency1_quote
+                    pair3 = f"{currency3_base}{currency3_quote}"
+                    
+                    if pair3 in available_pairs_set:
+                        triangle = (pair1, pair2, pair3)
+                        combinations.append(triangle)
         
         # Remove duplicates and sort
         combinations = list(set(combinations))
