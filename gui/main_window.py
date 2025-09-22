@@ -30,7 +30,7 @@ class MainWindow:
         self.root = tk.Tk()
         self.root.title("🎯 Forex Arbitrage AI Trading System")
         self.root.geometry("1600x900")
-        self.root.configure(bg='#1a1a1a')
+        self.root.configure(bg='#000000')
         self.root.minsize(1200, 700)
         
         # Initialize variables
@@ -59,20 +59,21 @@ class MainWindow:
         # Configure theme
         style.theme_use('clam')
         
-        # Beautiful modern color scheme
+        # Beautiful dark theme color scheme
         colors = {
-            'bg_primary': '#0d1117',
-            'bg_secondary': '#161b22',
-            'bg_tertiary': '#21262d',
-            'accent_blue': '#58a6ff',
-            'accent_green': '#3fb950',
-            'accent_red': '#f85149',
-            'accent_yellow': '#d29922',
-            'accent_purple': '#a5a5ff',
-            'text_primary': '#f0f6fc',
-            'text_secondary': '#c9d1d9',
-            'text_muted': '#8b949e',
-            'border': '#30363d'
+            'bg_primary': '#000000',
+            'bg_secondary': '#111111',
+            'bg_tertiary': '#1a1a1a',
+            'accent_blue': '#00bfff',
+            'accent_green': '#00ff88',
+            'accent_red': '#ff4757',
+            'accent_yellow': '#ffa502',
+            'accent_purple': '#9c88ff',
+            'text_primary': '#ffffff',
+            'text_secondary': '#e0e0e0',
+            'text_muted': '#a0a0a0',
+            'border': '#333333',
+            'highlight': '#1e1e1e'
         }
         
         # Configure main styles
@@ -95,59 +96,59 @@ class MainWindow:
         style.configure('Success.TButton',
                        background=colors['accent_green'],
                        foreground='#000000',
-                       font=('Segoe UI', 11, 'bold'),
+                       font=('Segoe UI', 12, 'bold'),
                        borderwidth=0,
                        focuscolor='none',
                        relief='flat',
-                       padding=(15, 8))
+                       padding=(20, 10))
         
         style.configure('Warning.TButton',
                        background=colors['accent_yellow'],
                        foreground='#000000',
-                       font=('Segoe UI', 11, 'bold'),
+                       font=('Segoe UI', 12, 'bold'),
                        borderwidth=0,
                        focuscolor='none',
                        relief='flat',
-                       padding=(15, 8))
+                       padding=(20, 10))
         
         style.configure('Danger.TButton',
                        background=colors['accent_red'],
                        foreground='#ffffff',
-                       font=('Segoe UI', 11, 'bold'),
+                       font=('Segoe UI', 12, 'bold'),
                        borderwidth=0,
                        focuscolor='none',
                        relief='flat',
-                       padding=(15, 8))
+                       padding=(20, 10))
         
         style.configure('Primary.TButton',
                        background=colors['accent_blue'],
                        foreground='#ffffff',
-                       font=('Segoe UI', 11, 'bold'),
+                       font=('Segoe UI', 12, 'bold'),
                        borderwidth=0,
                        focuscolor='none',
                        relief='flat',
-                       padding=(15, 8))
+                       padding=(20, 10))
         
         style.configure('Secondary.TButton',
                        background=colors['bg_tertiary'],
                        foreground=colors['text_primary'],
-                       font=('Segoe UI', 10),
+                       font=('Segoe UI', 11),
                        borderwidth=1,
                        focuscolor='none',
                        relief='flat',
-                       padding=(10, 6))
+                       padding=(15, 8))
         
-        # Add hover effects
+        # Add beautiful hover effects
         style.map('Success.TButton',
-                 background=[('active', '#2ea043')])
+                 background=[('active', '#00e676')])
         style.map('Warning.TButton',
-                 background=[('active', '#bf8700')])
+                 background=[('active', '#ffb74d')])
         style.map('Danger.TButton',
-                 background=[('active', '#da3633')])
+                 background=[('active', '#ff5722')])
         style.map('Primary.TButton',
-                 background=[('active', '#1f6feb')])
+                 background=[('active', '#0099ff')])
         style.map('Secondary.TButton',
-                 background=[('active', colors['bg_secondary'])])
+                 background=[('active', colors['highlight'])])
         
         # Label styles
         style.configure('Info.TLabel',
@@ -304,7 +305,40 @@ class MainWindow:
         
     # Connection frame removed - using auto setup
     
-    # Auto connect functionality removed - handled by main.py
+    def auto_connect(self):
+        """Auto connect to MT5 - simplified version"""
+        def auto_connect_thread():
+            try:
+                self.log_message("กำลังทำ Auto Setup...")
+                
+                # Import and create trading system
+                from main import TradingSystem
+                self.trading_system = TradingSystem(auto_setup=True)
+                
+                # Update connection status in main thread
+                self.root.after(0, self._update_connection_success)
+                
+            except Exception as e:
+                # Update connection status in main thread
+                self.root.after(0, lambda: self._update_connection_failed(str(e)))
+        
+        # Run in separate thread
+        threading.Thread(target=auto_connect_thread, daemon=True).start()
+    
+    def _update_connection_success(self):
+        """Update connection status on success - called from main thread"""
+        self.connection_status = "Connected"
+        self.log_message("เชื่อมต่อสำเร็จ!")
+        
+        # Update account info if available
+        if self.trading_system and self.trading_system.broker_api and self.trading_system.broker_api.account_info:
+            account = self.trading_system.broker_api.account_info
+            self.log_message(f"Account: {account.login} | Balance: {account.balance:.2f} {account.currency}")
+    
+    def _update_connection_failed(self, error_msg):
+        """Update connection status on failure - called from main thread"""
+        self.connection_status = "Failed"
+        self.log_message(f"Auto Setup ล้มเหลว: {error_msg}")
     
     def open_settings(self):
         """Open settings window"""
@@ -465,11 +499,12 @@ class MainWindow:
         frame = ttk.LabelFrame(parent, text="📝 System Log", style='Header.TLabel')
         frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Beautiful log text area
-        self.log_text = scrolledtext.ScrolledText(frame, height=8, bg='#0d1117', 
-                                                fg='#f0f6fc', font=('Consolas', 10), insertbackground='#58a6ff',
-                                                selectbackground='#264f78', selectforeground='#f0f6fc')
-        self.log_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # Beautiful log text area with dark theme
+        self.log_text = scrolledtext.ScrolledText(frame, height=8, bg='#000000', 
+                                                fg='#ffffff', font=('Consolas', 11), insertbackground='#00bfff',
+                                                selectbackground='#333333', selectforeground='#ffffff',
+                                                relief='flat', borderwidth=0)
+        self.log_text.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
         
         # Clear log button with beautiful styling
         ttk.Button(frame, text="🗑️ Clear Log", 

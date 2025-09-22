@@ -239,8 +239,13 @@ class TradingSystem:
             self.stop()
             sys.exit(0)
         
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
+        # Only setup signal handlers in main thread
+        try:
+            signal.signal(signal.SIGINT, signal_handler)
+            signal.signal(signal.SIGTERM, signal_handler)
+        except ValueError:
+            # Signal handlers can only be set in main thread
+            self.logger.warning("Cannot set signal handlers in non-main thread")
     
     def connect_broker(self, broker_type: str = "MetaTrader5", 
                       login: int = None, password: str = None, server: str = None) -> bool:
