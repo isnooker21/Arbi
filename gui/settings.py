@@ -18,6 +18,7 @@ from tkinter import ttk, messagebox, filedialog
 import json
 import os
 from typing import Dict, Any
+from .theme import TradingTheme
 
 class SettingsWindow:
     def __init__(self, parent):

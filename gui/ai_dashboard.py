@@ -20,6 +20,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 from datetime import datetime, timedelta
 import json
+from .theme import TradingTheme
 
 class AIDashboard:
     """

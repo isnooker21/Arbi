@@ -23,6 +23,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import threading
 import time
+from .theme import TradingTheme
 
 class RealTimeCharts:
     def __init__(self, parent, broker_api):
