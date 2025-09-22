@@ -1,3 +1,18 @@
+"""
+ระบบกราฟแบบ Real-time สำหรับระบบเทรด
+=====================================
+
+ไฟล์นี้ทำหน้าที่:
+- แสดงกราฟราคาแบบ Real-time สำหรับคู่เงินต่างๆ
+- แสดงกราฟโอกาส Arbitrage และการวิเคราะห์
+- แสดงกราฟประสิทธิภาพและสถิติการเทรด
+- แสดงกราฟความสัมพันธ์ระหว่างคู่เงิน
+- อัปเดตข้อมูลกราฟแบบอัตโนมัติ
+
+Author: AI Trading System
+Version: 1.0
+"""
+
 import tkinter as tk
 from tkinter import ttk
 import matplotlib.pyplot as plt
@@ -90,7 +105,11 @@ class RealTimeCharts:
         self.status_label.pack(side=tk.RIGHT, padx=5, pady=5)
         
     def create_price_charts_tab(self, notebook):
-        """Create price charts tab"""
+        """
+        สร้างแท็บกราฟราคา
+        
+        แสดงกราฟราคาแบบ Real-time สำหรับคู่เงินต่างๆ
+        """
         price_frame = ttk.Frame(notebook)
         notebook.add(price_frame, text="Price Charts")
         
@@ -112,7 +131,11 @@ class RealTimeCharts:
         self.price_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         
     def create_arbitrage_charts_tab(self, notebook):
-        """Create arbitrage opportunities charts tab"""
+        """
+        สร้างแท็บกราฟโอกาส Arbitrage
+        
+        แสดงกราฟโอกาส Arbitrage และการวิเคราะห์
+        """
         arbitrage_frame = ttk.Frame(notebook)
         notebook.add(arbitrage_frame, text="Arbitrage Opportunities")
         
@@ -134,7 +157,11 @@ class RealTimeCharts:
         self.arbitrage_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         
     def create_performance_charts_tab(self, notebook):
-        """Create performance charts tab"""
+        """
+        สร้างแท็บกราฟประสิทธิภาพ
+        
+        แสดงกราฟประสิทธิภาพและสถิติการเทรด
+        """
         performance_frame = ttk.Frame(notebook)
         notebook.add(performance_frame, text="Performance")
         

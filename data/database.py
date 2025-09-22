@@ -1,3 +1,18 @@
+"""
+ระบบจัดการฐานข้อมูลสำหรับระบบเทรด
+====================================
+
+ไฟล์นี้ทำหน้าที่:
+- สร้างและจัดการฐานข้อมูล SQLite
+- เก็บข้อมูลการเทรด คำสั่งซื้อ/ขาย และตำแหน่ง
+- เก็บข้อมูล AI และการเรียนรู้
+- เก็บข้อมูลประสิทธิภาพและสถิติ
+- เก็บข้อมูล Log และการติดตาม
+
+Author: AI Trading System
+Version: 1.0
+"""
+
 import sqlite3
 import json
 import logging
@@ -7,13 +22,35 @@ import os
 import pandas as pd
 
 class DatabaseManager:
+    """
+    ระบบจัดการฐานข้อมูลหลัก
+    
+    รับผิดชอบในการสร้าง จัดการ และเข้าถึงฐานข้อมูล
+    สำหรับระบบเทรดทั้งหมด
+    """
+    
     def __init__(self, db_path: str = "data/trading_system.db"):
+        """
+        เริ่มต้นระบบจัดการฐานข้อมูล
+        
+        Args:
+            db_path: เส้นทางไฟล์ฐานข้อมูล SQLite
+        """
         self.db_path = db_path
         self.logger = logging.getLogger(__name__)
         self._init_database()
         
     def _init_database(self):
-        """Initialize SQLite database with all required tables"""
+        """
+        เริ่มต้นฐานข้อมูล SQLite พร้อมตารางที่จำเป็น
+        
+        สร้างตารางทั้งหมดที่จำเป็นสำหรับระบบเทรด:
+        - ตารางคำสั่งซื้อ/ขาย
+        - ตารางตำแหน่งการเทรด
+        - ตารางข้อมูล AI
+        - ตารางประสิทธิภาพ
+        - ตาราง Log
+        """
         try:
             os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
             
@@ -35,7 +72,11 @@ class DatabaseManager:
             self.logger.error(f"Error initializing database: {e}")
     
     def _create_trading_tables(self, cursor):
-        """Create trading-related tables"""
+        """
+        สร้างตารางที่เกี่ยวข้องกับการเทรด
+        
+        รวมถึงตารางคำสั่ง ตำแหน่ง และข้อมูลการเทรด
+        """
         # Orders table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS orders (
@@ -132,7 +173,11 @@ class DatabaseManager:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_correlation_created ON correlation_recovery(created_at)')
     
     def _create_ai_tables(self, cursor):
-        """Create AI-related tables"""
+        """
+        สร้างตารางที่เกี่ยวข้องกับ AI
+        
+        รวมถึงตารางการเรียนรู้ การตัดสินใจ และประสิทธิภาพ AI
+        """
         # Rule performance table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS rule_performance (
@@ -207,7 +252,11 @@ class DatabaseManager:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_learning_data_type ON learning_data(data_type)')
     
     def _create_performance_tables(self, cursor):
-        """Create performance tracking tables"""
+        """
+        สร้างตารางติดตามประสิทธิภาพ
+        
+        รวมถึงตารางสถิติ กำไร/ขาดทุน และการวิเคราะห์
+        """
         # Daily performance table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS daily_performance (
@@ -262,7 +311,11 @@ class DatabaseManager:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_system_metrics_timestamp ON system_metrics(timestamp)')
     
     def _create_log_tables(self, cursor):
-        """Create logging tables"""
+        """
+        สร้างตาราง Log
+        
+        รวมถึงตาราง Log ระบบ และการติดตามเหตุการณ์
+        """
         # System logs table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS system_logs (

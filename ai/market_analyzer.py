@@ -1,3 +1,18 @@
+"""
+ระบบวิเคราะห์ตลาดสำหรับการเทรด Arbitrage
+=========================================
+
+ไฟล์นี้ทำหน้าที่:
+- วิเคราะห์สภาพตลาดปัจจุบันและแนวโน้ม
+- คำนวณความผันผวนและความสัมพันธ์ระหว่างคู่เงิน
+- ระบุช่วงเวลาการเทรด (Session) และสภาพตลาด
+- วิเคราะห์เทรนด์และสัญญาณทางเทคนิค
+- เก็บข้อมูลสถิติตลาดเพื่อการตัดสินใจ
+
+Author: AI Trading System
+Version: 1.0
+"""
+
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -6,7 +21,20 @@ from typing import Dict, List, Optional, Tuple
 import json
 
 class MarketAnalyzer:
+    """
+    ระบบวิเคราะห์ตลาดหลัก
+    
+    รับผิดชอบในการวิเคราะห์สภาพตลาด ความผันผวน
+    และความสัมพันธ์ระหว่างคู่เงินต่างๆ
+    """
+    
     def __init__(self, broker_api):
+        """
+        เริ่มต้นระบบวิเคราะห์ตลาด
+        
+        Args:
+            broker_api: API สำหรับเชื่อมต่อกับโบรกเกอร์
+        """
         self.broker = broker_api
         self.logger = logging.getLogger(__name__)
         self.market_conditions = {}
@@ -14,7 +42,18 @@ class MarketAnalyzer:
         self.correlation_cache = {}
         
     def analyze_market_conditions(self, symbols: List[str] = None) -> Dict:
-        """Analyze current market conditions"""
+        """
+        วิเคราะห์สภาพตลาดปัจจุบัน
+        
+        วิเคราะห์ข้อมูลตลาดสำหรับคู่เงินที่กำหนด
+        รวมถึงเทรนด์ ความผันผวน และช่วงเวลาการเทรด
+        
+        Args:
+            symbols: รายการคู่เงินที่ต้องการวิเคราะห์ (ถ้าไม่ระบุจะใช้ 10 คู่แรก)
+            
+        Returns:
+            Dict: ข้อมูลสภาพตลาดที่วิเคราะห์แล้ว
+        """
         try:
             if symbols is None:
                 symbols = self.broker.get_available_pairs()[:10]  # Limit to first 10 for performance

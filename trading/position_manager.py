@@ -1,3 +1,18 @@
+"""
+ระบบจัดการตำแหน่งการเทรด
+========================
+
+ไฟล์นี้ทำหน้าที่:
+- ติดตามและจัดการตำแหน่งที่เปิดอยู่ทั้งหมด
+- ตรวจสอบสถานะกำไร/ขาดทุนของแต่ละตำแหน่ง
+- จัดการคำสั่ง Stop Loss และ Take Profit
+- ตรวจสอบเงื่อนไขการปิดตำแหน่งอัตโนมัติ
+- บันทึกประวัติการเทรดและสถิติ
+
+Author: AI Trading System
+Version: 1.0
+"""
+
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -6,7 +21,21 @@ from typing import Dict, List, Optional
 import threading
 
 class PositionManager:
+    """
+    ระบบจัดการตำแหน่งการเทรดหลัก
+    
+    รับผิดชอบในการติดตาม จัดการ และควบคุมตำแหน่งการเทรด
+    รวมถึงการตรวจสอบความเสี่ยงและผลกำไร
+    """
+    
     def __init__(self, broker_api, risk_manager):
+        """
+        เริ่มต้นระบบจัดการตำแหน่ง
+        
+        Args:
+            broker_api: API สำหรับเชื่อมต่อกับโบรกเกอร์
+            risk_manager: ระบบจัดการความเสี่ยง
+        """
         self.broker = broker_api
         self.risk_manager = risk_manager
         self.positions = {}
@@ -15,7 +44,12 @@ class PositionManager:
         self.logger = logging.getLogger(__name__)
         
     def start_position_monitoring(self):
-        """Start position monitoring system"""
+        """
+        เริ่มต้นระบบติดตามตำแหน่ง
+        
+        เปิดระบบติดตามตำแหน่งการเทรดแบบเรียลไทม์
+        ในเธรดแยกเพื่อไม่ให้กระทบการทำงานหลัก
+        """
         self.is_running = True
         self.logger.info("Starting position monitoring...")
         
@@ -24,12 +58,23 @@ class PositionManager:
         monitoring_thread.start()
     
     def stop_position_monitoring(self):
-        """Stop position monitoring"""
+        """
+        หยุดระบบติดตามตำแหน่ง
+        
+        ปิดระบบติดตามตำแหน่งการเทรด
+        """
         self.is_running = False
         self.logger.info("Stopping position monitoring...")
     
     def _monitoring_loop(self):
-        """Main position monitoring loop"""
+        """
+        ลูปหลักสำหรับติดตามตำแหน่ง
+        
+        ทำงานในเธรดแยกเพื่อ:
+        - อัปเดตสถานะตำแหน่งทั้งหมด
+        - ตรวจสอบเงื่อนไขความเสี่ยง
+        - ตรวจสอบเป้าหมายกำไร/ขาดทุน
+        """
         while self.is_running:
             try:
                 # Update all positions

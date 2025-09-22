@@ -1,3 +1,18 @@
+"""
+ระบบจัดการข้อมูลประวัติการเทรด
+==============================
+
+ไฟล์นี้ทำหน้าที่:
+- เก็บข้อมูลราคาประวัติใน Timeframe ต่างๆ
+- ดึงข้อมูลราคาจากโบรกเกอร์และจัดเก็บในฐานข้อมูล
+- คำนวณสถิติและตัวชี้วัดทางเทคนิค
+- สนับสนุนการวิเคราะห์ Backtesting
+- จัดการข้อมูล OHLC สำหรับทุกคู่เงิน
+
+Author: AI Trading System
+Version: 1.0
+"""
+
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -8,13 +23,33 @@ import os
 import json
 
 class HistoricalDataManager:
+    """
+    ระบบจัดการข้อมูลประวัติการเทรดหลัก
+    
+    รับผิดชอบในการเก็บ จัดการ และเข้าถึงข้อมูลราคาประวัติ
+    สำหรับการวิเคราะห์และ Backtesting
+    """
+    
     def __init__(self, db_path: str = "data/historical.db"):
+        """
+        เริ่มต้นระบบจัดการข้อมูลประวัติ
+        
+        Args:
+            db_path: เส้นทางไฟล์ฐานข้อมูลสำหรับข้อมูลประวัติ
+        """
         self.db_path = db_path
         self.logger = logging.getLogger(__name__)
         self._init_database()
         
     def _init_database(self):
-        """Initialize SQLite database for historical data"""
+        """
+        เริ่มต้นฐานข้อมูล SQLite สำหรับข้อมูลประวัติ
+        
+        สร้างตารางสำหรับ Timeframe ต่างๆ:
+        - M1, M5, M15, M30, H1, H4, D1
+        - แต่ละตารางเก็บข้อมูล OHLC
+        - สร้าง Index เพื่อการค้นหาที่รวดเร็ว
+        """
         try:
             os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
             

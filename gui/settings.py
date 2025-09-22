@@ -1,3 +1,18 @@
+"""
+หน้าต่างตั้งค่าระบบเทรด
+=======================
+
+ไฟล์นี้ทำหน้าที่:
+- แสดงและแก้ไขการตั้งค่าระบบทั้งหมด
+- จัดการการตั้งค่า Broker และการเชื่อมต่อ
+- จัดการกฎเกณฑ์การเทรดและพารามิเตอร์ AI
+- จัดการการตั้งค่าความเสี่ยงและการจัดการเงิน
+- บันทึกและโหลดการตั้งค่าจากไฟล์ JSON
+
+Author: AI Trading System
+Version: 1.0
+"""
+
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import json
@@ -48,7 +63,14 @@ class SettingsWindow:
             self.original_settings = json.loads(json.dumps(self.settings))
     
     def get_default_settings(self) -> Dict[str, Any]:
-        """Get default settings"""
+        """
+        ดึงการตั้งค่าเริ่มต้นของระบบ
+        
+        ส่งคืนการตั้งค่าเริ่มต้นเมื่อไม่สามารถโหลดไฟล์ได้
+        
+        Returns:
+            Dict: การตั้งค่าเริ่มต้น
+        """
         return {
             "trading": {
                 "base_lot_size": 0.1,

@@ -1,3 +1,18 @@
+"""
+แดชบอร์ด AI สำหรับระบบเทรด
+============================
+
+ไฟล์นี้ทำหน้าที่:
+- แสดงสถานะและประสิทธิภาพของ AI Engine
+- แสดงข้อมูล Rule Engine และ Learning Module
+- แสดงกราฟและสถิติการทำงานของ AI
+- ควบคุมและปรับแต่งพารามิเตอร์ AI
+- แสดงการวิเคราะห์ตลาดและรูปแบบ
+
+Author: AI Trading System
+Version: 1.0
+"""
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 import matplotlib.pyplot as plt
@@ -7,7 +22,22 @@ from datetime import datetime, timedelta
 import json
 
 class AIDashboard:
+    """
+    แดชบอร์ด AI หลัก
+    
+    แสดงข้อมูลและควบคุม AI Engine ผ่าน GUI
+    รวมถึงการติดตามประสิทธิภาพและการวิเคราะห์
+    """
+    
     def __init__(self, parent, ai_engine, learning_module):
+        """
+        เริ่มต้นแดชบอร์ด AI
+        
+        Args:
+            parent: หน้าต่างหลัก
+            ai_engine: ระบบ AI Engine
+            learning_module: ระบบการเรียนรู้
+        """
         self.parent = parent
         self.ai_engine = ai_engine
         self.learning_module = learning_module
@@ -22,7 +52,15 @@ class AIDashboard:
         self.setup_ui()
         
     def setup_ui(self):
-        """Setup the AI dashboard interface"""
+        """
+        ตั้งค่าอินเทอร์เฟซแดชบอร์ด AI
+        
+        สร้างแท็บต่างๆ สำหรับแสดงข้อมูล AI:
+        - Rule Engine
+        - Learning Module
+        - Performance
+        - Market Analysis
+        """
         # Create main container
         main_container = ttk.Frame(self.dashboard_window)
         main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -44,7 +82,11 @@ class AIDashboard:
         self.create_market_analysis_tab(notebook)
         
     def create_rule_engine_tab(self, notebook):
-        """Create rule engine monitoring tab"""
+        """
+        สร้างแท็บติดตาม Rule Engine
+        
+        แสดงสถานะและประสิทธิภาพของกฎเกณฑ์ต่างๆ
+        """
         rule_frame = ttk.Frame(notebook)
         notebook.add(rule_frame, text="Rule Engine")
         
@@ -84,7 +126,11 @@ class AIDashboard:
                   command=self.refresh_rule_performance).pack(pady=5)
         
     def create_learning_tab(self, notebook):
-        """Create learning module tab"""
+        """
+        สร้างแท็บ Learning Module
+        
+        แสดงข้อมูลการเรียนรู้และรูปแบบที่พบ
+        """
         learning_frame = ttk.Frame(notebook)
         notebook.add(learning_frame, text="Learning Module")
         
@@ -125,7 +171,11 @@ class AIDashboard:
         self.pattern_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
     def create_performance_tab(self, notebook):
-        """Create performance monitoring tab"""
+        """
+        สร้างแท็บติดตามประสิทธิภาพ
+        
+        แสดงกราฟและสถิติการทำงานของ AI
+        """
         performance_frame = ttk.Frame(notebook)
         notebook.add(performance_frame, text="Performance")
         
@@ -167,7 +217,11 @@ class AIDashboard:
         self.update_performance_chart()
         
     def create_market_analysis_tab(self, notebook):
-        """Create market analysis tab"""
+        """
+        สร้างแท็บการวิเคราะห์ตลาด
+        
+        แสดงการวิเคราะห์ตลาดและรูปแบบที่ AI ระบุ
+        """
         analysis_frame = ttk.Frame(notebook)
         notebook.add(analysis_frame, text="Market Analysis")
         

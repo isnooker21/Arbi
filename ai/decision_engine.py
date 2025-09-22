@@ -1,12 +1,43 @@
+"""
+ระบบตัดสินใจอัตโนมัติสำหรับการเทรด Arbitrage
+==============================================
+
+ไฟล์นี้เป็นส่วนหลักของระบบ AI ที่ทำหน้าที่:
+- ประเมินโอกาส Arbitrage และการฟื้นตัวของ Correlation
+- วิเคราะห์ข้อมูลตลาดและเงื่อนไขต่างๆ
+- ใช้ Machine Learning เพื่อปรับปรุงการตัดสินใจ
+- กำหนดขนาดและทิศทางของ Position
+- บันทึกและติดตามผลการตัดสินใจ
+
+Author: AI Trading System
+Version: 1.0
+"""
+
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import logging
 from typing import Dict, List, Optional, Tuple
 import json
+from .rule_engine import AIDecision
 
 class DecisionEngine:
+    """
+    ระบบตัดสินใจหลักสำหรับการเทรด Arbitrage
+    
+    รับผิดชอบในการประเมินโอกาสการเทรดและตัดสินใจว่าจะดำเนินการหรือไม่
+    โดยใช้ข้อมูลจาก Rule Engine, Learning Module และ Market Analyzer
+    """
+    
     def __init__(self, rule_engine, learning_module, market_analyzer):
+        """
+        เริ่มต้นระบบตัดสินใจ
+        
+        Args:
+            rule_engine: ระบบกฎเกณฑ์สำหรับการประเมิน
+            learning_module: ระบบ Machine Learning
+            market_analyzer: ระบบวิเคราะห์ตลาด
+        """
         self.rule_engine = rule_engine
         self.learning_module = learning_module
         self.market_analyzer = market_analyzer
@@ -15,7 +46,21 @@ class DecisionEngine:
         self.performance_tracker = {}
         
     def evaluate_arbitrage_opportunity(self, opportunity: Dict) -> 'AIDecision':
-        """Evaluate arbitrage opportunity and make decision"""
+        """
+        ประเมินโอกาส Arbitrage และตัดสินใจ
+        
+        วิเคราะห์โอกาสการทำ Arbitrage โดยพิจารณาจาก:
+        - เงื่อนไขตลาดปัจจุบัน
+        - กฎเกณฑ์ที่กำหนดไว้
+        - ข้อมูลจาก Machine Learning
+        - ขนาดและทิศทางของ Position
+        
+        Args:
+            opportunity: ข้อมูลโอกาส Arbitrage
+            
+        Returns:
+            AIDecision: การตัดสินใจพร้อมเหตุผลและพารามิเตอร์
+        """
         try:
             # Get current market conditions
             market_conditions = self.market_analyzer.analyze_market_conditions()
@@ -43,7 +88,18 @@ class DecisionEngine:
             return AIDecision(False, 0.0, f"Error: {str(e)}", [], [], {})
     
     def evaluate_recovery_opportunity(self, opportunity: Dict) -> 'AIDecision':
-        """Evaluate correlation recovery opportunity"""
+        """
+        ประเมินโอกาสการฟื้นตัวของ Correlation
+        
+        วิเคราะห์โอกาสในการทำการเทรดเพื่อฟื้นตัวจากความสัมพันธ์
+        ระหว่างคู่เงินที่ผิดปกติ
+        
+        Args:
+            opportunity: ข้อมูลโอกาสการฟื้นตัว
+            
+        Returns:
+            AIDecision: การตัดสินใจพร้อมเหตุผลและพารามิเตอร์
+        """
         try:
             # Get current market conditions
             market_conditions = self.market_analyzer.analyze_market_conditions()
@@ -71,7 +127,19 @@ class DecisionEngine:
             return AIDecision(False, 0.0, f"Error: {str(e)}", [], [], {})
     
     def _prepare_arbitrage_context(self, opportunity: Dict, market_conditions: Dict) -> Dict:
-        """Prepare context for arbitrage rule evaluation"""
+        """
+        เตรียมข้อมูลบริบทสำหรับการประเมินกฎเกณฑ์ Arbitrage
+        
+        รวมข้อมูลจากโอกาส Arbitrage และเงื่อนไขตลาด
+        เพื่อใช้ในการประเมินกฎเกณฑ์
+        
+        Args:
+            opportunity: ข้อมูลโอกาส Arbitrage
+            market_conditions: เงื่อนไขตลาดปัจจุบัน
+            
+        Returns:
+            Dict: ข้อมูลบริบทที่พร้อมใช้
+        """
         try:
             context = {
                 'arbitrage_percent': opportunity.get('arbitrage_percent', 0),
@@ -110,7 +178,19 @@ class DecisionEngine:
             return {}
     
     def _prepare_recovery_context(self, opportunity: Dict, market_conditions: Dict) -> Dict:
-        """Prepare context for recovery rule evaluation"""
+        """
+        เตรียมข้อมูลบริบทสำหรับการประเมินกฎเกณฑ์การฟื้นตัว
+        
+        รวมข้อมูลจากโอกาสการฟื้นตัวและเงื่อนไขตลาด
+        เพื่อใช้ในการประเมินกฎเกณฑ์
+        
+        Args:
+            opportunity: ข้อมูลโอกาสการฟื้นตัว
+            market_conditions: เงื่อนไขตลาดปัจจุบัน
+            
+        Returns:
+            Dict: ข้อมูลบริบทที่พร้อมใช้
+        """
         try:
             context = {
                 'base_pair': opportunity.get('base_pair', ''),
@@ -153,7 +233,22 @@ class DecisionEngine:
     
     def _enhance_decision_with_learning(self, decision: 'AIDecision', opportunity: Dict, 
                                       market_conditions: Dict) -> 'AIDecision':
-        """Enhance decision with learning module insights"""
+        """
+        ปรับปรุงการตัดสินใจด้วยข้อมูลจาก Learning Module
+        
+        ใช้ Machine Learning เพื่อ:
+        - ทำนายความสำเร็จของโอกาส Arbitrage
+        - ระบุรูปแบบตลาดที่เกี่ยวข้อง
+        - ปรับระดับความมั่นใจในการตัดสินใจ
+        
+        Args:
+            decision: การตัดสินใจเริ่มต้น
+            opportunity: ข้อมูลโอกาส
+            market_conditions: เงื่อนไขตลาด
+            
+        Returns:
+            AIDecision: การตัดสินใจที่ปรับปรุงแล้ว
+        """
         try:
             # Get learning module prediction if available
             if hasattr(self.learning_module, 'predict_arbitrage_success'):
@@ -197,7 +292,19 @@ class DecisionEngine:
     
     def _set_position_parameters(self, decision: 'AIDecision', opportunity: Dict, 
                                market_conditions: Dict):
-        """Set position parameters for arbitrage decision"""
+        """
+        กำหนดพารามิเตอร์ของ Position สำหรับการตัดสินใจ Arbitrage
+        
+        คำนวณ:
+        - ขนาด Position ตามความมั่นใจและความผันผวน
+        - ทิศทางสำหรับแต่ละคู่เงินใน Triangle
+        - ตัวคูณขนาด Position
+        
+        Args:
+            decision: การตัดสินใจ
+            opportunity: ข้อมูลโอกาส Arbitrage
+            market_conditions: เงื่อนไขตลาด
+        """
         try:
             # Base position size
             base_lot_size = 0.1
@@ -247,7 +354,19 @@ class DecisionEngine:
     
     def _set_recovery_parameters(self, decision: 'AIDecision', opportunity: Dict, 
                                market_conditions: Dict):
-        """Set position parameters for recovery decision"""
+        """
+        กำหนดพารามิเตอร์ของ Position สำหรับการตัดสินใจการฟื้นตัว
+        
+        คำนวณ:
+        - ขนาด Position ตามความแข็งแกร่งของ Correlation
+        - ทิศทางตามความสัมพันธ์ระหว่างคู่เงิน
+        - ตัวคูณขนาด Position
+        
+        Args:
+            decision: การตัดสินใจ
+            opportunity: ข้อมูลโอกาสการฟื้นตัว
+            market_conditions: เงื่อนไขตลาด
+        """
         try:
             # Base position size from base pair
             base_volume = opportunity.get('base_volume', 0.1)
@@ -284,7 +403,18 @@ class DecisionEngine:
             self.logger.error(f"Error setting recovery parameters: {e}")
     
     def _extract_trend_from_analysis(self, analysis: Dict) -> str:
-        """Extract trend from timeframe analysis"""
+        """
+        สกัดข้อมูลเทรนด์จากการวิเคราะห์ Timeframe
+        
+        วิเคราะห์ทิศทางของเทรนด์จากข้อมูลการวิเคราะห์
+        และส่งคืนเป็น bullish, bearish หรือ sideways
+        
+        Args:
+            analysis: ข้อมูลการวิเคราะห์ Timeframe
+            
+        Returns:
+            str: ทิศทางเทรนด์ (bullish/bearish/sideways/unknown)
+        """
         try:
             if analysis.get('status') != 'success':
                 return 'unknown'
@@ -310,7 +440,17 @@ class DecisionEngine:
             return 'unknown'
     
     def _extract_structure_from_analysis(self, analysis: Dict) -> str:
-        """Extract structure from timeframe analysis"""
+        """
+        สกัดข้อมูลโครงสร้างจากการวิเคราะห์ Timeframe
+        
+        ระบุรูปแบบ Support/Resistance หรือโครงสร้างปกติ
+        
+        Args:
+            analysis: ข้อมูลการวิเคราะห์ Timeframe
+            
+        Returns:
+            str: โครงสร้าง (support/resistance/normal/unknown)
+        """
         try:
             if analysis.get('status') != 'success':
                 return 'unknown'
@@ -333,7 +473,17 @@ class DecisionEngine:
             return 'unknown'
     
     def _extract_condition_from_analysis(self, analysis: Dict) -> str:
-        """Extract condition from timeframe analysis"""
+        """
+        สกัดข้อมูลสภาพตลาดจากการวิเคราะห์ Timeframe
+        
+        ระบุระดับความผันผวนของตลาด
+        
+        Args:
+            analysis: ข้อมูลการวิเคราะห์ Timeframe
+            
+        Returns:
+            str: สภาพตลาด (high_volatility/low_volatility/normal/unknown)
+        """
         try:
             if analysis.get('status') != 'success':
                 return 'unknown'
@@ -357,7 +507,19 @@ class DecisionEngine:
             return 'normal'
     
     def _extract_signal_from_analysis(self, analysis: Dict) -> str:
-        """Extract signal strength from timeframe analysis"""
+        """
+        สกัดความแข็งแกร่งของสัญญาณจากการวิเคราะห์ Timeframe
+        
+        ประเมินความแข็งแกร่งของสัญญาณโดยพิจารณาจาก:
+        - จำนวนเทรนด์ที่แข็งแกร่ง
+        - ระดับความผันผวน
+        
+        Args:
+            analysis: ข้อมูลการวิเคราะห์ Timeframe
+            
+        Returns:
+            str: ความแข็งแกร่งสัญญาณ (strong/medium/weak/unknown)
+        """
         try:
             if analysis.get('status') != 'success':
                 return 'weak'
@@ -388,7 +550,17 @@ class DecisionEngine:
             return 'weak'
     
     def _calculate_position_age(self, opportunity: Dict) -> int:
-        """Calculate position age in seconds"""
+        """
+        คำนวณอายุของ Position เป็นวินาที
+        
+        ใช้สำหรับการประเมินโอกาสการฟื้นตัว
+        
+        Args:
+            opportunity: ข้อมูลโอกาส
+            
+        Returns:
+            int: อายุของ Position เป็นวินาที
+        """
         try:
             timestamp = opportunity.get('timestamp', datetime.now())
             if isinstance(timestamp, str):
@@ -402,7 +574,17 @@ class DecisionEngine:
             return 0
     
     def _calculate_average_trend_strength(self, market_conditions: Dict) -> float:
-        """Calculate average trend strength across all symbols"""
+        """
+        คำนวณความแข็งแกร่งของเทรนด์เฉลี่ยของทุกสัญลักษณ์
+        
+        ใช้สำหรับการปรับปรุงการตัดสินใจด้วย Learning Module
+        
+        Args:
+            market_conditions: เงื่อนไขตลาด
+            
+        Returns:
+            float: ความแข็งแกร่งของเทรนด์เฉลี่ย
+        """
         try:
             conditions = market_conditions.get('conditions', {})
             if not conditions:
@@ -420,7 +602,19 @@ class DecisionEngine:
             return 0.0
     
     def _find_matching_patterns(self, opportunity: Dict, patterns: List[Dict]) -> List[Dict]:
-        """Find patterns that match current opportunity"""
+        """
+        หารูปแบบที่ตรงกับโอกาสปัจจุบัน
+        
+        เปรียบเทียบลักษณะของโอกาสกับรูปแบบที่เรียนรู้มา
+        เพื่อปรับปรุงการตัดสินใจ
+        
+        Args:
+            opportunity: ข้อมูลโอกาสปัจจุบัน
+            patterns: รายการรูปแบบที่เรียนรู้
+            
+        Returns:
+            List[Dict]: รายการรูปแบบที่ตรงกัน
+        """
         try:
             matching_patterns = []
             
@@ -456,7 +650,19 @@ class DecisionEngine:
             return []
     
     def _record_decision(self, decision: 'AIDecision', opportunity: Dict, decision_type: str):
-        """Record decision for analysis"""
+        """
+        บันทึกการตัดสินใจเพื่อการวิเคราะห์
+        
+        เก็บข้อมูลการตัดสินใจทั้งหมดเพื่อ:
+        - วิเคราะห์ประสิทธิภาพ
+        - ปรับปรุงระบบ
+        - ติดตามสถิติ
+        
+        Args:
+            decision: การตัดสินใจ
+            opportunity: ข้อมูลโอกาส
+            decision_type: ประเภทการตัดสินใจ
+        """
         try:
             decision_record = {
                 'timestamp': datetime.now(),
@@ -478,7 +684,18 @@ class DecisionEngine:
             self.logger.error(f"Error recording decision: {e}")
     
     def get_decision_statistics(self) -> Dict:
-        """Get decision statistics"""
+        """
+        ดึงสถิติการตัดสินใจ
+        
+        คำนวณและส่งคืนสถิติต่างๆ ของการตัดสินใจ:
+        - จำนวนการตัดสินใจทั้งหมด
+        - จำนวนการตัดสินใจแต่ละประเภท
+        - อัตราการตัดสินใจเชิงบวก
+        - ความมั่นใจเฉลี่ย
+        
+        Returns:
+            Dict: สถิติการตัดสินใจ
+        """
         try:
             if not self.decision_history:
                 return {'total_decisions': 0}

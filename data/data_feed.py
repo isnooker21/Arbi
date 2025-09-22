@@ -17,7 +17,6 @@
 """
 
 import asyncio
-import websockets
 import json
 import threading
 import logging
@@ -25,6 +24,14 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Callable
 import pandas as pd
 import numpy as np
+
+# Try to import websockets, fallback to alternative if not available
+try:
+    import websockets  # type: ignore
+    WEBSOCKETS_AVAILABLE = True
+except ImportError:
+    WEBSOCKETS_AVAILABLE = False
+    print("Warning: websockets library not available. WebSocket features will be disabled.")
 
 class RealTimeDataFeed:
     def __init__(self, broker_api):
@@ -403,6 +410,10 @@ class WebSocketDataFeed:
     async def connect(self):
         """Connect to WebSocket feed"""
         try:
+            if not WEBSOCKETS_AVAILABLE:
+                self.logger.error("WebSockets library not available")
+                return False
+                
             if not self.websocket_url:
                 self.logger.error("WebSocket URL not provided")
                 return False
@@ -443,9 +454,13 @@ class WebSocketDataFeed:
                     # Notify subscribers
                     await self._notify_subscribers(data)
                     
-                except websockets.exceptions.ConnectionClosed:
-                    self.logger.warning("WebSocket connection closed")
-                    break
+                except Exception as ws_exception:
+                    if WEBSOCKETS_AVAILABLE and "ConnectionClosed" in str(type(ws_exception)):
+                        self.logger.warning("WebSocket connection closed")
+                        break
+                    else:
+                        self.logger.error(f"WebSocket error: {ws_exception}")
+                        break
                 except Exception as e:
                     self.logger.error(f"Error processing WebSocket message: {e}")
                     

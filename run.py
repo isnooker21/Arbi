@@ -42,11 +42,9 @@ def run_gui():
     try:
         print("🚀 กำลังเริ่มระบบเทรด Forex AI แบบ GUI...")
         
-        from gui.main_window import MainWindow
-        
-        # สร้างและรัน GUI
-        app = MainWindow()
-        app.run()
+        # ใช้ main.py แทน
+        from main import main
+        main()
         
     except Exception as e:
         print(f"❌ เกิดข้อผิดพลาดในการรัน GUI: {e}")
@@ -57,24 +55,29 @@ def run_cli():
     try:
         print("🚀 กำลังเริ่มระบบเทรด Forex AI แบบ Command Line...")
         
-        from main import TradingSystem
-        
-        # สร้างระบบเทรด
-        trading_system = TradingSystem()
-        
-        print("📋 ระบบเทรดพร้อมใช้งาน")
-        print("📝 ใช้ --gui เพื่อเปิดหน้าจอ GUI")
-        print("📝 ตั้งค่า Broker ใน config/broker_config.json")
-        
-        # แสดงสถานะระบบ
-        status = trading_system.get_system_status()
-        print(f"\n📊 สถานะระบบ:")
-        print(f"   - เริ่มต้นแล้ว: {status.get('is_initialized', False)}")
-        print(f"   - เชื่อมต่อ Broker: {status.get('broker_connected', False)}")
-        print(f"   - กำลังทำงาน: {status.get('is_running', False)}")
+        # ใช้ main.py แทน
+        import sys
+        sys.argv = ['main.py', '--cli']
+        from main import main
+        main()
         
     except Exception as e:
         print(f"❌ เกิดข้อผิดพลาดในการรัน CLI: {e}")
+        sys.exit(1)
+
+def run_auto_setup():
+    """รัน Auto Setup"""
+    try:
+        print("🔧 กำลังทำ Auto Setup...")
+        
+        # ใช้ main.py แทน
+        import sys
+        sys.argv = ['main.py', '--cli']  # ใช้ CLI mode เพื่อทำ auto setup
+        from main import main
+        main()
+        
+    except Exception as e:
+        print(f"❌ เกิดข้อผิดพลาดใน Auto Setup: {e}")
         sys.exit(1)
 
 def run_test():
@@ -177,6 +180,7 @@ def show_help():
 การใช้งาน:
     python run.py                    # รันแบบ GUI (แนะนำ)
     python run.py --gui             # รันแบบ GUI
+    python run.py --auto-setup      # ทำ Auto Setup (แนะนำสำหรับผู้ใช้ใหม่)
     python run.py --cli             # รันแบบ Command Line
     python run.py --test            # รันแบบทดสอบ
     python run.py --help            # แสดงความช่วยเหลือนี้
@@ -235,6 +239,12 @@ def main():
     )
     
     parser.add_argument(
+        '--auto-setup', 
+        action='store_true', 
+        help='ทำ Auto Setup ระบบ (แนะนำสำหรับผู้ใช้ใหม่)'
+    )
+    
+    parser.add_argument(
         '--help', 
         action='store_true', 
         help='แสดงความช่วยเหลือ'
@@ -253,6 +263,8 @@ def main():
     # ตรวจสอบ arguments
     if args.help:
         show_help()
+    elif args.auto_setup:
+        run_auto_setup()
     elif args.test:
         run_test()
     elif args.cli:
