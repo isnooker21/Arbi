@@ -305,7 +305,7 @@ class TradingSystem:
                 else:
                     self.logger.info("Successfully connected to broker")
             
-            self.logger.info("Starting trading system...")
+            self.logger.info("🚀 Starting trading components...")
             
             # Start all components
             self.position_manager.start_position_monitoring()
@@ -315,7 +315,7 @@ class TradingSystem:
             self.is_running = True
             self.emergency_stop = False
             
-            self.logger.info("Trading system started successfully")
+            self.logger.info("✅ Trading system started successfully")
             
             # Start main trading loop in background thread
             self.trading_thread = threading.Thread(target=self._trading_loop, daemon=True)
@@ -334,7 +334,7 @@ class TradingSystem:
                 self.logger.warning("Trading system not running")
                 return
             
-            self.logger.info("Stopping trading system...")
+            self.logger.info("🛑 Stopping trading system...")
             
             # Stop all components
             if self.arbitrage_detector:
@@ -355,9 +355,9 @@ class TradingSystem:
             if hasattr(self, 'trading_thread') and self.trading_thread.is_alive():
                 self.trading_thread.join(timeout=5.0)
                 if self.trading_thread.is_alive():
-                    self.logger.warning("Trading thread did not stop within timeout")
+                    self.logger.warning("⚠️ Trading thread timeout")
             
-            self.logger.info("Trading system stopped")
+            self.logger.info("✅ Trading system stopped")
             
         except Exception as e:
             self.logger.error(f"Error stopping trading system: {e}")
@@ -388,42 +388,55 @@ class TradingSystem:
     
     def _trading_loop(self):
         """Main trading loop"""
+        self.logger.info("🔄 Trading system active - monitoring markets...")
+        
         try:
             while self.is_running and not self.emergency_stop:
                 try:
                     # Update market analysis
                     if self.market_analyzer:
-                        market_conditions = self.market_analyzer.analyze_market_conditions()
+                        try:
+                            market_conditions = self.market_analyzer.analyze_market_conditions()
+                        except Exception as e:
+                            self.logger.warning(f"Market analysis error: {e}")
                     
-                    # Check enhanced risk management (includes circuit breaker)
+                    # Check risk management
                     if self.risk_manager:
-                        account_balance = self.broker_api.get_account_balance() if self.broker_api else 10000
-                        current_pnl = self.position_manager.get_total_pnl() if self.position_manager else 0
-                        
-                        # Check circuit breaker
-                        if not self.risk_manager.check_circuit_breaker(current_pnl, account_balance):
-                            self.logger.warning("Circuit breaker triggered - stopping trading")
-                            self.stop()
-                            break
-                        
-                        # Check traditional risk management
-                        if self.risk_manager.should_stop_trading():
-                            self.logger.warning("Risk management triggered - stopping trading")
-                            self.stop()
-                            break
+                        try:
+                            account_balance = self.broker_api.get_account_balance() if self.broker_api else 10000
+                            current_pnl = self.position_manager.get_total_pnl() if self.position_manager else 0
+                            
+                            # Check circuit breaker
+                            if not self.risk_manager.check_circuit_breaker(current_pnl, account_balance):
+                                self.logger.warning("⚠️ Circuit breaker triggered - stopping trading")
+                                self.stop()
+                                break
+                            
+                            # Check traditional risk management
+                            if self.risk_manager.should_stop_trading():
+                                self.logger.warning("⚠️ Risk management triggered - stopping trading")
+                                self.stop()
+                                break
+                        except Exception as e:
+                            self.logger.warning(f"Risk check error: {e}")
                     
                     # Update performance tracking
-                    self._update_performance_tracking()
+                    try:
+                        self._update_performance_tracking()
+                    except Exception as e:
+                        pass  # Silent fail for performance tracking
                     
                     # Sleep for 1 second
                     time.sleep(1)
                     
                 except Exception as e:
-                    self.logger.error(f"Error in trading loop: {e}")
+                    self.logger.error(f"Trading loop error: {e}")
                     time.sleep(5)
             
+            self.logger.info("🛑 Trading system stopped")
+            
         except Exception as e:
-            self.logger.error(f"Error in main trading loop: {e}")
+            self.logger.error(f"Critical trading error: {e}")
     
     def _on_data_update(self, data: dict):
         """Handle real-time data updates"""

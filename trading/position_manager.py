@@ -75,6 +75,8 @@ class PositionManager:
         - ตรวจสอบเงื่อนไขความเสี่ยง
         - ตรวจสอบเป้าหมายกำไร/ขาดทุน
         """
+        self.logger.info("📊 Position monitoring started")
+        
         while self.is_running:
             try:
                 # Update all positions
@@ -90,8 +92,10 @@ class PositionManager:
                 threading.Event().wait(1)
                 
             except Exception as e:
-                self.logger.error(f"Error in position monitoring loop: {e}")
+                self.logger.error(f"Position monitoring error: {e}")
                 threading.Event().wait(5)
+        
+        self.logger.info("📊 Position monitoring stopped")
     
     def update_all_positions(self):
         """Update all active positions from broker"""

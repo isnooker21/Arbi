@@ -75,14 +75,18 @@ class TriangleArbitrageDetector:
     
     def _detection_loop(self):
         """Main detection loop"""
+        self.logger.info("🔍 Arbitrage detection started")
+        
         while self.is_running:
             try:
                 self.detect_opportunities()
                 # Sleep for 100ms between detection cycles
                 threading.Event().wait(0.1)
             except Exception as e:
-                self.logger.error(f"Error in detection loop: {e}")
+                self.logger.error(f"Detection error: {e}")
                 threading.Event().wait(1)
+        
+        self.logger.info("🔍 Arbitrage detection stopped")
     
     def detect_opportunities(self):
         """Main detection method with multi-timeframe analysis"""

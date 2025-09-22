@@ -47,6 +47,8 @@ class CorrelationManager:
     
     def _monitoring_loop(self):
         """Main monitoring loop"""
+        self.logger.info("🔗 Correlation monitoring started")
+        
         while self.is_running:
             try:
                 # Update correlation matrix every 5 minutes
@@ -59,8 +61,10 @@ class CorrelationManager:
                 threading.Event().wait(300)
                 
             except Exception as e:
-                self.logger.error(f"Error in correlation monitoring loop: {e}")
+                self.logger.error(f"Correlation monitoring error: {e}")
                 threading.Event().wait(60)
+        
+        self.logger.info("🔗 Correlation monitoring stopped")
     
     def calculate_correlations(self, lookback_days: int = 30, timeframes: List[str] = ['H1', 'H4', 'D1']):
         """

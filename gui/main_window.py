@@ -548,7 +548,7 @@ class MainWindow:
             
             # Start background thread
             threading.Thread(target=start_trading_thread, daemon=True).start()
-            self.log_message("🔄 Starting trading system...")
+            self.log_message("🚀 Starting trading system...")
             
         except Exception as e:
             self.log_message(f"❌ Error starting trading: {str(e)}")
@@ -585,7 +585,7 @@ class MainWindow:
             
             # Start background thread
             threading.Thread(target=stop_trading_thread, daemon=True).start()
-            self.log_message("🔄 Stopping trading system...")
+            self.log_message("🛑 Stopping trading system...")
             
         except Exception as e:
             self.log_message(f"Error stopping trading: {str(e)}")
