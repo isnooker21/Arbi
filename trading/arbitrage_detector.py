@@ -312,7 +312,7 @@ class TriangleArbitrageDetector:
         try:
             pair1, pair2, pair3 = triangle
             
-            # Get current prices
+            # Get current prices (returns float bid prices)
             price1 = self.broker.get_current_price(pair1)
             price2 = self.broker.get_current_price(pair2)
             price3 = self.broker.get_current_price(pair3)
@@ -320,12 +320,10 @@ class TriangleArbitrageDetector:
             if not all([price1, price2, price3]):
                 return None
             
-            # Calculate arbitrage potential
+            # Calculate arbitrage potential using bid prices
             # For triangle: A/B * B/C * C/A = 1 (should be 1 for no arbitrage)
-            # If > 1, buy A/B, buy B/C, sell C/A
-            # If < 1, sell A/B, sell B/C, buy C/A
-            
-            cross_rate = (price1['bid'] * price2['bid'] * price3['ask']) / (price1['ask'] * price2['ask'] * price3['bid'])
+            # Simplified calculation using bid prices only
+            cross_rate = (price1 * price2) / price3
             profit_potential = abs(cross_rate - 1) * 100  # Convert to percentage
             
             if profit_potential > self.arbitrage_threshold:
