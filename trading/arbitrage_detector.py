@@ -332,27 +332,19 @@ class TriangleArbitrageDetector:
         try:
             pair1, pair2, pair3 = triangle
             
-            # Step 1: Get validated prices with multiple checks
-            prices = self._get_validated_prices(triangle)
-            if not prices:
-                return None
+            # Step 1: Get current prices (simplified for compatibility)
+            price1 = self.broker.get_current_price(pair1)
+            price2 = self.broker.get_current_price(pair2)
+            price3 = self.broker.get_current_price(pair3)
             
-            price1, price2, price3 = prices['pair1'], prices['pair2'], prices['pair3']
+            if not all([price1, price2, price3]):
+                return None
             
             # Step 2: Calculate arbitrage potential
             cross_rate = (price1 * price2) / price3
             profit_potential = abs(cross_rate - 1) * 100
             
-            # Step 3: Enhanced validation
-            validation_result = self._validate_arbitrage_opportunity(
-                triangle, prices, cross_rate, profit_potential
-            )
-            
-            if not validation_result['is_valid']:
-                self.logger.debug(f"❌ Validation failed: {validation_result['reason']}")
-                return None
-            
-            # Step 4: Use higher threshold for better accuracy
+            # Step 3: Use higher threshold for better accuracy
             effective_threshold = self.arbitrage_threshold  # Use full threshold, not reduced
             
             # Debug logging
@@ -360,13 +352,8 @@ class TriangleArbitrageDetector:
                 self.logger.debug(f"🔍 Triangle {triangle}: profit={profit_potential:.4f}%, threshold={effective_threshold:.4f}%")
             
             if profit_potential > effective_threshold:
-                # Step 5: Calculate confidence score
-                confidence_score = self._calculate_confidence_score(
-                    profit_potential, validation_result, prices
-                )
-                
-                if confidence_score < self.min_confidence_score:
-                    self.logger.debug(f"❌ Confidence too low: {confidence_score:.2f}")
+                # Step 4: Simple validation checks
+                if not self._simple_validation_checks(triangle, cross_rate, profit_potential):
                     return None
                 
                 # Step 6: Determine trade direction
@@ -557,6 +544,30 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error calculating volume score: {e}")
             return 0.5
+    
+    def _simple_validation_checks(self, triangle: Tuple[str, str, str], cross_rate: float, profit_potential: float) -> bool:
+        """การตรวจสอบแบบง่ายเพื่อความเข้ากันได้"""
+        try:
+            # Check 1: Cross rate is reasonable
+            if cross_rate < 0.5 or cross_rate > 2.0:
+                self.logger.debug(f"❌ Cross rate unreasonable: {cross_rate:.4f}")
+                return False
+            
+            # Check 2: Profit potential is significant enough
+            if profit_potential < self.arbitrage_threshold:
+                self.logger.debug(f"❌ Profit too low: {profit_potential:.4f}%")
+                return False
+            
+            # Check 3: Market conditions are suitable
+            if self.current_regime in ['volatile', 'trending'] and profit_potential < self.arbitrage_threshold * 1.5:
+                self.logger.debug(f"❌ Market too volatile for low profit: {profit_potential:.4f}%")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error in simple validation: {e}")
+            return False
     
     def _check_rate_limits(self) -> bool:
         """ตรวจสอบ rate limits ก่อนส่งออเดอร์"""
