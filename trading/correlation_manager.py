@@ -43,11 +43,13 @@ class CorrelationManager:
         
         # Recovery thresholds - More flexible for all market conditions
         self.recovery_thresholds = {
-            'min_correlation': 0.4,      # Lower minimum correlation (more flexible)
-            'max_correlation': 0.95,     # Maximum correlation (avoid over-hedging)
-            'min_loss_threshold': -0.005, # Lower loss threshold (-0.5%)
-            'max_recovery_time_hours': 24, # Maximum time to hold recovery position
-            'hedge_ratio_range': (0.3, 2.5)  # Wider hedge ratio range
+            'min_correlation': 0.6,      # ความสัมพันธ์ขั้นต่ำ 60%
+            'max_correlation': 0.95,     # ความสัมพันธ์สูงสุด 95%
+            'min_loss_threshold': -0.005, # ขาดทุนขั้นต่ำ -0.5%
+            'max_recovery_time_hours': 24, # เวลาสูงสุด 24 ชั่วโมง
+            'hedge_ratio_range': (0.3, 2.5),  # ขนาด hedge ratio
+            'wait_time_minutes': 5,      # รอ 5 นาทีก่อนเริ่มแก้ไม้
+            'base_lot_size': 0.1         # ขนาด lot เริ่มต้น
         }
         
         # Never-Cut-Loss flag
@@ -63,6 +65,134 @@ class CorrelationManager:
         }
         
         # Multi-timeframe correlation cache
+        self.recovery_chains = {}  # เก็บข้อมูล recovery chain ของแต่ละกลุ่ม
+        
+    def start_chain_recovery(self, group_id: str, losing_pairs: List[Dict]):
+        """เริ่ม chain recovery สำหรับกลุ่มที่ขาดทุน"""
+        try:
+            self.logger.info(f"🔗 Starting chain recovery for group {group_id}")
+            self.logger.info(f"   Losing pairs: {[pair['symbol'] for pair in losing_pairs]}")
+            
+            # สร้าง recovery chain
+            recovery_chain = {
+                'group_id': group_id,
+                'started_at': datetime.now(),
+                'original_pairs': losing_pairs,
+                'recovery_pairs': [],
+                'status': 'active',
+                'current_chain': []
+            }
+            
+            self.recovery_chains[group_id] = recovery_chain
+            
+            # เริ่ม recovery สำหรับแต่ละคู่ที่ขาดทุน
+            for pair in losing_pairs:
+                self._start_pair_recovery(group_id, pair)
+                
+        except Exception as e:
+            self.logger.error(f"Error starting chain recovery: {e}")
+    
+    def _start_pair_recovery(self, group_id: str, losing_pair: Dict):
+        """เริ่ม recovery สำหรับคู่ที่ขาดทุน"""
+        try:
+            symbol = losing_pair['symbol']
+            loss_percent = losing_pair.get('loss_percent', 0)
+            
+            # ตรวจสอบว่าคู่นี้ขาดทุนเกิน threshold หรือไม่
+            if loss_percent > self.recovery_thresholds['min_loss_threshold']:
+                self.logger.info(f"   {symbol} loss {loss_percent:.2f}% below threshold - skipping")
+                return
+            
+            # หา correlation pair ที่ดีที่สุด
+            hedge_candidates = self.find_optimal_hedge_pairs(symbol, loss_percent)
+            
+            if not hedge_candidates:
+                self.logger.warning(f"   No hedge candidates found for {symbol}")
+                return
+            
+            # เลือกคู่ที่ดีที่สุด
+            best_hedge = hedge_candidates[0]
+            hedge_symbol = best_hedge['symbol']
+            correlation = best_hedge['correlation']
+            
+            # คำนวณ lot size
+            hedge_lot_size = self._calculate_hedge_lot_size(
+                losing_pair['lot_size'], 
+                correlation, 
+                loss_percent
+            )
+            
+            # ส่งออเดอร์ hedge
+            success = self._send_hedge_order(hedge_symbol, hedge_lot_size, group_id)
+            
+            if success:
+                # บันทึกข้อมูล recovery
+                recovery_data = {
+                    'original_pair': symbol,
+                    'hedge_pair': hedge_symbol,
+                    'correlation': correlation,
+                    'lot_size': hedge_lot_size,
+                    'created_at': datetime.now(),
+                    'status': 'active'
+                }
+                
+                if group_id in self.recovery_chains:
+                    self.recovery_chains[group_id]['recovery_pairs'].append(recovery_data)
+                    self.recovery_chains[group_id]['current_chain'].append(hedge_symbol)
+                
+                self.logger.info(f"✅ Hedge order sent: {hedge_symbol} {hedge_lot_size} lot")
+                self.logger.info(f"   Correlation: {correlation:.3f}")
+                self.logger.info(f"   Original pair: {symbol}")
+            else:
+                self.logger.error(f"❌ Failed to send hedge order: {hedge_symbol}")
+                
+        except Exception as e:
+            self.logger.error(f"Error starting pair recovery: {e}")
+    
+    def _calculate_hedge_lot_size(self, original_lot: float, correlation: float, loss_percent: float) -> float:
+        """คำนวณ lot size สำหรับ hedge"""
+        try:
+            # ใช้ขนาดเดิม × correlation ratio
+            hedge_ratio = abs(correlation)
+            hedge_lot = original_lot * hedge_ratio
+            
+            # จำกัดขนาด
+            min_lot = 0.01
+            max_lot = 5.0
+            
+            hedge_lot = max(min_lot, min(hedge_lot, max_lot))
+            
+            return hedge_lot
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating hedge lot size: {e}")
+            return original_lot
+    
+    def _send_hedge_order(self, symbol: str, lot_size: float, group_id: str) -> bool:
+        """ส่งออเดอร์ hedge"""
+        try:
+            # กำหนดทิศทางตาม correlation
+            # ถ้า correlation เป็นบวก → ทิศทางเดียวกัน
+            # ถ้า correlation เป็นลบ → ทิศทางตรงข้าม
+            direction = "BUY"  # ใช้ BUY เป็นค่าเริ่มต้น
+            
+            result = self.broker.place_order(
+                symbol=symbol,
+                order_type=direction,
+                volume=lot_size,
+                comment=f"Hedge_{group_id}"
+            )
+            
+            if result and result.get('retcode') == 10009:
+                self.logger.info(f"✅ Hedge order sent: {symbol} {direction} {lot_size} lot")
+                return True
+            else:
+                self.logger.error(f"❌ Hedge order failed: {symbol} {direction}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Error sending hedge order: {e}")
+            return False
         self.correlation_cache = {
             'h1': {},
             'h4': {},

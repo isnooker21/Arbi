@@ -160,6 +160,10 @@ class AdaptiveEngine:
                     # Execute adaptive trading logic
                     self._execute_adaptive_trading()
                     
+                    # Check group status for arbitrage detector
+                    if hasattr(self.arbitrage_detector, 'check_group_status'):
+                        self.arbitrage_detector.check_group_status()
+                    
                     # Update performance metrics
                     self._update_performance_metrics()
                     

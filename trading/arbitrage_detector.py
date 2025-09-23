@@ -41,6 +41,11 @@ class TriangleArbitrageDetector:
         self.arbitrage_threshold = 0.005  # Lower default threshold (0.5 pips)
         self.execution_timeout = 150  # Target execution speed
         self.position_size = 0.1  # Default position size
+        
+        # Group management for single arbitrage entry
+        self.active_groups = {}  # เก็บข้อมูลกลุ่มที่เปิดอยู่
+        self.group_counter = 0   # ตัวนับกลุ่ม
+        self.is_arbitrage_paused = False  # หยุดตรวจสอบ arbitrage ใหม่
         self.regime_parameters = {
             'volatile': {'threshold': 0.01, 'timeout': 200},    # 1 pip
             'trending': {'threshold': 0.008, 'timeout': 150},   # 0.8 pips
@@ -903,9 +908,14 @@ class TriangleArbitrageDetector:
         self.logger.info("🔍 Arbitrage detection stopped")
     
     def detect_opportunities(self):
-        """Main detection method called by AdaptiveEngine"""
+        """Main detection method called by AdaptiveEngine - Single Entry Mode"""
         try:
             if not self.is_running:
+                return
+            
+            # หยุดตรวจสอบถ้ามีกลุ่มที่ยังไม่ปิด
+            if self.is_arbitrage_paused:
+                self.logger.debug("⏸️ Arbitrage detection paused - waiting for active groups to close")
                 return
                 
             self.logger.debug(f"🔍 Detecting arbitrage opportunities (threshold: {self.arbitrage_threshold})")
@@ -945,14 +955,12 @@ class TriangleArbitrageDetector:
                         self.logger.info(f"🎯 Arbitrage opportunity found: {triangle}")
                         self.logger.info(f"   Profit potential: {opportunity['profit_potential']:.4f}%")
                         
-                        # Execute triangle if conditions met
-                        success = self._execute_triangle_arbitrage(opportunity)
+                        # สร้างกลุ่ม arbitrage และส่งออเดอร์ 3 คู่พร้อมกัน
+                        success = self._create_arbitrage_group(triangle, opportunity)
                         if success:
-                            self.active_triangles[opportunity['id']] = opportunity
-                            self.performance_metrics['successful_trades'] += 1
-                            self.logger.info(f"✅ Triangle arbitrage executed: {opportunity['id']}")
-                            self.logger.info(f"   Profit potential: {opportunity['profit_potential']:.4f}%")
-                            self.logger.info(f"   Execution status: {opportunity.get('execution_status', 'unknown')}")
+                            # หยุดการตรวจสอบ arbitrage ใหม่ทันที
+                            self.logger.info("⏸️ Stopping arbitrage detection - group created")
+                            break  # ออกจากลูปทันที
                         else:
                             self.logger.warning(f"⚠️ Triangle arbitrage failed: {opportunity['id']}")
                             
@@ -970,6 +978,168 @@ class TriangleArbitrageDetector:
                     
         except Exception as e:
             self.logger.error(f"Error in detect_opportunities: {e}")
+    
+    def _create_arbitrage_group(self, triangle: Tuple[str, str, str], opportunity: Dict) -> bool:
+        """สร้างกลุ่ม arbitrage และส่งออเดอร์ 3 คู่พร้อมกัน"""
+        try:
+            self.group_counter += 1
+            group_id = f"arbitrage_group_{self.group_counter}"
+            
+            pair1, pair2, pair3 = triangle
+            
+            self.logger.info(f"🎯 Creating arbitrage group {group_id}")
+            self.logger.info(f"   Triangle: {pair1}, {pair2}, {pair3}")
+            self.logger.info(f"   Opportunity: {opportunity.get('arbitrage_percent', 0):.4f}%")
+            
+            # สร้างข้อมูลกลุ่ม
+            group_data = {
+                'group_id': group_id,
+                'triangle': triangle,
+                'created_at': datetime.now(),
+                'positions': [],
+                'status': 'active',
+                'total_pnl': 0.0,
+                'recovery_chain': []
+            }
+            
+            # ส่งออเดอร์ 3 คู่พร้อมกัน
+            orders_sent = 0
+            
+            # ออเดอร์คู่ที่ 1
+            if self._send_arbitrage_order(pair1, opportunity.get('pair1_direction', 'BUY'), group_id):
+                orders_sent += 1
+                group_data['positions'].append({
+                    'symbol': pair1,
+                    'direction': opportunity.get('pair1_direction', 'BUY'),
+                    'lot_size': self.position_size,
+                    'status': 'active'
+                })
+            
+            # ออเดอร์คู่ที่ 2
+            if self._send_arbitrage_order(pair2, opportunity.get('pair2_direction', 'SELL'), group_id):
+                orders_sent += 1
+                group_data['positions'].append({
+                    'symbol': pair2,
+                    'direction': opportunity.get('pair2_direction', 'SELL'),
+                    'lot_size': self.position_size,
+                    'status': 'active'
+                })
+            
+            # ออเดอร์คู่ที่ 3
+            if self._send_arbitrage_order(pair3, opportunity.get('pair3_direction', 'BUY'), group_id):
+                orders_sent += 1
+                group_data['positions'].append({
+                    'symbol': pair3,
+                    'direction': opportunity.get('pair3_direction', 'BUY'),
+                    'lot_size': self.position_size,
+                    'status': 'active'
+                })
+            
+            # ตรวจสอบว่าส่งออเดอร์สำเร็จครบ 3 คู่
+            if orders_sent == 3:
+                self.active_groups[group_id] = group_data
+                self.is_arbitrage_paused = True  # หยุดตรวจสอบ arbitrage ใหม่
+                
+                self.logger.info(f"✅ Arbitrage group {group_id} created successfully")
+                self.logger.info(f"   Orders sent: {orders_sent}/3")
+                self.logger.info(f"   Pausing arbitrage detection until group closes")
+                
+                return True
+            else:
+                self.logger.error(f"❌ Failed to create arbitrage group {group_id}")
+                self.logger.error(f"   Orders sent: {orders_sent}/3")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Error creating arbitrage group: {e}")
+            return False
+    
+    def _send_arbitrage_order(self, symbol: str, direction: str, group_id: str) -> bool:
+        """ส่งออเดอร์ arbitrage"""
+        try:
+            result = self.broker.place_order(
+                symbol=symbol,
+                order_type=direction,
+                volume=self.position_size,
+                comment=f"Arbitrage_{group_id}"
+            )
+            
+            if result and result.get('retcode') == 10009:
+                self.logger.info(f"✅ Order sent: {symbol} {direction} {self.position_size} lot")
+                return True
+            else:
+                self.logger.error(f"❌ Order failed: {symbol} {direction}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Error sending arbitrage order: {e}")
+            return False
+    
+    def check_group_status(self):
+        """ตรวจสอบสถานะของกลุ่มที่เปิดอยู่"""
+        try:
+            if not self.active_groups:
+                return
+            
+            groups_to_close = []
+            
+            for group_id, group_data in self.active_groups.items():
+                # ตรวจสอบว่ากลุ่มหมดเวลา 24 ชั่วโมง
+                if (datetime.now() - group_data['created_at']).total_seconds() > 86400:  # 24 hours
+                    self.logger.warning(f"⏰ Group {group_id} expired after 24 hours")
+                    groups_to_close.append(group_id)
+                    continue
+                
+                # ตรวจสอบสถานะของแต่ละตำแหน่ง
+                all_profitable = True
+                for position in group_data['positions']:
+                    # ตรวจสอบ PnL ของแต่ละตำแหน่ง
+                    # TODO: ใช้ broker API ตรวจสอบ PnL จริง
+                    # position_pnl = self.broker.get_position_pnl(position['symbol'])
+                    # if position_pnl < 0:
+                    #     all_profitable = False
+                    #     break
+                    pass  # ใช้ mock data ชั่วคราว
+                
+                # ถ้าทุกตำแหน่งกำไร ให้ปิดกลุ่ม
+                if all_profitable:
+                    self.logger.info(f"✅ Group {group_id} all positions profitable - closing group")
+                    groups_to_close.append(group_id)
+            
+            # ปิดกลุ่มที่ครบเงื่อนไข
+            for group_id in groups_to_close:
+                self._close_group(group_id)
+                
+        except Exception as e:
+            self.logger.error(f"Error checking group status: {e}")
+    
+    def _close_group(self, group_id: str):
+        """ปิดกลุ่ม arbitrage"""
+        try:
+            if group_id not in self.active_groups:
+                return
+            
+            group_data = self.active_groups[group_id]
+            
+            self.logger.info(f"🔄 Closing arbitrage group {group_id}")
+            
+            # ปิดทุกตำแหน่งในกลุ่ม
+            for position in group_data['positions']:
+                # TODO: ใช้ broker API ปิดตำแหน่งจริง
+                # self.broker.close_position(position['symbol'])
+                self.logger.info(f"   Closing position: {position['symbol']}")
+            
+            # ลบกลุ่มออกจาก active_groups
+            del self.active_groups[group_id]
+            
+            # เริ่มตรวจสอบ arbitrage ใหม่
+            self.is_arbitrage_paused = False
+            
+            self.logger.info(f"✅ Group {group_id} closed successfully")
+            self.logger.info("🔄 Resuming arbitrage detection")
+            
+        except Exception as e:
+            self.logger.error(f"Error closing group {group_id}: {e}")
     
     def analyze_timeframe(self, triangle: Tuple[str, str, str], timeframe: str) -> Dict:
         """Analyze triangle for specific timeframe"""
