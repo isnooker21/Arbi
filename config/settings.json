@@ -17,7 +17,7 @@
   "ai": {
     "learning_enabled": true,
     "rule_adaptation_frequency": "daily",
-    "confidence_threshold": 0.2,
+    "confidence_threshold": 0.1,
     "max_rules_per_category": 50,
     "performance_lookback_days": 30
   },

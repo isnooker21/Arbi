@@ -183,12 +183,16 @@ class FlexibleTrader:
                     # AI evaluation
                     ai_decision = self.ai.evaluate_flexible_opportunity(opportunity)
                     
-                    if ai_decision.should_act and ai_decision.confidence > 0.2:
+                    if ai_decision.should_act and ai_decision.confidence > 0.1:
                         self.logger.info(f"🎯 EXECUTING Trend Following: {pair}, "
                                        f"Direction: {opportunity['direction']}, "
                                        f"Confidence: {ai_decision.confidence:.2f}")
                         self._execute_flexible_trade(opportunity, ai_decision)
                         return True
+                    else:
+                        self.logger.info(f"🔍 Trend Following opportunity rejected: {pair}, "
+                                       f"Confidence: {ai_decision.confidence:.2f}")
+                        return False
             
             return False
             
@@ -235,12 +239,16 @@ class FlexibleTrader:
                     
                     ai_decision = self.ai.evaluate_flexible_opportunity(opportunity)
                     
-                    if ai_decision.should_act and ai_decision.confidence > 0.2:
+                    if ai_decision.should_act and ai_decision.confidence > 0.1:
                         self.logger.info(f"🎯 EXECUTING Momentum Trade: {pair}, "
                                        f"Direction: {opportunity['direction']}, "
                                        f"Confidence: {ai_decision.confidence:.2f}")
                         self._execute_flexible_trade(opportunity, ai_decision)
                         return True
+                    else:
+                        self.logger.info(f"🔍 Momentum opportunity rejected: {pair}, "
+                                       f"Confidence: {ai_decision.confidence:.2f}")
+                        return False
             
             return False
             
@@ -286,12 +294,16 @@ class FlexibleTrader:
                         
                         ai_decision = self.ai.evaluate_flexible_opportunity(opportunity)
                         
-                        if ai_decision.should_act and ai_decision.confidence > 0.2:
+                        if ai_decision.should_act and ai_decision.confidence > 0.1:
                             self.logger.info(f"🎯 EXECUTING Scalp Trade: {pair}, "
                                            f"Direction: {opportunity['direction']}, "
                                            f"Confidence: {ai_decision.confidence:.2f}")
                             self._execute_flexible_trade(opportunity, ai_decision)
                             return True
+                        else:
+                            self.logger.info(f"🔍 Scalping opportunity rejected: {pair}, "
+                                           f"Confidence: {ai_decision.confidence:.2f}")
+                            return False
             
             return False
             
@@ -337,6 +349,10 @@ class FlexibleTrader:
                                    f"Confidence: {ai_decision.confidence:.2f}")
                     self._execute_flexible_trade(opportunity, ai_decision)
                     return True
+                else:
+                    self.logger.info(f"🔍 Grid trading opportunity rejected: {pair}, "
+                                   f"Confidence: {ai_decision.confidence:.2f}")
+                    return False
             
             return False
             

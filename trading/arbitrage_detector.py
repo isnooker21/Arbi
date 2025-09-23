@@ -48,6 +48,11 @@ class TriangleArbitrageDetector:
     def _get_available_pairs(self) -> List[str]:
         """Get list of available trading pairs from broker"""
         try:
+            # Check if broker is connected
+            if not hasattr(self.broker, '_connected') or not self.broker._connected:
+                self.logger.warning("Broker not connected, cannot get available pairs")
+                return []
+            
             all_pairs = self.broker.get_available_pairs()
             self.logger.info(f"Raw pairs from broker: {len(all_pairs) if all_pairs else 0}")
             if all_pairs and len(all_pairs) > 0:
@@ -55,7 +60,19 @@ class TriangleArbitrageDetector:
             
             if not all_pairs:
                 self.logger.warning("No pairs available from broker")
-                return []
+                # Return hardcoded pairs as fallback
+                fallback_pairs = [
+                    'EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'USDCAD', 'AUDUSD', 'NZDUSD',
+                    'EURGBP', 'EURJPY', 'EURCHF', 'EURCAD', 'EURAUD', 'EURNZD',
+                    'GBPEUR', 'GBPJPY', 'GBPCHF', 'GBPCAD', 'GBPAUD', 'GBPNZD',
+                    'JPYEUR', 'JPYUSD', 'JPYGBP', 'JPYCHF', 'JPYCAD', 'JPYAUD', 'JPYNZD',
+                    'CHFEUR', 'CHFUSD', 'CHFGBP', 'CHFJPY', 'CHFCAD', 'CHFAUD', 'CHFNZD',
+                    'CADEUR', 'CADUSD', 'CADGBP', 'CADJPY', 'CADCHF', 'CADAUD', 'CADNZD',
+                    'AUDEUR', 'AUDUSD', 'AUDGBP', 'AUDJPY', 'AUDCHF', 'AUDCAD', 'AUDNZD',
+                    'NZDEUR', 'NZDUSD', 'NZDGBP', 'NZDJPY', 'NZDCHF', 'NZDCAD', 'NZDAUD'
+                ]
+                self.logger.warning(f"Using fallback pairs: {len(fallback_pairs)} pairs")
+                return fallback_pairs
             
             # Filter only Major and Minor pairs
             major_minor_currencies = ['EUR', 'USD', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD']
@@ -292,7 +309,7 @@ class TriangleArbitrageDetector:
                 # AI evaluation
                 ai_decision = self.ai.evaluate_arbitrage_opportunity(opportunity)
                 
-                if ai_decision.should_act and ai_decision.confidence > 0.2:
+                if ai_decision.should_act and ai_decision.confidence > 0.1:
                     self.logger.info(f"🎯 ARBITRAGE OPPORTUNITY: {triangle}, "
                                    f"Percent: {arbitrage_percent:.4f}%, "
                                    f"Confidence: {ai_decision.confidence:.2f}")
