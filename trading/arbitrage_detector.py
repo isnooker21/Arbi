@@ -64,11 +64,19 @@ class TriangleArbitrageDetector:
         self.logger.info(f"Available pairs: {len(self.available_pairs)}")
         self.logger.info(f"Generated {len(self.triangle_combinations)} triangle combinations (Major & Minor pairs only)")
         
+        # Debug: Show first few pairs
+        if self.available_pairs:
+            self.logger.info(f"First 5 pairs: {self.available_pairs[:5]}")
+        else:
+            self.logger.warning("⚠️ No available pairs found!")
+        
         # If no triangles generated, create fallback triangles
         if len(self.triangle_combinations) == 0 and len(self.available_pairs) > 0:
             self.logger.warning("No triangles generated, creating fallback triangles...")
             self.triangle_combinations = self._create_fallback_triangles()
             self.logger.info(f"Created {len(self.triangle_combinations)} fallback triangle combinations")
+        elif len(self.triangle_combinations) == 0:
+            self.logger.error("❌ No triangles generated and no available pairs!")
     
     def _get_available_pairs(self) -> List[str]:
         """Get list of available trading pairs from broker"""

@@ -317,18 +317,36 @@ class BrokerAPI:
         """Get list of available trading pairs"""
         try:
             if not self._connected:
-                return []
+                self.logger.warning("⚠️ Not connected to broker - using fallback pairs")
+                return self._get_fallback_pairs()
             
             if self.broker_type == "MetaTrader5":
                 symbols = mt5.symbols_get()
                 if symbols:
-                    return [symbol.name for symbol in symbols]
+                    pairs = [symbol.name for symbol in symbols]
+                    self.logger.info(f"✅ Retrieved {len(pairs)} pairs from MT5")
+                    return pairs
+                else:
+                    self.logger.warning("⚠️ No symbols from MT5 - using fallback pairs")
+                    return self._get_fallback_pairs()
             
-            return []
+            return self._get_fallback_pairs()
             
         except Exception as e:
             self.logger.error(f"Error getting available pairs: {e}")
-            return []
+            self.logger.warning("⚠️ Using fallback pairs due to error")
+            return self._get_fallback_pairs()
+    
+    def _get_fallback_pairs(self) -> List[str]:
+        """Get fallback pairs when broker data is unavailable"""
+        return [
+            'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
+            'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY',
+            'EURCHF', 'GBPCHF', 'USDCHF', 'AUDCHF', 'CADCHF',
+            'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'EURNZD',
+            'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD', 'CHFJPY',
+            'EURCAD', 'GBPCAD', 'USDCAD', 'AUDCAD', 'CADCHF'
+        ]
     
     def get_current_price(self, symbol: str) -> Optional[float]:
         """Get current price for a symbol"""
