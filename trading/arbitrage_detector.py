@@ -163,1201 +163,118 @@ class TriangleArbitrageDetector:
             self.logger.error(f"Error getting available pairs: {e}")
             return []
         
-    def _generate_triangle_combinations(self) -> List[Tuple[str, str, str]]:
-        """
-        สร้างรายการคู่เงินสามเหลี่ยมจากคู่เงินที่มีจริงในบัญชีเท่านั้น
-        
-        หลักการ: A/B × B/C = A/C (ราคาทางทฤษฎี)
-        """
-        combinations = []
-        
-        self.logger.info(f"Generating triangles from {len(self.available_pairs)} available pairs")
-        
-        # Only use pairs that are actually available in the account
-        available_pairs_set = set(self.available_pairs)
-        self.logger.info(f"Available pairs set: {len(available_pairs_set)}")
-        
-        # Generate triangles from available pairs
-        triangles_found = 0
-        for i, pair1 in enumerate(self.available_pairs):
-            if i < 3:  # Debug first few pairs
-                self.logger.info(f"Processing pair1: {pair1}")
-            
-            currency1_base = pair1[:3]
-            currency1_quote = pair1[3:]
-            
-            for j, pair2 in enumerate(self.available_pairs):
-                if pair2 == pair1:
-                    continue
-                    
-                currency2_base = pair2[:3]
-                currency2_quote = pair2[3:]
-                
-                # Check if pair1 and pair2 can form a triangle
-                if currency1_quote == currency2_base:
-                    # pair1 = A/B, pair2 = B/C, so we need A/C
-                    currency3_base = currency1_base
-                    currency3_quote = currency2_quote
-                    pair3 = f"{currency3_base}{currency3_quote}"
-                    
-                    if pair3 in available_pairs_set:
-                        triangle = (pair1, pair2, pair3)
-                        combinations.append(triangle)
-                        triangles_found += 1
-                        if triangles_found <= 5:  # Log first few triangles
-                            self.logger.info(f"Found triangle {triangles_found}: {triangle}")
-                
-                elif currency1_base == currency2_quote:
-                    # pair1 = A/B, pair2 = C/A, so we need C/B
-                    currency3_base = currency2_base
-                    currency3_quote = currency1_quote
-                    pair3 = f"{currency3_base}{currency3_quote}"
-                    
-                    if pair3 in available_pairs_set:
-                        triangle = (pair1, pair2, pair3)
-                        combinations.append(triangle)
-        
-        # Remove duplicates and sort
-        combinations = list(set(combinations))
-        combinations.sort()
-        
-        self.logger.info(f"Generated {len(combinations)} unique triangle combinations")
-        
-        return combinations
+    # Method removed - not used in simple system
     
-    def _generate_fixed_triangle_combinations(self) -> List[Tuple[str, str, str]]:
-        """
-        สร้าง triangle combinations จากคู่เงิน Arbitrage ที่กำหนด
-        ใช้เฉพาะ EURUSD, GBPUSD, EURGBP
-        """
-        combinations = []
-        
-        # ตรวจสอบว่าคู่เงินที่กำหนดมีอยู่ใน available_pairs หรือไม่
-        available_pairs_set = set(self.available_pairs)
-        valid_arbitrage_pairs = [pair for pair in self.arbitrage_pairs if pair in available_pairs_set]
-        
-        if len(valid_arbitrage_pairs) < 3:
-            self.logger.warning(f"⚠️ คู่เงิน Arbitrage ที่กำหนดไม่ครบ 3 คู่")
-            self.logger.warning(f"   คู่เงินที่กำหนด: {self.arbitrage_pairs}")
-            self.logger.warning(f"   คู่เงินที่ใช้ได้: {valid_arbitrage_pairs}")
-            return []
-        
-        # สร้าง triangle combination จากคู่เงินที่กำหนด
-        # EURUSD, GBPUSD, EURGBP
-        triangle = (valid_arbitrage_pairs[0], valid_arbitrage_pairs[1], valid_arbitrage_pairs[2])
-        combinations.append(triangle)
-        
-        self.logger.info(f"✅ สร้าง triangle combination จากคู่เงินที่กำหนด: {triangle}")
-        self.logger.info(f"   คู่เงิน Arbitrage: {valid_arbitrage_pairs}")
-        
-        return combinations
+    # Method removed - not used in simple system
     
-    def _create_fallback_triangles(self) -> List[Tuple[str, str, str]]:
-        """Create fallback triangle combinations when normal generation fails"""
-        fallback_triangles = []
-        
-        # Common triangle patterns
-        common_triangles = [
-            ('EURUSD', 'USDJPY', 'EURJPY'),
-            ('GBPUSD', 'USDJPY', 'GBPJPY'),
-            ('EURUSD', 'USDCHF', 'EURCHF'),
-            ('GBPUSD', 'USDCHF', 'GBPCHF'),
-            ('EURUSD', 'USDCAD', 'EURCAD'),
-            ('GBPUSD', 'USDCAD', 'GBPCAD'),
-            ('EURUSD', 'AUDUSD', 'EURAUD'),
-            ('GBPUSD', 'AUDUSD', 'GBPAUD'),
-            ('EURUSD', 'NZDUSD', 'EURNZD'),
-            ('GBPUSD', 'NZDUSD', 'GBPNZD'),
-            ('USDJPY', 'JPYCHF', 'USDCHF'),
-            ('USDJPY', 'JPYCAD', 'USDCAD'),
-            ('USDJPY', 'JPYAUD', 'AUDUSD'),
-            ('USDJPY', 'JPYNZD', 'NZDUSD'),
-            ('EURGBP', 'GBPJPY', 'EURJPY'),
-            ('EURGBP', 'GBPCHF', 'EURCHF'),
-            ('EURGBP', 'GBPCAD', 'EURCAD'),
-            ('EURGBP', 'GBPAUD', 'EURAUD'),
-            ('EURGBP', 'GBPNZD', 'EURNZD'),
-            ('AUDCAD', 'CADCHF', 'AUDCHF'),
-            ('AUDCAD', 'CADJPY', 'AUDJPY'),
-            ('AUDCAD', 'CADNZD', 'AUDNZD'),
-            ('AUDCHF', 'CHFJPY', 'AUDJPY'),
-            ('AUDCHF', 'CHFCAD', 'AUDCAD'),
-            ('AUDCHF', 'CHFNZD', 'AUDNZD')
-        ]
-        
-        # Filter to only include triangles with available pairs
-        available_pairs_set = set(self.available_pairs)
-        
-        for triangle in common_triangles:
-            pair1, pair2, pair3 = triangle
-            if pair1 in available_pairs_set and pair2 in available_pairs_set and pair3 in available_pairs_set:
-                fallback_triangles.append(triangle)
-        
-        self.logger.info(f"Created {len(fallback_triangles)} fallback triangles from common patterns")
-        return fallback_triangles
+    # Method removed - not used in simple system
     
-    def update_adaptive_parameters(self, params: Dict):
-        """
-        ⚡ CRITICAL: Update parameters based on market regime
-        Called by AdaptiveEngine every 30 seconds
-        """
-        try:
-            if 'market_regime' in params:
-                self.current_regime = params['market_regime']
-                regime_params = self.regime_parameters.get(self.current_regime, self.regime_parameters['normal'])
-                
-                # Update threshold based on regime
-                self.arbitrage_threshold = regime_params['threshold']
-                self.execution_timeout = regime_params['timeout']
-                
-                self.logger.info(f"🎯 Arbitrage parameters updated for {self.current_regime} market")
-                self.logger.info(f"   Threshold: {self.arbitrage_threshold}")
-                self.logger.info(f"   Timeout: {self.execution_timeout}ms")
-            
-            if 'position_size' in params:
-                self.position_size = params['position_size']
-                self.logger.info(f"📊 Position size updated: {self.position_size}")
-                
-        except Exception as e:
-            self.logger.error(f"Error updating adaptive parameters: {e}")
+    # Method removed - not used in simple system
     
-    def _get_priority_triangles(self) -> List[Tuple]:
-        """Get triangles prioritized by market regime - ใช้เฉพาะคู่เงินที่กำหนด"""
-        
-        # เพิ่ม debug logging
-        self.logger.info(f"🔍 Getting priority triangles for regime: {self.current_regime}")
-        self.logger.info(f"🔍 Total triangle combinations available: {len(self.triangle_combinations)}")
-        
-        # ใช้เฉพาะ triangle combinations ที่สร้างจากคู่เงินที่กำหนด
-        priority_triangles = self.triangle_combinations
-        
-        # Filter triangles by available pairs
-        available_pairs_set = set(self.available_pairs)
-        filtered_triangles = []
-        
-        for triangle in priority_triangles:
-            pair1, pair2, pair3 = triangle
-            if (pair1 in available_pairs_set and 
-                pair2 in available_pairs_set and 
-                pair3 in available_pairs_set):
-                filtered_triangles.append(triangle)
-            else:
-                self.logger.debug(f"🔍 Triangle filtered out (missing pairs): {triangle}")
-        
-        self.logger.info(f"🔍 Filtered triangles for {self.current_regime}: {len(filtered_triangles)}")
-        if len(filtered_triangles) == 0:
-            self.logger.warning(f"⚠️ No valid triangles for regime {self.current_regime}")
-            self.logger.info(f"Available pairs: {self.available_pairs[:10]}...")  # Show first 10 pairs
-        
-        return filtered_triangles
+    # Method removed - not used in simple system
 
-    def _calculate_triangle_opportunity(self, triangle: Tuple[str, str, str]) -> Optional[Dict]:
-        """
-        ⚡ ENHANCED: Calculate arbitrage opportunity with strict validation
-        """
-        try:
-            pair1, pair2, pair3 = triangle
-            
-            # Step 1: Get current prices (simplified for compatibility)
-            price1 = self.broker.get_current_price(pair1)
-            price2 = self.broker.get_current_price(pair2)
-            price3 = self.broker.get_current_price(pair3)
-            
-            if not all([price1, price2, price3]):
-                return None
-            
-            # Step 2: Calculate arbitrage potential
-            cross_rate = (price1 * price2) / price3
-            profit_potential = abs(cross_rate - 1) * 100
-            
-            # Step 3: Use higher threshold for better accuracy
-            effective_threshold = self.arbitrage_threshold  # Use full threshold, not reduced
-            
-            # Debug logging
-            if profit_potential > 0.001:
-                self.logger.debug(f"🔍 Triangle {triangle}: profit={profit_potential:.4f}%, threshold={effective_threshold:.4f}%")
-            
-            if profit_potential > effective_threshold:
-                # Step 4: Simple validation checks
-                if not self._simple_validation_checks(triangle, cross_rate, profit_potential):
-                    return None
-                
-                # Step 6: Determine trade direction
-                if cross_rate > 1:
-                    legs = [
-                        {'symbol': pair1, 'type': 'BUY', 'volume': self.position_size},
-                        {'symbol': pair2, 'type': 'BUY', 'volume': self.position_size},
-                        {'symbol': pair3, 'type': 'SELL', 'volume': self.position_size}
-                    ]
-                else:
-                    legs = [
-                        {'symbol': pair1, 'type': 'SELL', 'volume': self.position_size},
-                        {'symbol': pair2, 'type': 'SELL', 'volume': self.position_size},
-                        {'symbol': pair3, 'type': 'BUY', 'volume': self.position_size}
-                    ]
-                
-                return {
-                    'id': f"{pair1}_{pair2}_{pair3}_{int(time.time())}",
-                    'triangle': triangle,
-                    'profit_potential': profit_potential,
-                    'cross_rate': cross_rate,
-                    'legs': legs,
-                    'timestamp': datetime.now(),
-                    'market_regime': self.current_regime
-                }
-            
-            return None
-            
-        except Exception as e:
-            self.logger.error(f"Error calculating triangle opportunity for {triangle}: {e}")
-            return None
+    # Method removed - not used in simple system
     
-    def _get_validated_prices(self, triangle: Tuple[str, str, str]) -> Optional[Dict]:
-        """Get prices with multiple validation checks"""
-        try:
-            pair1, pair2, pair3 = triangle
-            prices = {}
-            
-            # Get prices multiple times for stability check
-            for pair in [pair1, pair2, pair3]:
-                price_checks = []
-                for _ in range(self.price_stability_checks):
-                    price = self.broker.get_current_price(pair)
-                    if price:
-                        price_checks.append(price)
-                    time.sleep(0.1)  # Small delay between checks
-                
-                if not price_checks:
-                    self.logger.debug(f"❌ No valid prices for {pair}")
-                    return None
-                
-                # Check price stability
-                if len(price_checks) > 1:
-                    price_variance = max(price_checks) - min(price_checks)
-                    if price_variance > 0.0001:  # Too much variance
-                        self.logger.debug(f"❌ Price too volatile for {pair}: {price_variance}")
-                        return None
-                
-                prices[pair] = sum(price_checks) / len(price_checks)
-            
-            # Calculate spread ratio
-            spread_ratio = self._calculate_spread_ratio(triangle, prices)
-            if spread_ratio > self.max_spread_ratio:
-                self.logger.debug(f"❌ Spread too wide: {spread_ratio:.2f}")
-                return None
-            
-            # Calculate volume score
-            volume_score = self._calculate_volume_score(triangle)
-            if volume_score < self.min_volume_threshold:
-                self.logger.debug(f"❌ Volume too low: {volume_score:.2f}")
-                return None
-            
-            prices['spread_ratio'] = spread_ratio
-            prices['volume_score'] = volume_score
-            
-            return prices
-            
-        except Exception as e:
-            self.logger.error(f"Error getting validated prices: {e}")
-            return None
+    # Method removed - not used in simple system
     
-    def _validate_arbitrage_opportunity(self, triangle: Tuple[str, str, str], prices: Dict, 
-                                      cross_rate: float, profit_potential: float) -> Dict:
-        """Enhanced validation for arbitrage opportunities"""
-        try:
-            validation_result = {
-                'is_valid': True,
-                'reason': '',
-                'checks_passed': 0,
-                'total_checks': 5
-            }
-            
-            # Check 1: Profit potential is significant
-            if profit_potential < self.arbitrage_threshold:
-                validation_result['is_valid'] = False
-                validation_result['reason'] = f"Profit too low: {profit_potential:.4f}%"
-                return validation_result
-            validation_result['checks_passed'] += 1
-            
-            # Check 2: Cross rate is reasonable
-            if cross_rate < 0.5 or cross_rate > 2.0:
-                validation_result['is_valid'] = False
-                validation_result['reason'] = f"Cross rate unreasonable: {cross_rate:.4f}"
-                return validation_result
-            validation_result['checks_passed'] += 1
-            
-            # Check 3: Spread ratio is acceptable
-            if prices['spread_ratio'] > self.max_spread_ratio:
-                validation_result['is_valid'] = False
-                validation_result['reason'] = f"Spread too wide: {prices['spread_ratio']:.2f}"
-                return validation_result
-            validation_result['checks_passed'] += 1
-            
-            # Check 4: Volume is sufficient
-            if prices['volume_score'] < self.min_volume_threshold:
-                validation_result['is_valid'] = False
-                validation_result['reason'] = f"Volume too low: {prices['volume_score']:.2f}"
-                return validation_result
-            validation_result['checks_passed'] += 1
-            
-            # Check 5: Market conditions are suitable
-            if self.current_regime in ['volatile', 'trending'] and profit_potential < self.arbitrage_threshold * 1.5:
-                validation_result['is_valid'] = False
-                validation_result['reason'] = f"Market too volatile for low profit: {profit_potential:.4f}%"
-                return validation_result
-            validation_result['checks_passed'] += 1
-            
-            return validation_result
-            
-        except Exception as e:
-            self.logger.error(f"Error validating arbitrage opportunity: {e}")
-            return {'is_valid': False, 'reason': f'Validation error: {e}', 'checks_passed': 0, 'total_checks': 5}
+    # Method removed - not used in simple system
     
-    def _calculate_confidence_score(self, profit_potential: float, validation_result: Dict, prices: Dict) -> float:
-        """Calculate confidence score for arbitrage opportunity"""
-        try:
-            confidence = 0.0
-            
-            # Base confidence from profit potential
-            if profit_potential > self.arbitrage_threshold * 2:
-                confidence += 0.4
-            elif profit_potential > self.arbitrage_threshold * 1.5:
-                confidence += 0.3
-            else:
-                confidence += 0.2
-            
-            # Validation checks bonus
-            checks_ratio = validation_result['checks_passed'] / validation_result['total_checks']
-            confidence += checks_ratio * 0.3
-            
-            # Spread ratio bonus
-            if prices['spread_ratio'] < 0.1:
-                confidence += 0.2
-            elif prices['spread_ratio'] < 0.2:
-                confidence += 0.1
-            
-            # Volume bonus
-            if prices['volume_score'] > 0.8:
-                confidence += 0.1
-            
-            return min(confidence, 1.0)
-            
-        except Exception as e:
-            self.logger.error(f"Error calculating confidence score: {e}")
-            return 0.0
+    # Method removed - not used in simple system
     
-    def _calculate_spread_ratio(self, triangle: Tuple[str, str, str], prices: Dict) -> float:
-        """Calculate average spread ratio for triangle"""
-        try:
-            total_spread = 0
-            for pair in triangle:
-                # Mock spread calculation - in real system, get bid/ask spread
-                spread = 0.0001  # 1 pip spread
-                total_spread += spread
-            
-            return total_spread / len(triangle)
-            
-        except Exception as e:
-            self.logger.error(f"Error calculating spread ratio: {e}")
-            return 1.0
+    # Method removed - not used in simple system
     
-    def _calculate_volume_score(self, triangle: Tuple[str, str, str]) -> float:
-        """Calculate volume score for triangle"""
-        try:
-            # Mock volume calculation - in real system, get actual volume data
-            return 0.8  # High volume score
-            
-        except Exception as e:
-            self.logger.error(f"Error calculating volume score: {e}")
-            return 0.5
+    # Method removed - not used in simple system
     
-    def _simple_validation_checks(self, triangle: Tuple[str, str, str], cross_rate: float, profit_potential: float) -> bool:
-        """การตรวจสอบแบบง่ายเพื่อความเข้ากันได้"""
-        try:
-            # Check 1: Cross rate is reasonable
-            if cross_rate < 0.5 or cross_rate > 2.0:
-                self.logger.debug(f"❌ Cross rate unreasonable: {cross_rate:.4f}")
-                return False
-            
-            # Check 2: Profit potential is significant enough
-            if profit_potential < self.arbitrage_threshold:
-                self.logger.debug(f"❌ Profit too low: {profit_potential:.4f}%")
-                return False
-            
-            # Check 3: Market conditions are suitable
-            if self.current_regime in ['volatile', 'trending'] and profit_potential < self.arbitrage_threshold * 1.5:
-                self.logger.debug(f"❌ Market too volatile for low profit: {profit_potential:.4f}%")
-                return False
-            
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Error in simple validation: {e}")
-            return False
+    # Method removed - not used in simple system
     
-    def _check_rate_limits(self) -> bool:
-        """ตรวจสอบ rate limits ก่อนส่งออเดอร์"""
-        try:
-            current_time = time.time()
-            current_date = datetime.now().date()
-            
-            # รีเซ็ตตัวนับรายวัน
-            if current_date != self.last_reset_date:
-                self.daily_order_count = 0
-                self.last_reset_date = current_date
-                self.logger.info(f"📅 Daily order count reset for {current_date}")
-            
-            # ตรวจสอบจำนวนออเดอร์ต่อวัน
-            if self.daily_order_count >= self.daily_order_limit:
-                self.logger.warning(f"⚠️ Daily order limit reached: {self.daily_order_count}/{self.daily_order_limit}")
-                return False
-            
-            # ตรวจสอบระยะห่างระหว่างออเดอร์
-            if current_time - self.last_order_time < self.min_order_interval:
-                remaining_time = self.min_order_interval - (current_time - self.last_order_time)
-                self.logger.debug(f"⏳ Order rate limited: {remaining_time:.1f}s remaining")
-                return False
-            
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Error checking rate limits: {e}")
-            return False
+    # Method removed - not used in simple system
     
-    def _update_order_tracking(self):
-        """อัพเดทการติดตามออเดอร์"""
-        try:
-            self.last_order_time = time.time()
-            self.daily_order_count += 1
-            self.logger.debug(f"📊 Order tracking updated: {self.daily_order_count}/{self.daily_order_limit} today")
-        except Exception as e:
-            self.logger.error(f"Error updating order tracking: {e}")
+    # Method removed - not used in simple system
     
     
     
-    def _execute_triangle_arbitrage(self, opportunity: Dict) -> bool:
-        """Execute triangle arbitrage with Never-Cut-Loss logic"""
-        try:
-            self.logger.info(f"🚀 Executing triangle arbitrage: {opportunity['id']}")
-            
-            orders = []
-            failed_legs = []
-            
-            # Execute all 3 legs
-            for i, leg in enumerate(opportunity['legs']):
-                try:
-                    order = self.broker.place_order(
-                        symbol=leg['symbol'],
-                        order_type=leg['type'],
-                        volume=leg['volume'],
-                        comment=f"ARBITRAGE_{opportunity['id']}_LEG{i+1}"
-                    )
-                    
-                    if order:
-                        orders.append(order)
-                        self.logger.debug(f"✅ Leg {i+1} executed: {leg['symbol']}")
-                    else:
-                        failed_legs.append(leg)
-                        self.logger.warning(f"⚠️ Leg {i+1} failed: {leg['symbol']} - Will use correlation recovery")
-                        
-                except Exception as e:
-                    failed_legs.append(leg)
-                    self.logger.error(f"❌ Leg {i+1} error: {e}")
-            
-            # Evaluate success
-            if len(orders) > 0:
-                opportunity['execution_status'] = 'complete' if len(failed_legs) == 0 else 'partial'
-                opportunity['orders'] = orders
-                opportunity['failed_legs'] = failed_legs
-                opportunity['execution_time'] = datetime.now()
-                
-                if len(failed_legs) > 0:
-                    self.logger.warning(f"⚠️ Partial execution - correlation manager will handle failed legs")
-                
-                return True
-            else:
-                self.logger.error(f"❌ Complete execution failure - all legs failed")
-                self.logger.warning(f"⚠️ All arbitrage legs failed - correlation manager will handle recovery")
-                return False
-                
-        except Exception as e:
-            self.logger.error(f"Error executing triangle arbitrage: {e}")
-            return False
+    # Method removed - not used in simple system
     
-    def calculate_adaptive_threshold(self) -> float:
-        """
-        คำนวณ threshold แบบ Adaptive ตาม market volatility และ regime
-        
-        Returns:
-            float: Adaptive threshold สำหรับการตรวจจับ arbitrage
-        """
-        try:
-            # Get current market volatility
-            current_volatility = self.detect_market_volatility()
-            
-            # Base threshold from market regime
-            base_threshold = self.adaptive_thresholds.get(self.market_regime, 0.001)
-            
-            # Adjust based on volatility
-            if current_volatility > 0.002:  # High volatility
-                volatility_multiplier = 1.5
-            elif current_volatility < 0.0005:  # Low volatility
-                volatility_multiplier = 0.7
-            else:  # Normal volatility
-                volatility_multiplier = 1.0
-            
-            # Calculate final threshold
-            adaptive_threshold = base_threshold * volatility_multiplier
-            
-            # Update stored threshold
-            self.volatility_threshold = adaptive_threshold
-            
-            self.logger.debug(f"Adaptive threshold calculated: {adaptive_threshold:.4f} "
-                            f"(regime: {self.market_regime}, volatility: {current_volatility:.4f})")
-            
-            return adaptive_threshold
-            
-        except Exception as e:
-            self.logger.error(f"Error calculating adaptive threshold: {e}")
-            return 0.001  # Default fallback
+    # Method removed - not used in simple system
     
-    def detect_market_volatility(self) -> float:
-        """
-        ตรวจจับ market volatility ปัจจุบัน
-        
-        Returns:
-            float: Current market volatility (0-1)
-        """
-        try:
-            if not self.available_pairs:
-                return 0.001
-            
-            # Sample a few major pairs for volatility calculation
-            sample_pairs = self.available_pairs[:5] if len(self.available_pairs) >= 5 else self.available_pairs
-            volatilities = []
-            
-            for pair in sample_pairs:
-                try:
-                    # Get recent price data (last 24 hours)
-                    data = self.broker.get_historical_data(pair, 'M15', 96)  # 24 hours of M15 data
-                    
-                    if data is not None and len(data) >= 20:
-                        # Calculate returns
-                        returns = data['close'].pct_change().dropna()
-                        
-                        # Calculate volatility as standard deviation
-                        volatility = returns.std()
-                        volatilities.append(volatility)
-                        
-                except Exception as e:
-                    self.logger.warning(f"Error calculating volatility for {pair}: {e}")
-                    continue
-            
-            if volatilities:
-                avg_volatility = np.mean(volatilities)
-                self.logger.debug(f"Market volatility: {avg_volatility:.4f}")
-                return avg_volatility
-            else:
-                return 0.001  # Default volatility
-                
-        except Exception as e:
-            self.logger.error(f"Error detecting market volatility: {e}")
-            return 0.001
+    # Method removed - not used in simple system
     
-    def detect_market_regime(self) -> str:
-        """
-        ตรวจจับ market regime ปัจจุบัน
-        
-        Returns:
-            str: Market regime ('volatile', 'trending', 'ranging', 'normal')
-        """
-        try:
-            if not self.available_pairs:
-                return 'normal'
-            
-            # Analyze major pairs for regime detection
-            sample_pairs = self.available_pairs[:3] if len(self.available_pairs) >= 3 else self.available_pairs
-            regime_indicators = []
-            
-            for pair in sample_pairs:
-                try:
-                    # Get H1 data for trend analysis
-                    data = self.broker.get_historical_data(pair, 'H1', 24)  # Last 24 hours
-                    
-                    if data is None or len(data) < 20:
-                        continue
-                    
-                    # Calculate trend strength
-                    trend_strength = self._calculate_trend_strength(data)
-                    
-                    # Calculate volatility
-                    returns = data['close'].pct_change().dropna()
-                    volatility = returns.std()
-                    
-                    # Determine regime for this pair
-                    if volatility > 0.002:
-                        regime_indicators.append('volatile')
-                    elif trend_strength > 0.7:
-                        regime_indicators.append('trending')
-                    elif trend_strength < 0.3:
-                        regime_indicators.append('ranging')
-                    else:
-                        regime_indicators.append('normal')
-                        
-                except Exception as e:
-                    self.logger.warning(f"Error analyzing regime for {pair}: {e}")
-                    continue
-            
-            if regime_indicators:
-                # Determine overall regime (most common)
-                regime_counts = {}
-                for regime in regime_indicators:
-                    regime_counts[regime] = regime_counts.get(regime, 0) + 1
-                
-                # Get most common regime
-                new_regime = max(regime_counts, key=regime_counts.get)
-                
-                # Update if regime changed
-                if new_regime != self.market_regime:
-                    self.logger.info(f"Market regime changed: {self.market_regime} -> {new_regime}")
-                    self.market_regime = new_regime
-                    self.performance_metrics['market_regime_changes'] += 1
-                
-                return new_regime
-            else:
-                return 'normal'
-                
-        except Exception as e:
-            self.logger.error(f"Error detecting market regime: {e}")
-            return 'normal'
+    # Method removed - not used in simple system
     
-    def optimize_triangle_selection(self, triangles: List[Tuple[str, str, str]]) -> List[Tuple[str, str, str]]:
-        """
-        ปรับปรุงการเลือก triangle ให้เหมาะสมกับสภาวะตลาด
-        
-        Args:
-            triangles: รายการ triangles ที่มีอยู่
-            
-        Returns:
-            List[Tuple[str, str, str]]: รายการ triangles ที่ถูกเลือกแล้ว
-        """
-        try:
-            if not triangles:
-                return []
-            
-            # Filter triangles based on current market conditions
-            optimized_triangles = []
-            
-            for triangle in triangles:
-                try:
-                    # Check if triangle is suitable for current regime
-                    if self._is_triangle_suitable_for_regime(triangle):
-                        optimized_triangles.append(triangle)
-                        
-                except Exception as e:
-                    self.logger.warning(f"Error checking triangle suitability: {e}")
-                    continue
-            
-            # Limit number of triangles based on market regime
-            max_triangles = {
-                'volatile': 3,    # Fewer triangles in volatile markets
-                'trending': 5,    # More triangles in trending markets
-                'ranging': 7,     # Most triangles in ranging markets
-                'normal': 5       # Default number
-            }
-            
-            limit = max_triangles.get(self.market_regime, 5)
-            
-            if len(optimized_triangles) > limit:
-                # Select best triangles based on historical performance
-                optimized_triangles = optimized_triangles[:limit]
-            
-            self.logger.debug(f"Optimized triangle selection: {len(optimized_triangles)}/{len(triangles)} triangles")
-            return optimized_triangles
-            
-        except Exception as e:
-            self.logger.error(f"Error optimizing triangle selection: {e}")
-            return triangles[:5]  # Return first 5 as fallback
+    # Method removed - not used in simple system
     
-    def validate_execution_speed(self, triangle: Tuple[str, str, str]) -> bool:
-        """
-        ตรวจสอบว่า execution speed อยู่ในเกณฑ์ที่กำหนด
-        
-        Args:
-            triangle: Triangle ที่ต้องการตรวจสอบ
-            
-        Returns:
-            bool: True ถ้า execution speed อยู่ในเกณฑ์
-        """
-        try:
-            start_time = datetime.now()
-            
-            # Simulate execution by getting current prices
-            pair1, pair2, pair3 = triangle
-            
-            price1 = self.broker.get_current_price(pair1)
-            price2 = self.broker.get_current_price(pair2)
-            price3 = self.broker.get_current_price(pair3)
-            
-            end_time = datetime.now()
-            execution_time = (end_time - start_time).total_seconds() * 1000  # Convert to milliseconds
-            
-            # Update average execution time
-            if self.performance_metrics['avg_execution_time'] == 0:
-                self.performance_metrics['avg_execution_time'] = execution_time
-            else:
-                # Exponential moving average
-                self.performance_metrics['avg_execution_time'] = (
-                    self.performance_metrics['avg_execution_time'] * 0.9 + execution_time * 0.1
-                )
-            
-            # Check if execution time is acceptable
-            is_acceptable = execution_time <= self.execution_speed_ms
-            
-            if not is_acceptable:
-                self.logger.warning(f"Execution speed too slow: {execution_time:.1f}ms > {self.execution_speed_ms}ms")
-            
-            return is_acceptable
-            
-        except Exception as e:
-            self.logger.error(f"Error validating execution speed: {e}")
-            return False
+    # Method removed - not used in simple system
     
-    def _calculate_trend_strength(self, data: pd.DataFrame) -> float:
-        """Calculate trend strength from price data"""
-        try:
-            if len(data) < 20:
-                return 0.0
-            
-            # Simple trend strength calculation using moving averages
-            sma_10 = data['close'].rolling(10).mean()
-            sma_20 = data['close'].rolling(20).mean()
-            
-            if len(sma_10) < 1 or len(sma_20) < 1:
-                return 0.0
-            
-            # Calculate trend strength as percentage difference
-            current_sma_10 = sma_10.iloc[-1]
-            current_sma_20 = sma_20.iloc[-1]
-            
-            if current_sma_20 == 0:
-                return 0.0
-            
-            trend_strength = abs(current_sma_10 - current_sma_20) / current_sma_20
-            
-            return min(trend_strength, 1.0)  # Cap at 1.0
-            
-        except Exception as e:
-            self.logger.error(f"Error calculating trend strength: {e}")
-            return 0.0
+    # Method removed - not used in simple system
     
-    def _is_triangle_suitable_for_regime(self, triangle: Tuple[str, str, str]) -> bool:
-        """Check if triangle is suitable for current market regime"""
-        try:
-            pair1, pair2, pair3 = triangle
-            
-            # In volatile markets, prefer major pairs only
-            if self.market_regime == 'volatile':
-                major_pairs = ['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'USDCAD', 'AUDUSD']
-                return all(pair in major_pairs for pair in triangle)
-            
-            # In trending markets, prefer pairs with strong trends
-            elif self.market_regime == 'trending':
-                # Check if pairs have trending characteristics
-                return True  # For now, accept all pairs
-            
-            # In ranging markets, prefer all pairs
-            elif self.market_regime == 'ranging':
-                return True
-            
-            # Normal regime - accept all pairs
-            else:
-                return True
-                
-        except Exception as e:
-            self.logger.error(f"Error checking triangle suitability: {e}")
-            return True
+    # Method removed - not used in simple system
     
-    def _calculate_technical_indicators(self, prices: List[float]) -> Dict:
-        """Calculate multi-timeframe technical indicators"""
-        try:
-            if len(prices) < 50:
-                return {}
-            
-            prices_array = np.array(prices, dtype=float)
-            
-            # Simple technical indicators without talib
-            indicators = {
-                # Moving Averages
-                'sma_10': np.mean(prices_array[-10:]) if len(prices_array) >= 10 else np.mean(prices_array),
-                'sma_20': np.mean(prices_array[-20:]) if len(prices_array) >= 20 else np.mean(prices_array),
-                'sma_50': np.mean(prices_array[-50:]) if len(prices_array) >= 50 else np.mean(prices_array),
-                
-                # Simple RSI calculation
-                'rsi': self._calculate_simple_rsi(prices_array),
-                
-                # Simple Bollinger Bands
-                'bb_upper': np.mean(prices_array[-20:]) + 2 * np.std(prices_array[-20:]) if len(prices_array) >= 20 else np.mean(prices_array),
-                'bb_middle': np.mean(prices_array[-20:]) if len(prices_array) >= 20 else np.mean(prices_array),
-                'bb_lower': np.mean(prices_array[-20:]) - 2 * np.std(prices_array[-20:]) if len(prices_array) >= 20 else np.mean(prices_array),
-                
-                # Volume indicators (using price as proxy)
-                'volume_sma': np.mean(prices_array[-20:]) if len(prices_array) >= 20 else np.mean(prices_array),
-                
-                # Price position in Bollinger Bands
-                'bb_position': 0.5,  # Default neutral position
-                
-                # Trend strength
-                'trend_strength': abs(np.mean(prices_array[-20:]) - np.mean(prices_array[-50:])) / np.mean(prices_array[-50:]) if len(prices_array) >= 50 and np.mean(prices_array[-50:]) > 0 else 0
-            }
-            
-            return indicators
-            
-        except Exception as e:
-            self.logger.error(f"Error calculating technical indicators: {e}")
-            return {}
+    # Method removed - not used in simple system
     
-    def _calculate_simple_rsi(self, prices: np.ndarray, period: int = 14) -> float:
-        """Calculate simple RSI without talib"""
-        try:
-            if len(prices) < period + 1:
-                return 50.0  # Default neutral RSI
-            
-            deltas = np.diff(prices)
-            gains = np.where(deltas > 0, deltas, 0)
-            losses = np.where(deltas < 0, -deltas, 0)
-            
-            avg_gain = np.mean(gains[-period:])
-            avg_loss = np.mean(losses[-period:])
-            
-            if avg_loss == 0:
-                return 100.0
-            
-            rs = avg_gain / avg_loss
-            rsi = 100 - (100 / (1 + rs))
-            
-            return rsi
-            
-        except Exception as e:
-            self.logger.error(f"Error calculating RSI: {e}")
-            return 50.0
+    # Method removed - not used in simple system
     
-    def _analyze_multi_timeframe_signals(self, triangle: Tuple[str, str, str]) -> Dict:
-        """Analyze multi-timeframe signals for triangle"""
-        try:
-            pair1, pair2, pair3 = triangle
-            signals = {}
-            
-            timeframes = ['M1', 'M5', 'M15', 'M30', 'H1']
-            
-            for pair in triangle:
-                pair_signals = {}
-                
-                for tf in timeframes:
-                    try:
-                        # Get historical data
-                        data = self.broker.get_historical_data(pair, tf, 100)
-                        if data is None or len(data) < 50:
-                            continue
-                        
-                        # Convert to prices
-                        if hasattr(data, 'close'):
-                            prices = data['close'].tolist()
-                        else:
-                            prices = [candle['close'] for candle in data]
-                        
-                        # Calculate indicators
-                        indicators = self._calculate_technical_indicators(prices)
-                        
-                        if indicators:
-                            pair_signals[tf] = {
-                                'rsi': indicators.get('rsi', 50),
-                                'macd_signal': indicators.get('macd_histogram', 0),
-                                'bb_position': indicators.get('bb_position', 0.5),
-                                'trend_strength': indicators.get('trend_strength', 0),
-                                'adx': indicators.get('adx', 20),
-                                'stoch_k': indicators.get('stoch_k', 50),
-                                'stoch_d': indicators.get('stoch_d', 50)
-                            }
-                    
-                    except Exception as e:
-                        self.logger.error(f"Error analyzing {pair} {tf}: {e}")
-                        continue
-                
-                signals[pair] = pair_signals
-            
-            return signals
-            
-        except Exception as e:
-            self.logger.error(f"Error analyzing multi-timeframe signals: {e}")
-            return {}
+    # Method removed - not used in simple system
     
-    def _get_signal_strength(self, signals: Dict) -> float:
-        """Calculate overall signal strength from multi-timeframe analysis"""
-        try:
-            if not signals:
-                return 0.0
-            
-            total_strength = 0
-            count = 0
-            
-            for pair, pair_signals in signals.items():
-                for tf, tf_signals in pair_signals.items():
-                    # RSI signal (0-1)
-                    rsi = tf_signals.get('rsi', 50)
-                    if rsi < 30 or rsi > 70:  # Oversold/Overbought
-                        total_strength += 0.8
-                    elif 40 <= rsi <= 60:  # Neutral
-                        total_strength += 0.5
-                    else:
-                        total_strength += 0.3
-                    
-                    # MACD signal (0-1)
-                    macd = tf_signals.get('macd_signal', 0)
-                    if macd > 0:  # Bullish
-                        total_strength += 0.7
-                    else:  # Bearish
-                        total_strength += 0.4
-                    
-                    # Trend strength (0-1)
-                    trend = tf_signals.get('trend_strength', 0)
-                    total_strength += min(trend * 2, 1.0)  # Scale to 0-1
-                    
-                    # ADX signal (0-1)
-                    adx = tf_signals.get('adx', 20)
-                    if adx > 25:  # Strong trend
-                        total_strength += 0.8
-                    elif adx > 20:  # Moderate trend
-                        total_strength += 0.6
-                    else:  # Weak trend
-                        total_strength += 0.4
-                    
-                    count += 1
-            
-            if count == 0:
-                return 0.0
-            
-            return total_strength / count
-            
-        except Exception as e:
-            self.logger.error(f"Error calculating signal strength: {e}")
-            return 0.0
+    # Method removed - not used in simple system
     
     def start_detection(self):
-        """Start the arbitrage detection loop"""
+        """Start the simple trading system"""
         self.is_running = True
-        self.logger.info("Starting arbitrage detection...")
+        self.logger.info("Starting simple trading system...")
         
-        # Run detection in separate thread
-        self.detection_thread = threading.Thread(target=self._detection_loop, daemon=True)
+        # Run simple trading in separate thread
+        self.detection_thread = threading.Thread(target=self._simple_trading_loop, daemon=True)
         self.detection_thread.start()
-        self.logger.info("✅ Detection thread started")
+        self.logger.info("✅ Simple trading thread started")
     
     def stop_detection(self):
         """Stop the arbitrage detection loop"""
         self.is_running = False
         self.logger.info("Stopping arbitrage detection...")
     
-    def _detection_loop(self):
-        """Main detection loop"""
-        self.logger.info("🔍 Arbitrage detection started")
+    def _simple_trading_loop(self):
+        """Simple trading loop - ออกไม้ทันทีและต่อเนื่อง"""
+        self.logger.info("🚀 Simple trading system started")
         loop_count = 0
         
         while self.is_running:
             try:
                 loop_count += 1
-                self.logger.debug(f"🔍 Detection loop #{loop_count} - is_running: {self.is_running}")
+                self.logger.info(f"🔄 Trading loop #{loop_count}")
                 
-                # ตรวจสอบว่าส่งออเดอร์ arbitrage แล้วหรือไม่
-                if self.arbitrage_sent:
-                    self.logger.debug(f"⏸️ Detection loop #{loop_count} - ส่งออเดอร์ arbitrage แล้ว - ใช้ Correlation Recovery")
-                    time.sleep(30.0)  # รอนานขึ้นเมื่อใช้ Correlation Recovery
+                # ตรวจสอบว่ามีกลุ่มที่เปิดอยู่หรือไม่
+                if len(self.active_groups) > 0:
+                    self.logger.debug(f"⏸️ มีกลุ่มเปิดอยู่ - รอให้ปิดก่อน")
+                    time.sleep(10.0)  # รอ 10 วินาที
                     continue
                 
-                self.logger.info(f"🔍 Detection loop #{loop_count} - Checking {len(self.triangle_combinations)} triangles")
+                # ออกไม้ทันทีตามคู่เงินที่กำหนด
+                self._send_simple_orders()
                 
-                self.detect_opportunities()
-                
-                # Sleep for 5 seconds between detection cycles (slower for better logging)
-                self.logger.debug(f"⏸️ Detection loop #{loop_count} - Sleeping for 5 seconds")
+                # รอ 5 วินาทีก่อนตรวจสอบอีกครั้ง
                 time.sleep(5.0)
-                self.logger.debug(f"✅ Detection loop #{loop_count} - Woke up from sleep")
+                
             except Exception as e:
-                self.logger.error(f"Detection error: {e}")
+                self.logger.error(f"Trading error: {e}")
                 import traceback
                 self.logger.error(traceback.format_exc())
                 time.sleep(1)
         
-        self.logger.info("🔍 Arbitrage detection stopped")
+        self.logger.info("🛑 Simple trading system stopped")
     
-    def detect_opportunities(self):
-        """Main detection method called by AdaptiveEngine - Single Entry Mode"""
+    def _send_simple_orders(self):
+        """ส่งออเดอร์ง่ายๆ ตามคู่เงินที่กำหนด"""
         try:
-            self.logger.debug("🔍 detect_opportunities called")
-            if not self.is_running:
-                self.logger.debug("⏸️ is_running is False - stopping detection")
-                return
+            self.logger.info("🚀 Sending simple orders for EURUSD, GBPUSD, EURGBP")
             
-            # ตรวจสอบว่าส่งออเดอร์ arbitrage แล้วหรือไม่
-            if self.arbitrage_sent:
-                self.logger.debug("⏸️ ส่งออเดอร์ arbitrage แล้ว - ใช้ Correlation Recovery")
-                return
-            
-            # เงื่อนไขเข้มงวด: ถ้ามีกลุ่มเปิดอยู่ ให้หยุดตรวจสอบ
-            if len(self.active_groups) > 0:
-                self.logger.debug("⏸️ มีกลุ่มเปิดอยู่ - หยุดตรวจสอบ arbitrage")
-                return
-            
-            # ถ้าไม่มีกลุ่มที่เปิดอยู่ ให้ reset ข้อมูล
-            if len(self.active_groups) == 0:
-                self._reset_group_data()
-            
-            # ตรวจสอบเพิ่มเติม: ถ้ามีคู่เงินที่ถูกใช้แล้ว ให้หยุดตรวจสอบ
-            if len(self.used_currency_pairs) > 0:
-                self.logger.debug("⏸️ มีคู่เงินที่ถูกใช้แล้ว - หยุดตรวจสอบ arbitrage")
-                self.logger.debug(f"   คู่เงินที่ถูกใช้: {self.used_currency_pairs}")
-                # ตั้งค่าว่าส่งออเดอร์ arbitrage แล้ว
-                self.arbitrage_sent = True
-                self.arbitrage_send_time = datetime.now()
-                return
-            
-            # ตรวจสอบเพิ่มเติม: ตรวจสอบว่ามีตำแหน่งที่เปิดอยู่จากกลุ่ม arbitrage หรือไม่
-            try:
-                all_positions = self.broker.get_all_positions()
-                if all_positions:
-                    arbitrage_positions = [pos for pos in all_positions if pos.get('comment', '').startswith('ARB_G')]
-                    if arbitrage_positions:
-                        self.logger.debug("⏸️ พบตำแหน่ง arbitrage ที่เปิดอยู่ - หยุดตรวจสอบ")
-                        self.logger.debug(f"   ตำแหน่งที่พบ: {[pos['symbol'] for pos in arbitrage_positions]}")
-                        # ตั้งค่าว่าส่งออเดอร์ arbitrage แล้ว
-                        self.arbitrage_sent = True
-                        self.arbitrage_send_time = datetime.now()
-                        return
-            except Exception as e:
-                self.logger.warning(f"Error checking existing positions: {e}")
-                
-            self.logger.debug(f"🔍 Detecting arbitrage opportunities (threshold: {self.arbitrage_threshold})")
-            
-            # Get triangles for current market regime
-            triangles_to_check = self._get_priority_triangles()
-            
-            if not triangles_to_check:
-                self.logger.warning("⚠️ No triangles available for checking - investigating...")
-                
-                # Debug info
-                self.logger.info(f"🔍 Debug Info:")
-                self.logger.info(f"   Available pairs: {len(self.available_pairs)}")
-                self.logger.info(f"   Triangle combinations: {len(self.triangle_combinations)}")
-                self.logger.info(f"   Current regime: {self.current_regime}")
-                
-                # Try to use fallback triangles
-                if len(self.available_pairs) >= 3:
-                    # Create simple fallback triangle from first 3 pairs
-                    fallback_triangle = tuple(self.available_pairs[:3])
-                    triangles_to_check = [fallback_triangle]
-                    self.logger.info(f"🔄 Using fallback triangle: {fallback_triangle}")
-                else:
-                    return
-            
-            opportunities_found = 0
-            
-            for triangle in triangles_to_check:
-                try:
-                    # Calculate arbitrage opportunity
-                    opportunity = self._calculate_triangle_opportunity(triangle)
-                    
-                    if opportunity and opportunity['profit_potential'] > self.arbitrage_threshold:
-                        self.total_opportunities_detected += 1
-                        opportunities_found += 1
-                        
-                        self.logger.info(f"🎯 Arbitrage opportunity found: {triangle}")
-                        self.logger.info(f"   Profit potential: {opportunity['profit_potential']:.4f}%")
-                        
-                        # สร้างกลุ่ม arbitrage และส่งออเดอร์ 3 คู่พร้อมกัน
-                        success = self._create_arbitrage_group(triangle, opportunity)
-                        if success:
-                            # ตั้งค่าว่าส่งออเดอร์ arbitrage แล้ว
-                            self.arbitrage_sent = True
-                            self.arbitrage_send_time = datetime.now()
-                            
-                            # หยุดการตรวจสอบ arbitrage ใหม่ทันที
-                            self.logger.info("⏸️ ส่งกลุ่มสำเร็จ - หยุดตรวจสอบ arbitrage")
-                            self.logger.info("🔄 เริ่มใช้ระบบ Correlation Recovery")
-                            break  # ออกจากลูปทันที
-                        else:
-                            self.logger.warning(f"⚠️ Triangle arbitrage failed: {opportunity['id']}")
-                            
-                except Exception as e:
-                    self.logger.error(f"Error checking triangle {triangle}: {e}")
-                    continue
-            
-            # Update performance metrics
-            self.performance_metrics['total_opportunities'] += opportunities_found
-            
-            if opportunities_found > 0:
-                self.logger.info(f"📊 Found {opportunities_found} arbitrage opportunities")
-            else:
-                self.logger.debug(f"📊 No arbitrage opportunities found in this cycle")
-                    
-        except Exception as e:
-            self.logger.error(f"Error in detect_opportunities: {e}")
-    
-    def _create_arbitrage_group(self, triangle: Tuple[str, str, str], opportunity: Dict) -> bool:
-        """สร้างกลุ่ม arbitrage และส่งออเดอร์ 3 คู่พร้อมกัน"""
-        try:
-            # ตรวจสอบว่าส่งออเดอร์ arbitrage แล้วหรือไม่
-            if self.arbitrage_sent:
-                self.logger.warning("🚫 ส่งออเดอร์ arbitrage แล้ว - หยุดสร้างกลุ่มใหม่")
-                return False
-            
-            # เงื่อนไขเข้มงวด: ถ้ามีกลุ่มเปิดอยู่ ให้หยุด
-            if len(self.active_groups) > 0:
-                self.logger.warning("🚫 มีกลุ่มเปิดอยู่แล้ว - หยุดสร้างกลุ่มใหม่")
-                self.logger.info(f"   กลุ่มที่เปิดอยู่: {list(self.active_groups.keys())}")
-                return False
-            
-            # ตรวจสอบเพิ่มเติม: ถ้ามีคู่เงินที่ถูกใช้แล้ว ให้หยุด
-            if len(self.used_currency_pairs) > 0:
-                self.logger.warning("🚫 มีคู่เงินที่ถูกใช้แล้ว - หยุดสร้างกลุ่มใหม่")
-                self.logger.info(f"   คู่เงินที่ใช้แล้ว: {self.used_currency_pairs}")
-                return False
-            
-            # ตรวจสอบเพิ่มเติม: ตรวจสอบว่ามีตำแหน่งที่เปิดอยู่จากกลุ่ม arbitrage หรือไม่
-            try:
-                all_positions = self.broker.get_all_positions()
-                if all_positions:
-                    arbitrage_positions = [pos for pos in all_positions if pos.get('comment', '').startswith('ARB_G')]
-                    if arbitrage_positions:
-                        self.logger.warning("🚫 พบตำแหน่ง arbitrage ที่เปิดอยู่แล้ว - หยุดสร้างกลุ่มใหม่")
-                        self.logger.info(f"   ตำแหน่งที่พบ: {[pos['symbol'] for pos in arbitrage_positions]}")
-                        return False
-            except Exception as e:
-                self.logger.warning(f"Error checking existing positions: {e}")
-            
-            # ตรวจสอบว่าคู่เงินใดถูกใช้ไปแล้วในกลุ่มอื่น (double check)
-            pair1, pair2, pair3 = triangle
-            triangle_pairs = {pair1, pair2, pair3}
-            used_pairs = triangle_pairs.intersection(self.used_currency_pairs)
-            
-            if used_pairs:
-                self.logger.warning(f"🚫 คู่เงิน {used_pairs} ถูกใช้ในกลุ่มอื่นแล้ว - หยุดสร้างกลุ่ม")
-                self.logger.info(f"   คู่เงินที่ใช้แล้ว: {self.used_currency_pairs}")
-                return False
-            
+            # สร้างกลุ่มใหม่
             self.group_counter += 1
-            group_id = f"arbitrage_group_{self.group_counter}"
-            
-            pair1, pair2, pair3 = triangle
-            
-            self.logger.info(f"🎯 Creating arbitrage group {group_id}")
-            self.logger.info(f"   Triangle: {pair1}, {pair2}, {pair3}")
-            self.logger.info(f"   Opportunity: {opportunity.get('arbitrage_percent', 0):.4f}%")
-            self.logger.info(f"   🚀 Sending orders simultaneously...")
+            group_id = f"simple_group_{self.group_counter}"
             
             # สร้างข้อมูลกลุ่ม
             group_data = {
                 'group_id': group_id,
-                'triangle': triangle,
+                'triangle': ('EURUSD', 'GBPUSD', 'EURGBP'),
                 'created_at': datetime.now(),
                 'positions': [],
                 'status': 'active',
@@ -1365,62 +282,52 @@ class TriangleArbitrageDetector:
                 'recovery_chain': []
             }
             
-            # ส่งออเดอร์ 3 คู่พร้อมกันด้วย threading
+            # ส่งออเดอร์ 3 คู่พร้อมกัน
             orders_sent = 0
             order_results = []
             
             # สร้างข้อมูลออเดอร์ทั้ง 3 คู่
             orders_to_send = [
-                {
-                    'symbol': pair1,
-                    'direction': opportunity.get('pair1_direction', 'BUY'),
-                    'group_id': group_id,
-                    'index': 0
-                },
-                {
-                    'symbol': pair2,
-                    'direction': opportunity.get('pair2_direction', 'SELL'),
-                    'group_id': group_id,
-                    'index': 1
-                },
-                {
-                    'symbol': pair3,
-                    'direction': opportunity.get('pair3_direction', 'BUY'),
-                    'group_id': group_id,
-                    'index': 2
-                }
+                {'symbol': 'EURUSD', 'direction': 'BUY', 'group_id': group_id, 'index': 0},
+                {'symbol': 'GBPUSD', 'direction': 'SELL', 'group_id': group_id, 'index': 1},
+                {'symbol': 'EURGBP', 'direction': 'BUY', 'group_id': group_id, 'index': 2}
             ]
             
             # ส่งออเดอร์พร้อมกันด้วย threading
             threads = []
-            results = [None] * 3  # เก็บผลลัพธ์ของแต่ละออเดอร์
+            results = [None] * 3
             
             def send_single_order(order_data, result_index):
                 """ส่งออเดอร์เดี่ยวใน thread แยก"""
                 try:
-                    result = self._send_arbitrage_order(
-                        order_data['symbol'], 
-                        order_data['direction'], 
-                        order_data['group_id']
+                    # สร้าง comment
+                    group_number = group_id.split('_')[-1]
+                    comment = f"SIMPLE_G{group_number}_{order_data['symbol']}"
+                    
+                    result = self.broker.place_order(
+                        symbol=order_data['symbol'],
+                        order_type=order_data['direction'],
+                        volume=self.position_size,
+                        comment=comment
                     )
                     
-                    if isinstance(result, dict):
+                    if result and result.get('retcode') == 10009:
                         results[result_index] = {
-                            'success': result['success'],
-                            'symbol': result['symbol'],
-                            'direction': result['direction'],
+                            'success': True,
+                            'symbol': order_data['symbol'],
+                            'direction': order_data['direction'],
                             'order_id': result.get('order_id'),
                             'index': result_index
                         }
                     else:
-                        # Fallback for old return format
                         results[result_index] = {
-                            'success': result,
+                            'success': False,
                             'symbol': order_data['symbol'],
                             'direction': order_data['direction'],
                             'order_id': None,
                             'index': result_index
                         }
+                        
                 except Exception as e:
                     self.logger.error(f"Error sending order for {order_data['symbol']}: {e}")
                     results[result_index] = {
@@ -1443,15 +350,14 @@ class TriangleArbitrageDetector:
                 threads.append(thread)
                 thread.start()
             
-            # รอให้ออเดอร์ทั้งหมดเสร็จสิ้น (timeout 5 วินาที)
+            # รอให้ออเดอร์ทั้งหมดเสร็จสิ้น
             for thread in threads:
                 thread.join(timeout=5.0)
             
             end_time = datetime.now()
-            total_execution_time = (end_time - start_time).total_seconds() * 1000  # milliseconds
-            self.logger.info(f"   ⏱️ Total execution time: {total_execution_time:.1f}ms")
+            total_execution_time = (end_time - start_time).total_seconds() * 1000
             
-            # ตรวจสอบผลลัพธ์และเพิ่มตำแหน่งที่สำเร็จ
+            # ตรวจสอบผลลัพธ์
             for result in results:
                 if result and result['success']:
                     orders_sent += 1
@@ -1460,52 +366,38 @@ class TriangleArbitrageDetector:
                         'direction': result['direction'],
                         'lot_size': self.position_size,
                         'status': 'active',
-                        'order_id': result.get('order_id'),  # เก็บ order_id สำหรับปิดออเดอร์
-                        'comment': f"ARB_G{group_id.split('_')[-1]}_{result['symbol']}"  # เก็บ comment สำหรับค้นหา
+                        'order_id': result.get('order_id'),
+                        'comment': f"SIMPLE_G{group_id.split('_')[-1]}_{result['symbol']}"
                     })
+                    self.logger.info(f"✅ Order sent: {result['symbol']} {result['direction']}")
                 elif result:
-                    self.logger.warning(f"❌ Order failed: {result['symbol']} {result['direction']}")
+                    self.logger.error(f"❌ Order failed: {result['symbol']} {result['direction']}")
                     if 'error' in result:
                         self.logger.error(f"   Error: {result['error']}")
             
             # ตรวจสอบว่าส่งออเดอร์สำเร็จครบ 3 คู่
             if orders_sent == 3:
                 self.active_groups[group_id] = group_data
-                
-                # เพิ่มคู่เงินลงในรายการที่ใช้แล้ว
-                self.used_currency_pairs.update(triangle_pairs)
-                self.group_currency_mapping[group_id] = triangle_pairs
-                
-                # อัพเดท order tracking
-                self._update_order_tracking()
-                
-                self.logger.info(f"✅ Arbitrage group {group_id} created successfully")
-                self.logger.info(f"   🚀 Orders sent simultaneously: {orders_sent}/3")
-                self.logger.info(f"   📊 คู่เงินที่ใช้: {triangle_pairs}")
-                self.logger.info(f"   ⏸️ หยุดตรวจสอบ arbitrage จนกว่ากลุ่มจะปิด")
-                
-                # แสดงรายละเอียดออเดอร์ที่ส่งสำเร็จ
-                successful_orders = [r for r in results if r and r['success']]
-                for order in successful_orders:
-                    self.logger.info(f"   ✅ {order['symbol']} {order['direction']} - สำเร็จ")
-                
-                return True
+                self.logger.info(f"✅ Simple group {group_id} created successfully")
+                self.logger.info(f"   🚀 Orders sent: {orders_sent}/3")
+                self.logger.info(f"   ⏱️ Execution time: {total_execution_time:.1f}ms")
+                self.logger.info("🔄 เริ่มใช้ระบบ Correlation Recovery")
             else:
-                self.logger.error(f"❌ Failed to create arbitrage group {group_id}")
+                self.logger.error(f"❌ Failed to create simple group {group_id}")
                 self.logger.error(f"   Orders sent: {orders_sent}/3")
                 
-                # แสดงรายละเอียดออเดอร์ที่ล้มเหลว
-                failed_orders = [r for r in results if r and not r['success']]
-                for order in failed_orders:
-                    self.logger.error(f"   ❌ {order['symbol']} {order['direction']} - ล้มเหลว")
-                    if 'error' in order:
-                        self.logger.error(f"      Error: {order['error']}")
-                
-                return False
-                
         except Exception as e:
-            self.logger.error(f"Error creating arbitrage group: {e}")
-            return False
+            self.logger.error(f"Error sending simple orders: {e}")
+    
+    def detect_opportunities(self):
+        """Legacy method - ไม่ใช้แล้ว ใช้ _send_simple_orders แทน"""
+        self.logger.debug("🔍 detect_opportunities called (legacy method - not used)")
+        return
+    
+    def _create_arbitrage_group(self, triangle: Tuple[str, str, str], opportunity: Dict) -> bool:
+        """Legacy method - ไม่ใช้แล้ว ใช้ _send_simple_orders แทน"""
+        self.logger.debug("🔍 _create_arbitrage_group called (legacy method - not used)")
+        return False
     
     def _send_arbitrage_order(self, symbol: str, direction: str, group_id: str) -> bool:
         """ส่งออเดอร์ arbitrage"""
