@@ -35,16 +35,16 @@ class TriangleArbitrageDetector:
         self.is_running = False
         self.logger = logging.getLogger(__name__)
         
-        # Adaptive parameters
+        # Adaptive parameters - More flexible for all market conditions
         self.current_regime = 'normal'  # volatile, trending, ranging, normal
-        self.arbitrage_threshold = 0.02  # Default threshold
+        self.arbitrage_threshold = 0.005  # Lower default threshold (0.5 pips)
         self.execution_timeout = 150  # Target execution speed
         self.position_size = 0.1  # Default position size
         self.regime_parameters = {
-            'volatile': {'threshold': 0.05, 'timeout': 200},
-            'trending': {'threshold': 0.03, 'timeout': 150}, 
-            'ranging': {'threshold': 0.015, 'timeout': 100},
-            'normal': {'threshold': 0.02, 'timeout': 150}
+            'volatile': {'threshold': 0.01, 'timeout': 200},    # 1 pip
+            'trending': {'threshold': 0.008, 'timeout': 150},   # 0.8 pips
+            'ranging': {'threshold': 0.005, 'timeout': 100},    # 0.5 pips
+            'normal': {'threshold': 0.005, 'timeout': 150}      # 0.5 pips
         }
         
         # Performance tracking
@@ -326,7 +326,14 @@ class TriangleArbitrageDetector:
             cross_rate = (price1 * price2) / price3
             profit_potential = abs(cross_rate - 1) * 100  # Convert to percentage
             
-            if profit_potential > self.arbitrage_threshold:
+            # More aggressive trading - lower threshold for all conditions
+            effective_threshold = self.arbitrage_threshold * 0.5  # 50% of normal threshold
+            
+            # Debug logging for opportunities
+            if profit_potential > 0.001:  # Log any potential > 0.1 pips
+                self.logger.debug(f"🔍 Triangle {triangle}: profit={profit_potential:.4f}%, threshold={effective_threshold:.4f}%")
+            
+            if profit_potential > effective_threshold:
                 # Determine trade direction
                 if cross_rate > 1:
                     # Buy A/B, Buy B/C, Sell C/A

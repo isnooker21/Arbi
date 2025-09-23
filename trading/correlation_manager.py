@@ -41,13 +41,13 @@ class CorrelationManager:
         self.portfolio_rebalancing = True
         self.multi_timeframe_analysis = True
         
-        # Recovery thresholds
+        # Recovery thresholds - More flexible for all market conditions
         self.recovery_thresholds = {
-            'min_correlation': 0.6,      # Minimum correlation for recovery
+            'min_correlation': 0.4,      # Lower minimum correlation (more flexible)
             'max_correlation': 0.95,     # Maximum correlation (avoid over-hedging)
-            'min_loss_threshold': -0.01, # Minimum loss to trigger recovery (-1%)
+            'min_loss_threshold': -0.005, # Lower loss threshold (-0.5%)
             'max_recovery_time_hours': 24, # Maximum time to hold recovery position
-            'hedge_ratio_range': (0.5, 2.0)  # Hedge ratio range
+            'hedge_ratio_range': (0.3, 2.5)  # Wider hedge ratio range
         }
         
         # Never-Cut-Loss flag
@@ -935,10 +935,10 @@ class CorrelationManager:
                         'timestamp': datetime.now()
                     }
                     
-                    # AI evaluation for recovery
-                    ai_decision = self.ai.evaluate_recovery_opportunity(opportunity)
-                    
-                    if ai_decision.should_act and ai_decision.confidence > 0.6:
+                # AI evaluation for recovery
+                ai_decision = self.ai.evaluate_recovery_opportunity(opportunity)
+                
+                if ai_decision.should_act and ai_decision.confidence > 0.6:
                         self.logger.info(f"🎯 ACTIVE RECOVERY OPPORTUNITY: {pair} -> {hedge_candidate['hedge_pair']}, "
                                        f"Correlation: {hedge_candidate['correlation']:.3f}, "
                                        f"Potential: {hedge_candidate['recovery_potential']:.3f}, "

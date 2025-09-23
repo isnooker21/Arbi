@@ -200,11 +200,12 @@ class MarketAnalyzer:
             return 0.5
     
     def _determine_market_regime(self, volatility: float, trend_strength: float, correlation_stability: float) -> str:
-        """Determine market regime"""
+        """Determine market regime - More flexible for all conditions"""
         try:
-            VOLATILITY_HIGH = 0.0015
-            TREND_STRONG = 0.7
-            TREND_WEAK = 0.3
+            # More flexible thresholds for all market conditions
+            VOLATILITY_HIGH = 0.001  # Lower threshold for volatile
+            TREND_STRONG = 0.5       # Lower threshold for trending
+            TREND_WEAK = 0.2         # Lower threshold for ranging
             
             if volatility > VOLATILITY_HIGH:
                 return 'volatile'
