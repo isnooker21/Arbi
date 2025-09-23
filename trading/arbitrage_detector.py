@@ -100,7 +100,7 @@ class TriangleArbitrageDetector:
         self.persistence_file = "data/active_groups.json"
         
         # การตั้งค่าการปิดกลุ่ม
-        self.profit_threshold_per_lot = 10.0  # 10 USD ต่อ lot
+        self.profit_threshold_per_lot = 1.0  # 1 USD ต่อ lot เดี่ยว
         
         # If no triangles generated, create fallback triangles
         if len(self.triangle_combinations) == 0 and len(self.available_pairs) > 0:
@@ -535,19 +535,19 @@ class TriangleArbitrageDetector:
                 self.logger.info(f"   💰 Account Balance: {account_balance:.2f} USD")
                 self.logger.info(f"   📊 Profit Percentage: {profit_percentage:.3f}%")
                 
-                # คำนวณกำไรต่อ lot
-                total_lot_size = sum(position.get('lot_size', 0.1) for position in group_data['positions'])
-                profit_per_lot = total_group_pnl / total_lot_size if total_lot_size > 0 else 0
+                # คำนวณกำไรต่อ lot เดี่ยว (0.1 lot)
+                single_lot_size = 0.1  # lot size เดี่ยว
+                profit_per_single_lot = total_group_pnl / 3  # หารด้วย 3 คู่
                 
-                # ปิดกลุ่มเมื่อกำไรต่อ lot ถึงเป้าหมาย
-                if profit_per_lot >= self.profit_threshold_per_lot:
+                # ปิดกลุ่มเมื่อกำไรต่อ lot เดี่ยว ถึงเป้าหมาย
+                if profit_per_single_lot >= self.profit_threshold_per_lot:
                     self.logger.info(f"✅ Group {group_id} reached profit target - Total PnL: {total_group_pnl:.2f} USD")
                     self.logger.info(f"✅ Closing group {group_id} - All positions will be closed together")
-                    self.logger.info(f"   🎯 Profit per lot: {profit_per_lot:.2f} USD (Target: {self.profit_threshold_per_lot} USD)")
+                    self.logger.info(f"   🎯 Profit per single lot: {profit_per_single_lot:.2f} USD (Target: {self.profit_threshold_per_lot} USD)")
                     groups_to_close.append(group_id)
                 elif total_group_pnl > 0:
                     self.logger.info(f"💰 Group {group_id} profitable but below threshold - Total PnL: {total_group_pnl:.2f} USD")
-                    self.logger.info(f"   🎯 Profit per lot: {profit_per_lot:.2f} USD (Target: {self.profit_threshold_per_lot} USD)")
+                    self.logger.info(f"   🎯 Profit per single lot: {profit_per_single_lot:.2f} USD (Target: {self.profit_threshold_per_lot} USD)")
                 elif self._should_start_recovery(group_id, group_data, total_group_pnl, profit_percentage):
                     # เริ่ม correlation recovery ตามเงื่อนไขที่กำหนด
                     self.logger.info(f"🔄 Group {group_id} losing - Total PnL: {total_group_pnl:.2f} USD ({profit_percentage:.2f}%)")
