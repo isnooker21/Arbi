@@ -1306,18 +1306,31 @@ class TriangleArbitrageDetector:
                         order_data['direction'], 
                         order_data['group_id']
                     )
-                    results[result_index] = {
-                        'success': result,
-                        'symbol': order_data['symbol'],
-                        'direction': order_data['direction'],
-                        'index': result_index
-                    }
+                    
+                    if isinstance(result, dict):
+                        results[result_index] = {
+                            'success': result['success'],
+                            'symbol': result['symbol'],
+                            'direction': result['direction'],
+                            'order_id': result.get('order_id'),
+                            'index': result_index
+                        }
+                    else:
+                        # Fallback for old return format
+                        results[result_index] = {
+                            'success': result,
+                            'symbol': order_data['symbol'],
+                            'direction': order_data['direction'],
+                            'order_id': None,
+                            'index': result_index
+                        }
                 except Exception as e:
                     self.logger.error(f"Error sending order for {order_data['symbol']}: {e}")
                     results[result_index] = {
                         'success': False,
                         'symbol': order_data['symbol'],
                         'direction': order_data['direction'],
+                        'order_id': None,
                         'index': result_index,
                         'error': str(e)
                     }
@@ -1349,7 +1362,9 @@ class TriangleArbitrageDetector:
                         'symbol': result['symbol'],
                         'direction': result['direction'],
                         'lot_size': self.position_size,
-                        'status': 'active'
+                        'status': 'active',
+                        'order_id': result.get('order_id'),  # เก็บ order_id สำหรับปิดออเดอร์
+                        'comment': f"ARB_G{group_id.split('_')[-1]}_{result['symbol']}"  # เก็บ comment สำหรับค้นหา
                     })
                 elif result:
                     self.logger.warning(f"❌ Order failed: {result['symbol']} {result['direction']}")
@@ -1417,10 +1432,20 @@ class TriangleArbitrageDetector:
             
             if result and result.get('retcode') == 10009:
                 self.logger.debug(f"✅ Order sent: {symbol} {direction} {self.position_size} lot (took {execution_time:.1f}ms)")
-                return True
+                return {
+                    'success': True,
+                    'order_id': result.get('order_id'),
+                    'symbol': symbol,
+                    'direction': direction
+                }
             else:
                 self.logger.error(f"❌ Order failed: {symbol} {direction} (took {execution_time:.1f}ms)")
-                return False
+                return {
+                    'success': False,
+                    'order_id': None,
+                    'symbol': symbol,
+                    'direction': direction
+                }
                 
         except Exception as e:
             self.logger.error(f"Error sending arbitrage order: {e}")
@@ -1465,7 +1490,7 @@ class TriangleArbitrageDetector:
             self.logger.error(f"Error checking group status: {e}")
     
     def _close_group(self, group_id: str):
-        """ปิดกลุ่ม arbitrage"""
+        """ปิดกลุ่ม arbitrage พร้อมกันทั้งกลุ่ม"""
         try:
             if group_id not in self.active_groups:
                 return
@@ -1473,25 +1498,132 @@ class TriangleArbitrageDetector:
             group_data = self.active_groups[group_id]
             
             self.logger.info(f"🔄 Closing arbitrage group {group_id}")
+            self.logger.info(f"   🚀 Closing orders simultaneously...")
             
-            # ปิดทุกตำแหน่งในกลุ่ม
-            for position in group_data['positions']:
-                # TODO: ใช้ broker API ปิดตำแหน่งจริง
-                # self.broker.close_position(position['symbol'])
-                self.logger.info(f"   Closing position: {position['symbol']}")
+            # ปิดออเดอร์พร้อมกันทั้งกลุ่มด้วย threading
+            positions_to_close = group_data['positions']
+            orders_closed = 0
+            close_results = []
+            
+            # สร้างข้อมูลการปิดออเดอร์
+            close_orders = []
+            for i, position in enumerate(positions_to_close):
+                close_orders.append({
+                    'symbol': position['symbol'],
+                    'direction': position['direction'],
+                    'group_id': group_id,
+                    'order_id': position.get('order_id'),
+                    'comment': position.get('comment'),
+                    'index': i
+                })
+            
+            # ปิดออเดอร์พร้อมกันด้วย threading
+            threads = []
+            results = [None] * len(close_orders)  # เก็บผลลัพธ์ของแต่ละออเดอร์
+            
+            def close_single_order(order_data, result_index):
+                """ปิดออเดอร์เดี่ยวใน thread แยก"""
+                try:
+                    # ใช้ order_id ที่เก็บไว้ใน position data
+                    order_id = order_data.get('order_id')
+                    
+                    if order_id:
+                        result = self.broker.close_order(order_id)
+                        results[result_index] = {
+                            'success': result,
+                            'symbol': order_data['symbol'],
+                            'direction': order_data['direction'],
+                            'order_id': order_id,
+                            'index': result_index
+                        }
+                    else:
+                        # Fallback: หา order_id จาก broker API
+                        all_positions = self.broker.get_all_positions()
+                        found_order_id = None
+                        
+                        # หา order ที่ตรงกับ symbol และ comment
+                        group_number = group_id.split('_')[-1]
+                        expected_comment = f"ARB_G{group_number}_{order_data['symbol']}"
+                        
+                        for pos in all_positions:
+                            if (pos['symbol'] == order_data['symbol'] and 
+                                pos['comment'] == expected_comment):
+                                found_order_id = pos['ticket']
+                                break
+                        
+                        if found_order_id:
+                            result = self.broker.close_order(found_order_id)
+                            results[result_index] = {
+                                'success': result,
+                                'symbol': order_data['symbol'],
+                                'direction': order_data['direction'],
+                                'order_id': found_order_id,
+                                'index': result_index
+                            }
+                        else:
+                            self.logger.warning(f"Order not found for {order_data['symbol']}")
+                            results[result_index] = {
+                                'success': False,
+                                'symbol': order_data['symbol'],
+                                'direction': order_data['direction'],
+                                'order_id': None,
+                                'index': result_index,
+                                'error': 'Order not found'
+                            }
+                        
+                except Exception as e:
+                    self.logger.error(f"Error closing order for {order_data['symbol']}: {e}")
+                    results[result_index] = {
+                        'success': False,
+                        'symbol': order_data['symbol'],
+                        'direction': order_data['direction'],
+                        'order_id': None,
+                        'index': result_index,
+                        'error': str(e)
+                    }
+            
+            # เริ่มปิดออเดอร์พร้อมกัน
+            start_time = datetime.now()
+            for i, order_data in enumerate(close_orders):
+                thread = threading.Thread(
+                    target=close_single_order, 
+                    args=(order_data, i),
+                    daemon=True
+                )
+                threads.append(thread)
+                thread.start()
+            
+            # รอให้ออเดอร์ทั้งหมดเสร็จสิ้น (timeout 5 วินาที)
+            for thread in threads:
+                thread.join(timeout=5.0)
+            
+            end_time = datetime.now()
+            total_execution_time = (end_time - start_time).total_seconds() * 1000  # milliseconds
+            self.logger.info(f"   ⏱️ Total closing time: {total_execution_time:.1f}ms")
+            
+            # ตรวจสอบผลลัพธ์และนับออเดอร์ที่ปิดสำเร็จ
+            for result in results:
+                if result and result['success']:
+                    orders_closed += 1
+                    self.logger.info(f"   ✅ Closed: {result['symbol']} {result['direction']} (Order: {result['order_id']})")
+                elif result:
+                    self.logger.warning(f"   ❌ Failed to close: {result['symbol']} {result['direction']}")
+                    if 'error' in result:
+                        self.logger.error(f"      Error: {result['error']}")
             
             # ลบคู่เงินออกจากรายการที่ใช้แล้ว
             if group_id in self.group_currency_mapping:
                 group_pairs = self.group_currency_mapping[group_id]
                 self.used_currency_pairs -= group_pairs
                 del self.group_currency_mapping[group_id]
-                self.logger.info(f"   คู่เงินที่ปลดล็อค: {group_pairs}")
+                self.logger.info(f"   📊 คู่เงินที่ปลดล็อค: {group_pairs}")
             
             # ลบกลุ่มออกจาก active_groups
             del self.active_groups[group_id]
             
             self.logger.info(f"✅ Group {group_id} closed successfully")
-            self.logger.info(f"   คู่เงินที่ใช้ได้แล้ว: {self.used_currency_pairs}")
+            self.logger.info(f"   🚀 Orders closed simultaneously: {orders_closed}/{len(positions_to_close)}")
+            self.logger.info(f"   📊 คู่เงินที่ใช้ได้แล้ว: {self.used_currency_pairs}")
             self.logger.info("🔄 เริ่มตรวจสอบ arbitrage ใหม่")
             
         except Exception as e:
