@@ -462,7 +462,7 @@ class BrokerAPI:
                         return None
                     price = tick.ask if order_type.upper() == 'BUY' else tick.bid
                 
-                # Prepare request
+                # Prepare request for REAL TRADING
                 request = {
                     "action": mt5.TRADE_ACTION_DEAL,
                     "symbol": symbol,
@@ -471,9 +471,9 @@ class BrokerAPI:
                     "price": price,
                     "deviation": 20,
                     "magic": 234000,
-                    "comment": comment or "Python Arbitrage Bot",
+                    "comment": comment or "Arbitrage Bot",
                     "type_time": mt5.ORDER_TIME_GTC,
-                    "type_filling": mt5.ORDER_FILLING_IOC,
+                    "type_filling": mt5.ORDER_FILLING_FOK,  # Fill or Kill for better execution
                 }
                 
                 # Add stop loss and take profit
@@ -483,11 +483,24 @@ class BrokerAPI:
                     request["tp"] = tp
                 
                 # Send order
+                self.logger.info(f"📤 Sending REAL order: {symbol} {order_type} {volume} @ {price}")
                 result = mt5.order_send(request)
                 
-                if result.retcode != mt5.TRADE_RETCODE_DONE:
-                    self.logger.error(f"Order failed: {result.retcode} - {result.comment}")
+                if result is None:
+                    self.logger.error(f"❌ Order send failed: No result from MT5 for {symbol}")
+                    # Try to get last error
+                    error = mt5.last_error()
+                    if error:
+                        self.logger.error(f"MT5 Error: {error}")
                     return None
+                
+                if result.retcode != mt5.TRADE_RETCODE_DONE:
+                    self.logger.error(f"❌ Order failed: {result.retcode} - {result.comment}")
+                    return None
+                
+                # Success!
+                self.logger.info(f"✅ Order executed successfully: {symbol} {order_type} {volume} @ {price}")
+                self.logger.info(f"   Order ID: {result.order}, Retcode: {result.retcode}")
                 
                 return {
                     'order_id': result.order,
