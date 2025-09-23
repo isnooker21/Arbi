@@ -357,6 +357,16 @@ class AdaptiveEngine:
     def _execute_adaptive_trading(self):
         """ดำเนินการ Adaptive Trading Logic"""
         try:
+            # ตรวจสอบว่ามีกลุ่ม arbitrage เปิดอยู่หรือไม่
+            if hasattr(self.arbitrage_detector, 'active_groups') and len(self.arbitrage_detector.active_groups) > 0:
+                self.logger.debug("⏸️ มีกลุ่ม arbitrage เปิดอยู่ - ข้ามการตรวจสอบใหม่")
+                return
+            
+            # ตรวจสอบว่ามีคู่เงินที่ถูกใช้แล้วหรือไม่
+            if hasattr(self.arbitrage_detector, 'used_currency_pairs') and len(self.arbitrage_detector.used_currency_pairs) > 0:
+                self.logger.debug("⏸️ มีคู่เงินที่ถูกใช้แล้ว - ข้ามการตรวจสอบใหม่")
+                return
+            
             # Get current market regime
             market_analysis = self.market_analyzer.analyze_market_conditions()
             if not market_analysis:
@@ -382,6 +392,11 @@ class AdaptiveEngine:
         try:
             self.logger.debug("Executing volatile market trading strategy")
             
+            # ตรวจสอบว่ามีกลุ่ม arbitrage เปิดอยู่หรือไม่
+            if hasattr(self.arbitrage_detector, 'active_groups') and len(self.arbitrage_detector.active_groups) > 0:
+                self.logger.debug("⏸️ มีกลุ่ม arbitrage เปิดอยู่ - ข้ามการตรวจสอบใหม่")
+                return
+            
             # In volatile markets, be more conservative
             # Focus on high-confidence arbitrage opportunities only
             
@@ -400,6 +415,11 @@ class AdaptiveEngine:
         """ดำเนินการเทรดในตลาด Trending"""
         try:
             self.logger.debug("Executing trending market trading strategy")
+            
+            # ตรวจสอบว่ามีกลุ่ม arbitrage เปิดอยู่หรือไม่
+            if hasattr(self.arbitrage_detector, 'active_groups') and len(self.arbitrage_detector.active_groups) > 0:
+                self.logger.debug("⏸️ มีกลุ่ม arbitrage เปิดอยู่ - ข้ามการตรวจสอบใหม่")
+                return
             
             # In trending markets, be more aggressive
             # Look for both arbitrage and recovery opportunities
@@ -420,6 +440,11 @@ class AdaptiveEngine:
         try:
             self.logger.debug("Executing ranging market trading strategy")
             
+            # ตรวจสอบว่ามีกลุ่ม arbitrage เปิดอยู่หรือไม่
+            if hasattr(self.arbitrage_detector, 'active_groups') and len(self.arbitrage_detector.active_groups) > 0:
+                self.logger.debug("⏸️ มีกลุ่ม arbitrage เปิดอยู่ - ข้ามการตรวจสอบใหม่")
+                return
+            
             # In ranging markets, focus on arbitrage opportunities
             # Recovery opportunities are less reliable in ranging markets
             
@@ -434,6 +459,11 @@ class AdaptiveEngine:
         """ดำเนินการเทรดในตลาด Normal"""
         try:
             self.logger.debug("Executing normal market trading strategy")
+            
+            # ตรวจสอบว่ามีกลุ่ม arbitrage เปิดอยู่หรือไม่
+            if hasattr(self.arbitrage_detector, 'active_groups') and len(self.arbitrage_detector.active_groups) > 0:
+                self.logger.debug("⏸️ มีกลุ่ม arbitrage เปิดอยู่ - ข้ามการตรวจสอบใหม่")
+                return
             
             # In normal markets, use balanced approach
             # Check for both arbitrage and recovery opportunities
