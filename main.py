@@ -586,10 +586,10 @@ class TradingSystem:
     def _on_data_update(self, data: dict):
         """Handle real-time data updates"""
         try:
-            # Update market analyzer with new data
-            if self.market_analyzer:
-                # This could trigger market analysis updates
-                pass
+            # Update market analyzer with new data - DISABLED for simple trading system
+            # if self.market_analyzer:
+            #     # This could trigger market analysis updates
+            #     pass
             
             # Log significant price movements
             for symbol, tick_data in data.items():
@@ -645,7 +645,7 @@ class TradingSystem:
             if self.arbitrage_detector:
                 triangle_performance = self.arbitrage_detector.get_triangle_performance()
                 status['active_triangles'] = triangle_performance.get('active_triangles', 0)
-                status['market_regime'] = triangle_performance.get('market_regime', 'unknown')
+                # status['market_regime'] = triangle_performance.get('market_regime', 'unknown')  # DISABLED - not used in simple trading
                 status['adaptive_threshold'] = triangle_performance.get('adaptive_threshold', 0.001)
                 status['duplicate_prevention'] = {
                     'used_currency_pairs': triangle_performance.get('used_currency_pairs', []),

@@ -371,12 +371,14 @@ class AdaptiveEngine:
                 self.logger.debug("⏸️ มีคู่เงินที่ถูกใช้แล้ว - ข้ามการตรวจสอบใหม่")
                 return
             
-            # Get current market regime
-            market_analysis = self.market_analyzer.analyze_market_conditions()
-            if not market_analysis:
-                return
+            # Get current market regime - DISABLED for simple trading system
+            # market_analysis = self.market_analyzer.analyze_market_conditions()
+            # market_analysis = None
+            # if not market_analysis:
+            #     return
             
-            current_regime = market_analysis.get('market_regime', 'normal')
+            # current_regime = market_analysis.get('market_regime', 'normal')
+            current_regime = 'normal'  # Default regime for simple trading
             
             # Execute trading based on regime
             if current_regime == 'volatile':

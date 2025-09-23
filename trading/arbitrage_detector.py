@@ -38,7 +38,8 @@ class TriangleArbitrageDetector:
         self.logger = logging.getLogger(__name__)
         
         # Adaptive parameters - More strict and accurate
-        self.current_regime = 'normal'  # volatile, trending, ranging, normal
+        # self.current_regime = 'normal'  # DISABLED - not used in simple trading
+        # self.market_regime = 'normal'  # DISABLED - not used in simple trading
         self.arbitrage_threshold = 0.008  # Higher threshold (0.8 pips) for better accuracy
         self.execution_timeout = 150  # Target execution speed
         self.position_size = 0.1  # Default position size
@@ -79,8 +80,8 @@ class TriangleArbitrageDetector:
         self.performance_metrics = {
             'total_opportunities': 0,
             'successful_trades': 0,
-            'avg_execution_time': 0,
-            'market_regime_changes': 0
+            'avg_execution_time': 0
+            # 'market_regime_changes': 0  # DISABLED - not used in simple trading
         }
         
         # Initialize pairs and combinations after logger is set
@@ -1091,13 +1092,13 @@ class TriangleArbitrageDetector:
                 'status': 'active',
                 'never_cut_loss': True,
                 'recovery_strategy': 'correlation_hedge',
-                'market_regime': self.market_regime,
+                # 'market_regime': self.market_regime,  # DISABLED - not used in simple trading
                 'adaptive_threshold': self.volatility_threshold,
                 'execution_speed_ms': self.performance_metrics['avg_execution_time']
             }
             
             self.logger.info(f"✅ NEVER-CUT-LOSS triangle executed: {triangle} with {len(orders)} orders "
-                           f"(regime: {self.market_regime})")
+                           f"(regime: normal)")  # DISABLED - not used in simple trading
             return True
             
         except Exception as e:
@@ -1218,7 +1219,7 @@ class TriangleArbitrageDetector:
             'avg_execution_time_ms': self.performance_metrics['avg_execution_time'],
             'total_opportunities': self.performance_metrics['total_opportunities'],
             'successful_trades': self.performance_metrics['successful_trades'],
-            'market_regime_changes': self.performance_metrics['market_regime_changes'],
+            # 'market_regime_changes': self.performance_metrics['market_regime_changes'],  # DISABLED - not used in simple trading
             'used_currency_pairs': list(self.used_currency_pairs),
             'active_groups_count': len(self.active_groups),
             'group_currency_mapping': self.group_currency_mapping
@@ -1237,8 +1238,8 @@ class TriangleArbitrageDetector:
     def update_adaptive_parameters(self, new_params: Dict):
         """Update adaptive parameters dynamically"""
         try:
-            if 'market_regime' in new_params:
-                self.market_regime = new_params['market_regime']
+            # if 'market_regime' in new_params:  # DISABLED - not used in simple trading
+            #     self.market_regime = new_params['market_regime']
             
             if 'volatility_threshold' in new_params:
                 self.volatility_threshold = new_params['volatility_threshold']
@@ -1291,7 +1292,7 @@ class TriangleArbitrageDetector:
                 'never_cut_loss_positions': never_cut_loss_positions,
                 'avg_holding_time_hours': avg_holding_time,
                 'success_rate': success_rate,
-                'market_regime': self.market_regime,
+                # 'market_regime': self.market_regime,  # DISABLED - not used in simple trading
                 'adaptive_threshold': self.volatility_threshold,
                 'execution_speed_ms': self.performance_metrics['avg_execution_time'],
                 'duplicate_prevention': {
