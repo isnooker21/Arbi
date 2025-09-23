@@ -607,6 +607,28 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error updating order tracking: {e}")
     
+    def _is_triangle_already_used(self, triangle: Tuple[str, str, str]) -> bool:
+        """ตรวจสอบว่าคู่เงินใน triangle นี้ถูกใช้แล้วหรือไม่"""
+        try:
+            pair1, pair2, pair3 = triangle
+            
+            # ตรวจสอบในกลุ่มที่เปิดอยู่
+            for group_id, group_data in self.active_groups.items():
+                if group_data['status'] != 'active':
+                    continue
+                
+                # ตรวจสอบว่าคู่เงินใดคู่หนึ่งถูกใช้แล้ว
+                used_pairs = [pos['symbol'] for pos in group_data['positions']]
+                if pair1 in used_pairs or pair2 in used_pairs or pair3 in used_pairs:
+                    self.logger.debug(f"   Pair {pair1}, {pair2}, {pair3} already used in group {group_id}")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Error checking triangle usage: {e}")
+            return False
+    
     
     def _execute_triangle_arbitrage(self, opportunity: Dict) -> bool:
         """Execute triangle arbitrage with Never-Cut-Loss logic"""
@@ -1149,8 +1171,9 @@ class TriangleArbitrageDetector:
                 return
             
             # หยุดตรวจสอบถ้ามีกลุ่มที่ยังไม่ปิด
-            if self.is_arbitrage_paused:
+            if self.is_arbitrage_paused or len(self.active_groups) > 0:
                 self.logger.debug("⏸️ Arbitrage detection paused - waiting for active groups to close")
+                self.logger.debug(f"   Active groups: {len(self.active_groups)}")
                 return
                 
             self.logger.debug(f"🔍 Detecting arbitrage opportunities (threshold: {self.arbitrage_threshold})")
@@ -1180,6 +1203,11 @@ class TriangleArbitrageDetector:
             
             for triangle in triangles_to_check:
                 try:
+                    # ตรวจสอบว่าคู่เงินใน triangle นี้ถูกใช้แล้วหรือไม่
+                    if self._is_triangle_already_used(triangle):
+                        self.logger.debug(f"⏭️ Triangle {triangle} already used - skipping")
+                        continue
+                    
                     # Calculate arbitrage opportunity
                     opportunity = self._calculate_triangle_opportunity(triangle)
                     
