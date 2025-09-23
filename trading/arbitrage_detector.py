@@ -620,8 +620,14 @@ class TriangleArbitrageDetector:
                 # ตรวจสอบว่าคู่เงินใดคู่หนึ่งถูกใช้แล้ว
                 used_pairs = [pos['symbol'] for pos in group_data['positions']]
                 if pair1 in used_pairs or pair2 in used_pairs or pair3 in used_pairs:
-                    self.logger.debug(f"   Pair {pair1}, {pair2}, {pair3} already used in group {group_id}")
+                    self.logger.info(f"🚫 Triangle {triangle} already used in group {group_id}")
+                    self.logger.info(f"   Used pairs: {used_pairs}")
                     return True
+            
+            # ตรวจสอบเพิ่มเติม: ถ้ามีกลุ่มเปิดอยู่ ให้หยุดส่งกลุ่มใหม่
+            if len(self.active_groups) > 0:
+                self.logger.info(f"🚫 Active groups exist ({len(self.active_groups)}) - skipping new triangle")
+                return True
             
             return False
             
@@ -1172,8 +1178,12 @@ class TriangleArbitrageDetector:
             
             # หยุดตรวจสอบถ้ามีกลุ่มที่ยังไม่ปิด
             if self.is_arbitrage_paused or len(self.active_groups) > 0:
-                self.logger.debug("⏸️ Arbitrage detection paused - waiting for active groups to close")
-                self.logger.debug(f"   Active groups: {len(self.active_groups)}")
+                self.logger.info("⏸️ Arbitrage detection paused - waiting for active groups to close")
+                self.logger.info(f"   Active groups: {len(self.active_groups)}")
+                for group_id, group_data in self.active_groups.items():
+                    if group_data['status'] == 'active':
+                        used_pairs = [pos['symbol'] for pos in group_data['positions']]
+                        self.logger.info(f"   Group {group_id}: {used_pairs}")
                 return
                 
             self.logger.debug(f"🔍 Detecting arbitrage opportunities (threshold: {self.arbitrage_threshold})")
@@ -1245,6 +1255,11 @@ class TriangleArbitrageDetector:
     def _create_arbitrage_group(self, triangle: Tuple[str, str, str], opportunity: Dict) -> bool:
         """สร้างกลุ่ม arbitrage และส่งออเดอร์ 3 คู่พร้อมกัน"""
         try:
+            # ตรวจสอบว่ามีกลุ่มเปิดอยู่หรือไม่
+            if len(self.active_groups) > 0:
+                self.logger.warning("🚫 Cannot create new group - active groups exist")
+                return False
+            
             # ตรวจสอบ rate limits ก่อน
             if not self._check_rate_limits():
                 self.logger.warning("⏳ Rate limit reached - skipping arbitrage group creation")
