@@ -273,6 +273,8 @@ class TriangleArbitrageDetector:
                             # ลบ Group ที่ไม่มี valid positions
                             self.logger.info(f"🗑️ Group {group_id} has no valid positions - removing from active groups")
                             del self.active_groups[group_id]
+                            # บันทึกการเปลี่ยนแปลง
+                            self._save_active_groups()
                     
                     if has_valid_groups:
                         time.sleep(10.0)  # รอ 10 วินาที
@@ -605,6 +607,8 @@ class TriangleArbitrageDetector:
                     # ลบ Group ออกจาก recovery_in_progress
                     if group_id in self.recovery_in_progress:
                         self.recovery_in_progress.remove(group_id)
+                    # บันทึกการเปลี่ยนแปลง
+                    self._save_active_groups()
                     continue
                 
                 # แสดงผล PnL รวมของกลุ่ม
