@@ -1182,7 +1182,7 @@ class CorrelationManager:
             self.logger.info("🔄 Performing portfolio rebalancing...")
             
             # Get current portfolio positions
-            current_positions = self.broker.get_current_positions()
+            current_positions = self.broker.get_all_positions()
             
             if not current_positions:
                 return

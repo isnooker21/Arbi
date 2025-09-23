@@ -225,7 +225,7 @@ class AdaptiveEngine:
             if not account_info:
                 return
             
-            balance = account_info.balance
+            balance = account_info.get('balance', 10000)  # Default to 10000 if not found
             
             # Determine account tier
             account_tier = self._determine_account_tier(balance)
@@ -260,7 +260,7 @@ class AdaptiveEngine:
         """ติดตามสุขภาพ Portfolio"""
         try:
             # Get current positions
-            positions = self.broker.get_current_positions()
+            positions = self.broker.get_all_positions()
             if not positions:
                 return
             
@@ -540,7 +540,7 @@ class AdaptiveEngine:
             self.stop_adaptive_trading()
             
             # Close all positions
-            positions = self.broker.get_current_positions()
+            positions = self.broker.get_all_positions()
             if positions:
                 for position in positions:
                     try:
