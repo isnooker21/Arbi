@@ -945,16 +945,16 @@ class TriangleArbitrageDetector:
                         self.logger.info(f"🎯 Arbitrage opportunity found: {triangle}")
                         self.logger.info(f"   Profit potential: {opportunity['profit_potential']:.4f}%")
                         
-                # Execute triangle if conditions met
-                success = self._execute_triangle_arbitrage(opportunity)
-                if success:
-                    self.active_triangles[opportunity['id']] = opportunity
-                    self.performance_metrics['successful_trades'] += 1
-                    self.logger.info(f"✅ Triangle arbitrage executed: {opportunity['id']}")
-                    self.logger.info(f"   Profit potential: {opportunity['profit_potential']:.4f}%")
-                    self.logger.info(f"   Execution status: {opportunity.get('execution_status', 'unknown')}")
-                else:
-                    self.logger.warning(f"⚠️ Triangle arbitrage failed: {opportunity['id']}")
+                        # Execute triangle if conditions met
+                        success = self._execute_triangle_arbitrage(opportunity)
+                        if success:
+                            self.active_triangles[opportunity['id']] = opportunity
+                            self.performance_metrics['successful_trades'] += 1
+                            self.logger.info(f"✅ Triangle arbitrage executed: {opportunity['id']}")
+                            self.logger.info(f"   Profit potential: {opportunity['profit_potential']:.4f}%")
+                            self.logger.info(f"   Execution status: {opportunity.get('execution_status', 'unknown')}")
+                        else:
+                            self.logger.warning(f"⚠️ Triangle arbitrage failed: {opportunity['id']}")
                             
                 except Exception as e:
                     self.logger.error(f"Error checking triangle {triangle}: {e}")
