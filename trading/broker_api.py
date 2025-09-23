@@ -491,6 +491,7 @@ class BrokerAPI:
                     return None
                 
                 # Prepare request for REAL TRADING
+                # Let broker choose the filling type automatically
                 request = {
                     "action": mt5.TRADE_ACTION_DEAL,
                     "symbol": symbol,
@@ -501,7 +502,7 @@ class BrokerAPI:
                     "magic": 234000,
                     "comment": comment or "Arbitrage Bot",
                     "type_time": mt5.ORDER_TIME_GTC,
-                    "type_filling": mt5.ORDER_FILLING_FOK,  # Fill or Kill for better execution
+                    # Let broker choose type_filling automatically
                 }
                 
                 # Add stop loss and take profit
@@ -513,21 +514,10 @@ class BrokerAPI:
                 # Send order
                 self.logger.info(f"📤 Sending REAL order: {symbol} {order_type} {volume} @ {price}")
                 self.logger.debug(f"📋 Order request: {request}")
+                self.logger.info(f"🔄 Letting broker choose filling type automatically")
                 
-                # Try multiple order methods
+                # Send order - let broker choose filling type
                 result = mt5.order_send(request)
-                
-                # If first attempt fails, try with different filling type
-                if result is None:
-                    self.logger.info(f"🔄 Retrying order with different filling type...")
-                    request["type_filling"] = mt5.ORDER_FILLING_IOC
-                    result = mt5.order_send(request)
-                    
-                    # If still fails, try with market execution
-                    if result is None:
-                        self.logger.info(f"🔄 Retrying with market execution...")
-                        request["type_filling"] = mt5.ORDER_FILLING_MARKET
-                        result = mt5.order_send(request)
                 
                 if result is None:
                     self.logger.error(f"❌ Order send failed: No result from MT5 for {symbol}")
