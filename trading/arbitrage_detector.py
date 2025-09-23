@@ -41,6 +41,7 @@ class TriangleArbitrageDetector:
         # self.current_regime = 'normal'  # DISABLED - not used in simple trading
         # self.market_regime = 'normal'  # DISABLED - not used in simple trading
         self.arbitrage_threshold = 0.008  # Higher threshold (0.8 pips) for better accuracy
+        self.volatility_threshold = 0.008  # Same as arbitrage_threshold for simple trading
         self.execution_timeout = 150  # Target execution speed
         self.position_size = 0.1  # Default position size
         
