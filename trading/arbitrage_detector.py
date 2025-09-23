@@ -607,33 +607,6 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error updating order tracking: {e}")
     
-    def _is_triangle_already_used(self, triangle: Tuple[str, str, str]) -> bool:
-        """ตรวจสอบว่าคู่เงินใน triangle นี้ถูกใช้แล้วหรือไม่"""
-        try:
-            pair1, pair2, pair3 = triangle
-            
-            # ตรวจสอบในกลุ่มที่เปิดอยู่
-            for group_id, group_data in self.active_groups.items():
-                if group_data['status'] != 'active':
-                    continue
-                
-                # ตรวจสอบว่าคู่เงินใดคู่หนึ่งถูกใช้แล้ว
-                used_pairs = [pos['symbol'] for pos in group_data['positions']]
-                if pair1 in used_pairs or pair2 in used_pairs or pair3 in used_pairs:
-                    self.logger.info(f"🚫 Triangle {triangle} already used in group {group_id}")
-                    self.logger.info(f"   Used pairs: {used_pairs}")
-                    return True
-            
-            # ตรวจสอบเพิ่มเติม: ถ้ามีกลุ่มเปิดอยู่ ให้หยุดส่งกลุ่มใหม่
-            if len(self.active_groups) > 0:
-                self.logger.info(f"🚫 Active groups exist ({len(self.active_groups)}) - skipping new triangle")
-                return True
-            
-            return False
-            
-        except Exception as e:
-            self.logger.error(f"Error checking triangle usage: {e}")
-            return False
     
     
     def _execute_triangle_arbitrage(self, opportunity: Dict) -> bool:
@@ -1176,14 +1149,9 @@ class TriangleArbitrageDetector:
             if not self.is_running:
                 return
             
-            # หยุดตรวจสอบถ้ามีกลุ่มที่ยังไม่ปิด
-            if self.is_arbitrage_paused or len(self.active_groups) > 0:
-                self.logger.info("⏸️ Arbitrage detection paused - waiting for active groups to close")
-                self.logger.info(f"   Active groups: {len(self.active_groups)}")
-                for group_id, group_data in self.active_groups.items():
-                    if group_data['status'] == 'active':
-                        used_pairs = [pos['symbol'] for pos in group_data['positions']]
-                        self.logger.info(f"   Group {group_id}: {used_pairs}")
+            # เงื่อนไขง่ายๆ: ถ้ามีกลุ่มเปิดอยู่ ให้หยุดตรวจสอบ
+            if len(self.active_groups) > 0:
+                self.logger.info("⏸️ มีกลุ่มเปิดอยู่ - หยุดตรวจสอบ arbitrage")
                 return
                 
             self.logger.debug(f"🔍 Detecting arbitrage opportunities (threshold: {self.arbitrage_threshold})")
@@ -1213,11 +1181,6 @@ class TriangleArbitrageDetector:
             
             for triangle in triangles_to_check:
                 try:
-                    # ตรวจสอบว่าคู่เงินใน triangle นี้ถูกใช้แล้วหรือไม่
-                    if self._is_triangle_already_used(triangle):
-                        self.logger.debug(f"⏭️ Triangle {triangle} already used - skipping")
-                        continue
-                    
                     # Calculate arbitrage opportunity
                     opportunity = self._calculate_triangle_opportunity(triangle)
                     
@@ -1232,7 +1195,7 @@ class TriangleArbitrageDetector:
                         success = self._create_arbitrage_group(triangle, opportunity)
                         if success:
                             # หยุดการตรวจสอบ arbitrage ใหม่ทันที
-                            self.logger.info("⏸️ Stopping arbitrage detection - group created")
+                            self.logger.info("⏸️ ส่งกลุ่มสำเร็จ - หยุดตรวจสอบ")
                             break  # ออกจากลูปทันที
                         else:
                             self.logger.warning(f"⚠️ Triangle arbitrage failed: {opportunity['id']}")
@@ -1255,14 +1218,9 @@ class TriangleArbitrageDetector:
     def _create_arbitrage_group(self, triangle: Tuple[str, str, str], opportunity: Dict) -> bool:
         """สร้างกลุ่ม arbitrage และส่งออเดอร์ 3 คู่พร้อมกัน"""
         try:
-            # ตรวจสอบว่ามีกลุ่มเปิดอยู่หรือไม่
+            # เงื่อนไขง่ายๆ: ถ้ามีกลุ่มเปิดอยู่ ให้หยุด
             if len(self.active_groups) > 0:
-                self.logger.warning("🚫 Cannot create new group - active groups exist")
-                return False
-            
-            # ตรวจสอบ rate limits ก่อน
-            if not self._check_rate_limits():
-                self.logger.warning("⏳ Rate limit reached - skipping arbitrage group creation")
+                self.logger.warning("🚫 มีกลุ่มเปิดอยู่แล้ว - หยุดสร้างกลุ่มใหม่")
                 return False
             
             self.group_counter += 1
@@ -1321,14 +1279,13 @@ class TriangleArbitrageDetector:
             # ตรวจสอบว่าส่งออเดอร์สำเร็จครบ 3 คู่
             if orders_sent == 3:
                 self.active_groups[group_id] = group_data
-                self.is_arbitrage_paused = True  # หยุดตรวจสอบ arbitrage ใหม่
                 
                 # อัพเดท order tracking
                 self._update_order_tracking()
                 
                 self.logger.info(f"✅ Arbitrage group {group_id} created successfully")
                 self.logger.info(f"   Orders sent: {orders_sent}/3")
-                self.logger.info(f"   Pausing arbitrage detection until group closes")
+                self.logger.info(f"   หยุดตรวจสอบ arbitrage จนกว่ากลุ่มจะปิด")
                 
                 return True
             else:
@@ -1422,11 +1379,8 @@ class TriangleArbitrageDetector:
             # ลบกลุ่มออกจาก active_groups
             del self.active_groups[group_id]
             
-            # เริ่มตรวจสอบ arbitrage ใหม่
-            self.is_arbitrage_paused = False
-            
             self.logger.info(f"✅ Group {group_id} closed successfully")
-            self.logger.info("🔄 Resuming arbitrage detection")
+            self.logger.info("🔄 เริ่มตรวจสอบ arbitrage ใหม่")
             
         except Exception as e:
             self.logger.error(f"Error closing group {group_id}: {e}")
