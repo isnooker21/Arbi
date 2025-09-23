@@ -43,6 +43,10 @@ class TriangleArbitrageDetector:
         """Get list of available trading pairs from broker"""
         try:
             all_pairs = self.broker.get_available_pairs()
+            self.logger.info(f"Raw pairs from broker: {len(all_pairs) if all_pairs else 0}")
+            if all_pairs and len(all_pairs) > 0:
+                self.logger.info(f"First 5 raw pairs: {all_pairs[:5]}")
+            
             if not all_pairs:
                 self.logger.warning("No pairs available from broker")
                 return []
@@ -52,12 +56,19 @@ class TriangleArbitrageDetector:
             available_pairs = []
             
             for pair in all_pairs:
+                # Debug logging for first few pairs
+                if len(available_pairs) < 5:
+                    self.logger.info(f"Processing pair: {pair} (type: {type(pair)})")
+                
+                # Handle both string and dict formats
+                pair_str = pair if isinstance(pair, str) else str(pair)
+                
                 # Check if pair contains only major/minor currencies
-                if len(pair) == 6:  # Standard pair format like EURUSD
-                    currency1 = pair[:3]
-                    currency2 = pair[3:]
+                if len(pair_str) == 6:  # Standard pair format like EURUSD
+                    currency1 = pair_str[:3]
+                    currency2 = pair_str[3:]
                     if currency1 in major_minor_currencies and currency2 in major_minor_currencies:
-                        available_pairs.append(pair)
+                        available_pairs.append(pair_str)
             
             self.logger.info(f"Filtered {len(available_pairs)} Major/Minor pairs from broker")
             if len(available_pairs) <= 20:  # Show all if small number
@@ -78,15 +89,22 @@ class TriangleArbitrageDetector:
         """
         combinations = []
         
+        self.logger.info(f"Generating triangles from {len(self.available_pairs)} available pairs")
+        
         # Only use pairs that are actually available in the account
         available_pairs_set = set(self.available_pairs)
+        self.logger.info(f"Available pairs set: {len(available_pairs_set)}")
         
         # Generate triangles from available pairs
-        for pair1 in self.available_pairs:
+        triangles_found = 0
+        for i, pair1 in enumerate(self.available_pairs):
+            if i < 3:  # Debug first few pairs
+                self.logger.info(f"Processing pair1: {pair1}")
+            
             currency1_base = pair1[:3]
             currency1_quote = pair1[3:]
             
-            for pair2 in self.available_pairs:
+            for j, pair2 in enumerate(self.available_pairs):
                 if pair2 == pair1:
                     continue
                     
@@ -103,6 +121,9 @@ class TriangleArbitrageDetector:
                     if pair3 in available_pairs_set:
                         triangle = (pair1, pair2, pair3)
                         combinations.append(triangle)
+                        triangles_found += 1
+                        if triangles_found <= 5:  # Log first few triangles
+                            self.logger.info(f"Found triangle {triangles_found}: {triangle}")
                 
                 elif currency1_base == currency2_quote:
                     # pair1 = A/B, pair2 = C/A, so we need C/B
@@ -117,6 +138,8 @@ class TriangleArbitrageDetector:
         # Remove duplicates and sort
         combinations = list(set(combinations))
         combinations.sort()
+        
+        self.logger.info(f"Generated {len(combinations)} unique triangle combinations")
         
         return combinations
     

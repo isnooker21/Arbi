@@ -149,8 +149,11 @@ class FlexibleTrader:
             if data is None or len(data) < 50:
                 return False
             
-            # Calculate trend strength using moving averages
-            prices = [candle['close'] for candle in data]
+            # Convert DataFrame to list of prices
+            if hasattr(data, 'close'):  # DataFrame
+                prices = data['close'].tolist()
+            else:  # List of dicts
+                prices = [candle['close'] for candle in data]
             
             # Short and long moving averages
             sma_20 = np.mean(prices[-20:])
@@ -201,7 +204,11 @@ class FlexibleTrader:
             if data is None or len(data) < 20:
                 return False
             
-            prices = [candle['close'] for candle in data]
+            # Convert DataFrame to list of prices
+            if hasattr(data, 'close'):  # DataFrame
+                prices = data['close'].tolist()
+            else:  # List of dicts
+                prices = [candle['close'] for candle in data]
             
             # Calculate momentum indicators
             rsi = self._calculate_rsi(prices, 14)
@@ -249,7 +256,11 @@ class FlexibleTrader:
             if data is None or len(data) < 10:
                 return False
             
-            prices = [candle['close'] for candle in data]
+            # Convert DataFrame to list of prices
+            if hasattr(data, 'close'):  # DataFrame
+                prices = data['close'].tolist()
+            else:  # List of dicts
+                prices = [candle['close'] for candle in data]
             
             # Check for small but consistent moves
             price_change = (prices[-1] - prices[-5]) / prices[-5]
@@ -296,7 +307,11 @@ class FlexibleTrader:
             if data is None or len(data) < 30:
                 return False
             
-            prices = [candle['close'] for candle in data]
+            # Convert DataFrame to list of prices
+            if hasattr(data, 'close'):  # DataFrame
+                prices = data['close'].tolist()
+            else:  # List of dicts
+                prices = [candle['close'] for candle in data]
             
             # Check if market is ranging (low volatility, sideways movement)
             volatility = np.std(prices[-20:]) / np.mean(prices[-20:])
