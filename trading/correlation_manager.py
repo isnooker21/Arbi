@@ -245,10 +245,11 @@ class CorrelationManager:
             self.logger.info(f"🔗 Continuing recovery chain for {hedge_symbol} - Level {next_level}")
             
             # หา correlation pair สำหรับคู่ที่แก้ไม้
-            hedge_candidates = self.find_optimal_hedge_pairs(hedge_symbol, 0)
+            hedge_candidates = self._find_optimal_hedge_pairs(hedge_symbol)
             
             if not hedge_candidates:
-                self.logger.warning(f"   No hedge candidates found for {hedge_symbol}")
+                self.logger.warning(f"⚠️ No hedge candidates found for {hedge_symbol}")
+                self.logger.warning(f"   This should not happen - check _find_optimal_hedge_pairs method")
                 return
             
             # เลือกคู่ที่ดีที่สุด
@@ -383,19 +384,37 @@ class CorrelationManager:
             # Get all available pairs from broker
             all_pairs = self.broker.get_available_pairs()
             if not all_pairs:
-                self.logger.warning("No available pairs for correlation recovery")
-                return []
+                self.logger.warning("No available pairs from broker, using fallback pairs")
+                # ใช้ fallback pairs สำหรับ correlation recovery
+                all_pairs = [
+                    'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
+                    'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY',
+                    'EURCHF', 'GBPCHF', 'USDCHF', 'AUDCHF', 'CADCHF',
+                    'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'EURNZD',
+                    'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD', 'CHFJPY',
+                    'EURCAD', 'GBPCAD', 'USDCAD', 'AUDCAD', 'CADCHF'
+                ]
             
             # Get correlation data for the base symbol
             correlations = self.correlation_matrix.get(base_symbol, {})
             
             # If no correlation data, use all available pairs
             if not correlations:
-                self.logger.info(f"No correlation data for {base_symbol}, using all available pairs")
+                self.logger.warning(f"⚠️ No correlation data for {base_symbol}, using all available pairs")
                 for symbol in all_pairs:
                     if symbol != base_symbol:
-                        # Use default correlation values
-                        correlation = 0.7  # Default correlation
+                        # ใช้ correlation values ที่แตกต่างกันตามประเภทคู่เงิน
+                        if base_symbol in ['EURUSD', 'GBPUSD', 'EURGBP']:
+                            # สำหรับคู่เงินหลัก ใช้ correlation สูง
+                            if symbol in ['USDJPY', 'AUDUSD', 'USDCAD']:
+                                correlation = 0.8  # High correlation
+                            elif symbol in ['EURJPY', 'GBPJPY', 'AUDJPY']:
+                                correlation = 0.7  # Medium correlation
+                            else:
+                                correlation = 0.6  # Lower correlation
+                        else:
+                            correlation = 0.7  # Default correlation
+                        
                         hedge_candidates.append({
                             'symbol': symbol,
                             'correlation': correlation,
@@ -422,7 +441,12 @@ class CorrelationManager:
             # Sort by hedge strength (highest first)
             hedge_candidates.sort(key=lambda x: x['hedge_strength'], reverse=True)
             
-            self.logger.info(f"Found {len(hedge_candidates)} hedge candidates for {base_symbol}")
+            self.logger.info(f"✅ Found {len(hedge_candidates)} hedge candidates for {base_symbol}")
+            if hedge_candidates:
+                # แสดง top 5 hedge candidates
+                top_candidates = hedge_candidates[:5]
+                for i, candidate in enumerate(top_candidates, 1):
+                    self.logger.info(f"   {i}. {candidate['symbol']} (correlation: {candidate['correlation']:.2f}, strength: {candidate['hedge_strength']:.2f})")
             return hedge_candidates
             
         except Exception as e:
