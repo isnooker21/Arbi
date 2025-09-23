@@ -88,7 +88,7 @@ class TriangleArbitrageDetector:
         
         # ใช้เฉพาะคู่เงิน Arbitrage 3 คู่ที่กำหนด
         self.arbitrage_pairs = ['EURUSD', 'GBPUSD', 'EURGBP']
-        self.triangle_combinations = self._generate_fixed_triangle_combinations()
+        self.triangle_combinations = [('EURUSD', 'GBPUSD', 'EURGBP')]  # Fixed triangle combination
         
         # Log triangle combinations count
         self.logger.info(f"Available pairs: {len(self.available_pairs)}")
@@ -103,7 +103,7 @@ class TriangleArbitrageDetector:
         # If no triangles generated, create fallback triangles
         if len(self.triangle_combinations) == 0 and len(self.available_pairs) > 0:
             self.logger.warning("No triangles generated, creating fallback triangles...")
-            self.triangle_combinations = self._create_fallback_triangles()
+            self.triangle_combinations = [('EURUSD', 'GBPUSD', 'EURGBP')]  # Fixed fallback
             self.logger.info(f"Created {len(self.triangle_combinations)} fallback triangle combinations")
         elif len(self.triangle_combinations) == 0:
             self.logger.error("❌ No triangles generated and no available pairs!")
