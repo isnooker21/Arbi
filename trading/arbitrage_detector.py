@@ -26,6 +26,7 @@ from typing import Dict, List, Tuple, Optional
 import asyncio
 import threading
 import talib
+import time
 
 class TriangleArbitrageDetector:
     def __init__(self, broker_api, ai_engine):
