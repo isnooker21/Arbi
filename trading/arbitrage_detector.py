@@ -261,7 +261,7 @@ class TriangleArbitrageDetector:
                 
                 # รอ 5 วินาทีก่อนตรวจสอบอีกครั้ง
                 time.sleep(5.0)
-                
+                    
             except Exception as e:
                 self.logger.error(f"Trading error: {e}")
                 import traceback
@@ -414,6 +414,14 @@ class TriangleArbitrageDetector:
             
             # ตรวจสอบว่าส่งออเดอร์สำเร็จครบ 3 คู่
             if orders_sent == 3:
+                # เก็บ comment ใน used_currency_pairs เพื่อให้ reset ได้
+                group_number = group_id.split('_')[-1]
+                for result in results:
+                    if result and result.get('success'):
+                        comment = f"SIMPLE_G{group_number}_{result['symbol']}"
+                        self.used_currency_pairs.add(comment)
+                        self.logger.debug(f"💾 Added comment to used_currency_pairs: {comment}")
+                
                 self._update_group_data(group_id, group_data)
                 self.logger.info(f"✅ Simple group {group_id} created successfully")
                 self.logger.info(f"   🚀 Orders sent: {orders_sent}/3")
@@ -881,12 +889,26 @@ class TriangleArbitrageDetector:
                     if 'error' in result:
                         self.logger.error(f"      Error: {result['error']}")
             
-            # ลบคู่เงินออกจากรายการที่ใช้แล้ว
+            # ลบคู่เงินและ comment ออกจากรายการที่ใช้แล้ว
             if group_id in self.group_currency_mapping:
                 group_pairs = self.group_currency_mapping[group_id]
                 self.used_currency_pairs -= group_pairs
                 del self.group_currency_mapping[group_id]
                 self.logger.info(f"   📊 คู่เงินที่ปลดล็อค: {group_pairs}")
+            
+            # ลบ comment ออกจาก used_currency_pairs
+            group_number = group_id.split('_')[-1]
+            comments_to_remove = []
+            for comment in list(self.used_currency_pairs):
+                if comment.startswith(f"SIMPLE_G{group_number}_"):
+                    comments_to_remove.append(comment)
+            
+            for comment in comments_to_remove:
+                self.used_currency_pairs.discard(comment)
+                self.logger.debug(f"🗑️ Removed comment from used_currency_pairs: {comment}")
+            
+            if comments_to_remove:
+                self.logger.info(f"   🔄 Comments removed: {comments_to_remove}")
             
             # ปิด recovery positions ที่เกี่ยวข้องกับกลุ่มนี้
             total_recovery_closed = 0
@@ -999,11 +1021,18 @@ class TriangleArbitrageDetector:
                 f"ARB_G{group_number}_"
             ]
             
+            # Debug: แสดง used_currency_pairs ปัจจุบัน
+            self.logger.info(f"🔍 Current used_currency_pairs: {list(self.used_currency_pairs)}")
+            self.logger.info(f"🔍 Looking for patterns: {comment_patterns}")
+            
             # ตรวจสอบว่ามี comment ที่ใช้อยู่หรือไม่
             used_comments = set()
             for pattern in comment_patterns:
-                if pattern in self.used_currency_pairs:
-                    used_comments.add(pattern)
+                # Check if any used_currency_pairs starts with this pattern
+                for used_pair in list(self.used_currency_pairs):  # Iterate over a copy
+                    if used_pair.startswith(pattern):
+                        used_comments.add(used_pair)
+                        self.logger.info(f"✅ Found matching comment: {used_pair}")
             
             # ลบ comment ที่ใช้แล้วออกจาก used_currency_pairs
             for comment in used_comments:
@@ -1011,6 +1040,9 @@ class TriangleArbitrageDetector:
             
             if used_comments:
                 self.logger.info(f"🔄 Reset comments for group {group_id}: {used_comments}")
+                self.logger.info(f"🔄 Remaining used_currency_pairs: {list(self.used_currency_pairs)}")
+            else:
+                self.logger.info(f"🔄 No comments to reset for group {group_id}")
             
         except Exception as e:
             self.logger.error(f"Error resetting comments for group {group_id}: {e}")

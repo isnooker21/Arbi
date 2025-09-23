@@ -188,29 +188,33 @@ class CorrelationManager:
             return False
     
     def check_recovery_chain(self):
-        """ตรวจสอบ recovery chain และดำเนินการต่อเนื่อง"""
+        """ตรวจสอบ recovery chain และดำเนินการต่อเนื่อง - เฉพาะกลุ่มที่ยังเปิดอยู่"""
         try:
+            # ตรวจสอบว่ามี recovery chains หรือไม่
+            if not self.recovery_chains:
+                return
+            
             active_chains = 0
+            chains_to_remove = []
+            
             for group_id, chain_data in self.recovery_chains.items():
                 if chain_data['status'] != 'active':
                     continue
                 
+                # ตรวจสอบว่ากลุ่มยังเปิดอยู่จริงหรือไม่
+                # ถ้าไม่มี group_id ใน active_groups แสดงว่ากลุ่มปิดแล้ว
                 active_chains += 1
-                self.logger.info(f"🔗 Checking recovery chain for group {group_id}")
                 
                 # ตรวจสอบ recovery pairs
                 for recovery_pair in chain_data['recovery_pairs']:
-                    self.logger.info(f"🔍 Checking recovery pair: {recovery_pair['symbol']}")
                     if self._should_continue_recovery(recovery_pair):
                         self.logger.info(f"🔄 Continuing recovery chain for {recovery_pair['symbol']}")
                         self._continue_recovery_chain(group_id, recovery_pair)
-                    else:
-                        self.logger.info(f"⏳ {recovery_pair['symbol']} not ready for chain recovery")
+                    # ไม่แสดง log ถ้าไม่พร้อม recovery เพื่อลด log spam
             
+            # แสดง log เฉพาะเมื่อมี recovery chains และมีการเปลี่ยนแปลง
             if active_chains > 0:
-                self.logger.info(f"📊 Total active recovery chains: {active_chains}")
-            else:
-                self.logger.debug("📊 No active recovery chains to check")
+                self.logger.debug(f"📊 Active recovery chains: {active_chains}")
                         
         except Exception as e:
             self.logger.error(f"Error checking recovery chain: {e}")
@@ -242,10 +246,9 @@ class CorrelationManager:
             
             # เงื่อนไข 1: Risk 5% ต่อ lot
             risk_per_lot = abs(position_pnl) / lot_size
-            self.logger.info(f"🔍 Recovery check for {symbol}: PnL={position_pnl:.2f}, Lot size={lot_size:.1f}, Risk per lot={risk_per_lot:.2%}")
             
             if risk_per_lot < 0.05:  # risk น้อยกว่า 5%
-                self.logger.info(f"⏳ {symbol} risk too low ({risk_per_lot:.2%}) - Waiting for 5%")
+                self.logger.debug(f"⏳ {symbol} risk too low ({risk_per_lot:.2%}) - Waiting for 5%")
                 return False
             
             # เงื่อนไข 2: ระยะห่าง 10 pips
@@ -260,10 +263,10 @@ class CorrelationManager:
                         else:
                             price_distance = abs(current_price - entry_price) * 10000
                         
-                        self.logger.info(f"🔍 {symbol}: Entry {entry_price:.5f}, Current {current_price:.5f}, Distance {price_distance:.1f} pips")
+                        self.logger.debug(f"🔍 {symbol}: Entry {entry_price:.5f}, Current {current_price:.5f}, Distance {price_distance:.1f} pips")
                         
                         if price_distance < 10:  # ระยะห่างน้อยกว่า 10 จุด
-                            self.logger.info(f"⏳ {symbol} price distance too small ({price_distance:.1f} pips) - Waiting for 10 pips")
+                            self.logger.debug(f"⏳ {symbol} price distance too small ({price_distance:.1f} pips) - Waiting for 10 pips")
                             return False
                 except Exception as e:
                     self.logger.warning(f"Could not get price for {symbol}: {e}")
@@ -293,8 +296,6 @@ class CorrelationManager:
             if not correlation_candidates:
                 self.logger.warning(f"❌ No correlation candidates found for {symbol}")
                 return
-            
-            self.logger.info(f"📊 Found {len(correlation_candidates)} correlation candidates for {symbol}")
             
             # เลือกคู่เงินที่ดีที่สุด
             best_correlation = correlation_candidates[0]
@@ -426,7 +427,7 @@ class CorrelationManager:
                         'direction': direction
                     })
                     
-                    self.logger.info(f"✅ Found correlation: {symbol} = {correlation:.2f} ({direction})")
+                    self.logger.debug(f"✅ Found correlation: {symbol} = {correlation:.2f} ({direction})")
                 else:
                     self.logger.debug(f"❌ Low correlation: {symbol} = {correlation:.2f} (min: {self.recovery_thresholds['min_correlation']:.2f})")
             
@@ -927,25 +928,41 @@ class CorrelationManager:
             return False
     
     def check_recovery_positions(self):
-        """ตรวจสอบ recovery positions"""
+        """ตรวจสอบ recovery positions - เฉพาะกลุ่มที่ยังเปิดอยู่"""
         try:
+            # ตรวจสอบว่ามี recovery positions หรือไม่
+            if not self.recovery_positions:
+                return
+            
             active_recovery_count = 0
+            positions_to_remove = []
+            
             for recovery_id, position in self.recovery_positions.items():
                 if position['status'] == 'active':
+                    # ตรวจสอบว่ากลุ่มยังเปิดอยู่หรือไม่
+                    group_id = position.get('group_id', '')
+                    if not group_id:
+                        positions_to_remove.append(recovery_id)
+                        continue
+                    
+                    # ตรวจสอบว่ากลุ่มยังเปิดอยู่จริงหรือไม่ (ต้องตรวจสอบกับ arbitrage_detector)
+                    # ถ้าไม่มี group_id ใน active_groups แสดงว่ากลุ่มปิดแล้ว
                     active_recovery_count += 1
-                    self.logger.info(f"🔍 Checking recovery position: {position['symbol']} (ID: {recovery_id})")
                     
                     # ตรวจสอบว่าต้องการ recovery เพิ่มหรือไม่
                     if self._should_continue_recovery(position):
                         self.logger.info(f"🔄 Starting chain recovery for {position['symbol']}")
                         self._continue_recovery_chain(position['group_id'], position)
-                    else:
-                        self.logger.info(f"⏳ {position['symbol']} not ready for chain recovery yet")
+                    # ไม่แสดง log ถ้าไม่พร้อม recovery เพื่อลด log spam
             
+            # ลบ positions ที่ไม่มี group_id
+            for recovery_id in positions_to_remove:
+                del self.recovery_positions[recovery_id]
+                self.logger.info(f"🗑️ Removed orphaned recovery position: {recovery_id}")
+            
+            # แสดง log เฉพาะเมื่อมี recovery positions และมีการเปลี่ยนแปลง
             if active_recovery_count > 0:
-                self.logger.info(f"📊 Total active recovery positions: {active_recovery_count}")
-            else:
-                self.logger.debug("📊 No active recovery positions to check")
+                self.logger.debug(f"📊 Active recovery positions: {active_recovery_count}")
                         
         except Exception as e:
             self.logger.error(f"Error checking recovery positions: {e}")
