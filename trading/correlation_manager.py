@@ -50,6 +50,9 @@ class CorrelationManager:
             'hedge_ratio_range': (0.5, 2.0)  # Hedge ratio range
         }
         
+        # Never-Cut-Loss flag
+        self.never_cut_loss = True
+        
         # Performance tracking
         self.recovery_metrics = {
             'total_recoveries': 0,
@@ -69,6 +72,233 @@ class CorrelationManager:
         # Portfolio rebalancing parameters
         self.portfolio_balance_threshold = 0.1  # 10% imbalance threshold
         self.rebalancing_frequency_hours = 6    # Rebalance every 6 hours
+    
+    def update_recovery_parameters(self, params: Dict):
+        """
+        ⚡ CRITICAL: Update recovery parameters based on market regime
+        Called by AdaptiveEngine every 30 seconds
+        """
+        try:
+            if 'recovery_mode' in params:
+                self.recovery_mode = params['recovery_mode']
+                self.logger.info(f"🔄 Recovery mode updated: {self.recovery_mode}")
+            
+            if 'recovery_thresholds' in params:
+                self.recovery_thresholds.update(params['recovery_thresholds'])
+                self.logger.info(f"📊 Recovery thresholds updated: {self.recovery_thresholds}")
+                
+        except Exception as e:
+            self.logger.error(f"Error updating recovery parameters: {e}")
+    
+    def check_recovery_opportunities(self):
+        """
+        ⚡ CRITICAL: Main recovery method called by AdaptiveEngine
+        Checks all positions and initiates recovery for losing ones
+        """
+        try:
+            if not self.is_running:
+                return
+                
+            # Get all open positions
+            positions = self.broker.get_open_positions()
+            if not positions:
+                return
+            
+            # Check each position for recovery opportunities
+            for position in positions:
+                try:
+                    # Check if position is losing
+                    if position.get('profit', 0) < self.recovery_thresholds['min_loss_threshold']:
+                        self.logger.info(f"🔄 Found losing position: {position['symbol']} "
+                                       f"Profit: {position['profit']:.2f}")
+                        
+                        # Initiate correlation recovery
+                        self._initiate_correlation_recovery(position)
+                        
+                except Exception as e:
+                    self.logger.error(f"Error checking position {position.get('symbol', 'unknown')}: {e}")
+                    
+        except Exception as e:
+            self.logger.error(f"Error in check_recovery_opportunities: {e}")
+    
+    def _initiate_correlation_recovery(self, losing_position: Dict):
+        """
+        ⚡ CRITICAL: Initiate correlation recovery for a losing position
+        Never cuts loss - uses correlation hedge instead
+        """
+        try:
+            symbol = losing_position['symbol']
+            self.logger.info(f"🔄 Initiating correlation recovery for {symbol}")
+            
+            # Find optimal hedge pairs
+            hedge_candidates = self._find_optimal_hedge_pairs(symbol)
+            if not hedge_candidates:
+                self.logger.warning(f"No suitable hedge pairs found for {symbol}")
+                return
+            
+            # Execute hedge positions
+            for hedge_candidate in hedge_candidates[:2]:  # Max 2 hedges per position
+                success = self._execute_hedge_position(losing_position, hedge_candidate)
+                if success:
+                    self.recovery_metrics['total_recoveries'] += 1
+                    self.logger.info(f"✅ Hedge position opened: {hedge_candidate['symbol']}")
+                    
+        except Exception as e:
+            self.logger.error(f"Error initiating correlation recovery: {e}")
+    
+    def _find_optimal_hedge_pairs(self, base_symbol: str) -> List[Dict]:
+        """
+        ⚡ CRITICAL: Find optimal hedge pairs for a given symbol
+        """
+        try:
+            hedge_candidates = []
+            
+            # Get correlation data for the base symbol
+            correlations = self.correlation_matrix.get(base_symbol, {})
+            
+            for symbol, correlation in correlations.items():
+                # Check if correlation is within acceptable range
+                if (self.recovery_thresholds['min_correlation'] <= abs(correlation) <= 
+                    self.recovery_thresholds['max_correlation']):
+                    
+                    # Calculate hedge strength
+                    hedge_strength = abs(correlation)
+                    
+                    hedge_candidates.append({
+                        'symbol': symbol,
+                        'correlation': correlation,
+                        'hedge_strength': hedge_strength,
+                        'direction': 'opposite' if correlation > 0 else 'same'
+                    })
+            
+            # Sort by hedge strength (highest first)
+            hedge_candidates.sort(key=lambda x: x['hedge_strength'], reverse=True)
+            
+            return hedge_candidates
+            
+        except Exception as e:
+            self.logger.error(f"Error finding optimal hedge pairs for {base_symbol}: {e}")
+            return []
+    
+    def _execute_hedge_position(self, original_position: Dict, hedge_candidate: Dict) -> bool:
+        """
+        ⚡ CRITICAL: Execute hedge position for recovery
+        """
+        try:
+            symbol = hedge_candidate['symbol']
+            correlation = hedge_candidate['correlation']
+            direction = hedge_candidate['direction']
+            
+            # Calculate hedge volume
+            hedge_volume = self._calculate_hedge_volume(original_position, hedge_candidate)
+            
+            # Determine trade direction based on correlation
+            if direction == 'opposite':
+                # If positive correlation, trade opposite direction
+                order_type = 'SELL' if original_position['type'] == 'BUY' else 'BUY'
+            else:
+                # If negative correlation, trade same direction
+                order_type = original_position['type']
+            
+            # Place hedge order
+            order = self.broker.place_order(
+                symbol=symbol,
+                order_type=order_type,
+                volume=hedge_volume
+            )
+            
+            if order:
+                # Track recovery position
+                recovery_id = f"{original_position['symbol']}_{symbol}_{int(datetime.now().timestamp())}"
+                self.recovery_positions[recovery_id] = {
+                    'original_position': original_position,
+                    'hedge_position': order,
+                    'correlation': correlation,
+                    'start_time': datetime.now(),
+                    'status': 'active'
+                }
+                
+                self.logger.info(f"✅ Hedge position executed: {symbol} {order_type} {hedge_volume}")
+                return True
+            else:
+                self.logger.warning(f"Failed to execute hedge position: {symbol}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Error executing hedge position: {e}")
+            return False
+    
+    def _calculate_hedge_volume(self, original_position: Dict, hedge_candidate: Dict) -> float:
+        """
+        ⚡ CRITICAL: Calculate optimal hedge volume
+        """
+        try:
+            # Base volume from original position
+            base_volume = original_position.get('volume', 0.1)
+            
+            # Correlation-based adjustment
+            correlation = abs(hedge_candidate['correlation'])
+            hedge_ratio = correlation  # Use correlation as hedge ratio
+            
+            # Apply hedge ratio range limits
+            min_ratio, max_ratio = self.recovery_thresholds['hedge_ratio_range']
+            hedge_ratio = max(min_ratio, min(max_ratio, hedge_ratio))
+            
+            # Calculate final hedge volume
+            hedge_volume = base_volume * hedge_ratio
+            
+            # Ensure minimum volume
+            hedge_volume = max(0.01, hedge_volume)
+            
+            return round(hedge_volume, 2)
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating hedge volume: {e}")
+            return 0.1  # Default fallback
+    
+    def perform_portfolio_rebalancing(self):
+        """
+        ⚡ CRITICAL: Ensure adequate hedging for all losing positions
+        """
+        try:
+            if not self.is_running:
+                return
+                
+            # Get all open positions
+            positions = self.broker.get_open_positions()
+            if not positions:
+                return
+            
+            # Check each losing position
+            for position in positions:
+                if position.get('profit', 0) < self.recovery_thresholds['min_loss_threshold']:
+                    symbol = position['symbol']
+                    
+                    # Check existing hedges
+                    existing_hedges = self._get_existing_hedges(symbol)
+                    
+                    # If less than 2 hedges, add more
+                    if len(existing_hedges) < 2:
+                        self.logger.info(f"🔄 Rebalancing portfolio for {symbol} - adding hedges")
+                        self._initiate_correlation_recovery(position)
+                        
+        except Exception as e:
+            self.logger.error(f"Error in portfolio rebalancing: {e}")
+    
+    def _get_existing_hedges(self, symbol: str) -> List:
+        """
+        ⚡ CRITICAL: Get existing hedge positions for a symbol
+        """
+        try:
+            hedges = []
+            for recovery_id, recovery_data in self.recovery_positions.items():
+                if (recovery_data['original_position']['symbol'] == symbol and 
+                    recovery_data['status'] == 'active'):
+                    hedges.append(recovery_data)
+            return hedges
+        except Exception as e:
+            self.logger.error(f"Error getting existing hedges for {symbol}: {e}")
+            return []
         
     def start_correlation_monitoring(self):
         """Start correlation monitoring and recovery system"""

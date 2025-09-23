@@ -419,12 +419,21 @@ class TradingSystem:
             self.logger.error(f"Error during emergency stop: {e}")
     
     def _trading_loop(self):
-        """Main trading loop"""
+        """
+        ⚡ CRITICAL: Main trading loop with health checks and recovery
+        """
         self.logger.info("🔄 Trading system active - monitoring markets...")
         
         try:
             while self.is_running and not self.emergency_stop:
                 try:
+                    # Health check every 30 seconds
+                    if not self._health_check():
+                        self.logger.warning("⚠️ System health check failed - attempting recovery")
+                        self._attempt_system_recovery()
+                        time.sleep(10)  # Wait 10 seconds before retry
+                        continue
+                    
                     # Update market analysis
                     if self.market_analyzer:
                         try:
@@ -469,6 +478,93 @@ class TradingSystem:
             
         except Exception as e:
             self.logger.error(f"Critical trading error: {e}")
+    
+    def _health_check(self) -> bool:
+        """
+        ⚡ CRITICAL: Check system health and component status
+        """
+        try:
+            # Check broker connection
+            if not self.broker_api or not self.broker_api.is_connected():
+                self.logger.warning("⚠️ Broker connection lost")
+                return False
+            
+            # Check adaptive engine
+            if not self.adaptive_engine or not self.adaptive_engine.is_running:
+                self.logger.warning("⚠️ Adaptive engine not running")
+                return False
+            
+            # Check arbitrage detector
+            if not self.arbitrage_detector or not self.arbitrage_detector.is_running:
+                self.logger.warning("⚠️ Arbitrage detector not running")
+                return False
+            
+            # Check correlation manager
+            if not self.correlation_manager or not self.correlation_manager.is_running:
+                self.logger.warning("⚠️ Correlation manager not running")
+                return False
+            
+            # Check market analyzer
+            if not self.market_analyzer:
+                self.logger.warning("⚠️ Market analyzer not initialized")
+                return False
+            
+            self.logger.debug("✅ System health check passed")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error in health check: {e}")
+            return False
+    
+    def _attempt_system_recovery(self):
+        """
+        ⚡ CRITICAL: Attempt to recover system components
+        """
+        try:
+            self.logger.info("🔄 Attempting system recovery...")
+            
+            # Try to reconnect broker
+            if self.broker_api:
+                try:
+                    self.broker_api.connect()
+                    self.logger.info("✅ Broker reconnected")
+                except Exception as e:
+                    self.logger.error(f"Failed to reconnect broker: {e}")
+            
+            # Try to restart adaptive engine
+            if self.adaptive_engine:
+                try:
+                    self.adaptive_engine.stop()
+                    threading.Event().wait(2)  # Wait 2 seconds
+                    self.adaptive_engine.start()
+                    self.logger.info("✅ Adaptive engine restarted")
+                except Exception as e:
+                    self.logger.error(f"Failed to restart adaptive engine: {e}")
+            
+            # Try to restart arbitrage detector
+            if self.arbitrage_detector:
+                try:
+                    self.arbitrage_detector.stop_detection()
+                    threading.Event().wait(1)  # Wait 1 second
+                    self.arbitrage_detector.start_detection()
+                    self.logger.info("✅ Arbitrage detector restarted")
+                except Exception as e:
+                    self.logger.error(f"Failed to restart arbitrage detector: {e}")
+            
+            # Try to restart correlation manager
+            if self.correlation_manager:
+                try:
+                    self.correlation_manager.stop_correlation_monitoring()
+                    threading.Event().wait(1)  # Wait 1 second
+                    self.correlation_manager.start_correlation_monitoring()
+                    self.logger.info("✅ Correlation manager restarted")
+                except Exception as e:
+                    self.logger.error(f"Failed to restart correlation manager: {e}")
+            
+            self.logger.info("🔄 System recovery attempt completed")
+            
+        except Exception as e:
+            self.logger.error(f"Error in system recovery: {e}")
     
     def _on_data_update(self, data: dict):
         """Handle real-time data updates"""

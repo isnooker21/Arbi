@@ -36,17 +36,19 @@ class TriangleArbitrageDetector:
         self.logger = logging.getLogger(__name__)
         
         # Adaptive parameters
-        self.market_regime = 'normal'  # volatile, trending, ranging, normal
-        self.volatility_threshold = 0.001  # Default threshold
-        self.execution_speed_ms = 100  # Target execution speed
-        self.adaptive_thresholds = {
-            'volatile': 0.002,    # Higher threshold in volatile markets
-            'trending': 0.0015,   # Medium threshold in trending markets
-            'ranging': 0.0008,    # Lower threshold in ranging markets
-            'normal': 0.001       # Default threshold
+        self.current_regime = 'normal'  # volatile, trending, ranging, normal
+        self.arbitrage_threshold = 0.02  # Default threshold
+        self.execution_timeout = 150  # Target execution speed
+        self.position_size = 0.1  # Default position size
+        self.regime_parameters = {
+            'volatile': {'threshold': 0.05, 'timeout': 200},
+            'trending': {'threshold': 0.03, 'timeout': 150}, 
+            'ranging': {'threshold': 0.015, 'timeout': 100},
+            'normal': {'threshold': 0.02, 'timeout': 150}
         }
         
         # Performance tracking
+        self.total_opportunities_detected = 0
         self.performance_metrics = {
             'total_opportunities': 0,
             'successful_trades': 0,
@@ -232,6 +234,130 @@ class TriangleArbitrageDetector:
         
         self.logger.info(f"Created {len(fallback_triangles)} fallback triangles from common patterns")
         return fallback_triangles
+    
+    def update_adaptive_parameters(self, params: Dict):
+        """
+        ⚡ CRITICAL: Update parameters based on market regime
+        Called by AdaptiveEngine every 30 seconds
+        """
+        try:
+            if 'market_regime' in params:
+                self.current_regime = params['market_regime']
+                regime_params = self.regime_parameters.get(self.current_regime, self.regime_parameters['normal'])
+                
+                # Update threshold based on regime
+                self.arbitrage_threshold = regime_params['threshold']
+                self.execution_timeout = regime_params['timeout']
+                
+                self.logger.info(f"🎯 Arbitrage parameters updated for {self.current_regime} market")
+                self.logger.info(f"   Threshold: {self.arbitrage_threshold}")
+                self.logger.info(f"   Timeout: {self.execution_timeout}ms")
+            
+            if 'position_size' in params:
+                self.position_size = params['position_size']
+                self.logger.info(f"📊 Position size updated: {self.position_size}")
+                
+        except Exception as e:
+            self.logger.error(f"Error updating adaptive parameters: {e}")
+    
+    def _get_priority_triangles(self) -> List[Tuple]:
+        """Get triangles prioritized by market regime"""
+        if self.current_regime == 'volatile':
+            # In volatile markets, focus on major pairs only
+            return [
+                ('EURUSD', 'GBPUSD', 'EURGBP'),
+                ('EURUSD', 'USDJPY', 'EURJPY'),
+                ('GBPUSD', 'USDJPY', 'GBPJPY')
+            ]
+        elif self.current_regime == 'trending':
+            # In trending markets, include more triangles
+            return self.triangle_combinations[:6]  # First 6 triangles
+        else:
+            # Normal/ranging markets, use all available
+            return self.triangle_combinations
+
+    def _calculate_triangle_opportunity(self, triangle: Tuple[str, str, str]) -> Optional[Dict]:
+        """
+        ⚡ CRITICAL: Calculate arbitrage opportunity for a triangle
+        """
+        try:
+            pair1, pair2, pair3 = triangle
+            
+            # Get current prices
+            price1 = self.broker.get_current_price(pair1)
+            price2 = self.broker.get_current_price(pair2)
+            price3 = self.broker.get_current_price(pair3)
+            
+            if not all([price1, price2, price3]):
+                return None
+            
+            # Calculate arbitrage potential
+            # For triangle: A/B * B/C * C/A = 1 (should be 1 for no arbitrage)
+            # If > 1, buy A/B, buy B/C, sell C/A
+            # If < 1, sell A/B, sell B/C, buy C/A
+            
+            cross_rate = (price1['bid'] * price2['bid'] * price3['ask']) / (price1['ask'] * price2['ask'] * price3['bid'])
+            profit_potential = abs(cross_rate - 1) * 100  # Convert to percentage
+            
+            if profit_potential > self.arbitrage_threshold:
+                # Determine trade direction
+                if cross_rate > 1:
+                    # Buy A/B, Buy B/C, Sell C/A
+                    legs = [
+                        {'symbol': pair1, 'type': 'BUY', 'volume': self.position_size},
+                        {'symbol': pair2, 'type': 'BUY', 'volume': self.position_size},
+                        {'symbol': pair3, 'type': 'SELL', 'volume': self.position_size}
+                    ]
+                else:
+                    # Sell A/B, Sell B/C, Buy C/A
+                    legs = [
+                        {'symbol': pair1, 'type': 'SELL', 'volume': self.position_size},
+                        {'symbol': pair2, 'type': 'SELL', 'volume': self.position_size},
+                        {'symbol': pair3, 'type': 'BUY', 'volume': self.position_size}
+                    ]
+                
+                return {
+                    'id': f"{pair1}_{pair2}_{pair3}_{int(time.time())}",
+                    'triangle': triangle,
+                    'profit_potential': profit_potential,
+                    'cross_rate': cross_rate,
+                    'legs': legs,
+                    'timestamp': datetime.now(),
+                    'market_regime': self.current_regime
+                }
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating triangle opportunity for {triangle}: {e}")
+            return None
+    
+    
+    def _execute_triangle_arbitrage(self, opportunity: Dict) -> bool:
+        """
+        ⚡ CRITICAL: Execute triangle arbitrage with Never-Cut-Loss logic
+        If any leg fails, relies on correlation manager for recovery
+        """
+        try:
+            # Execute all 3 legs simultaneously
+            orders = []
+            for leg in opportunity['legs']:
+                order = self.broker.place_order(
+                    symbol=leg['symbol'],
+                    order_type=leg['type'],
+                    volume=leg['volume']
+                )
+                if order:
+                    orders.append(order)
+                else:
+                    # If any leg fails, don't close others - let correlation manager handle
+                    self.logger.warning(f"⚠️ Leg execution failed: {leg['symbol']} - Will rely on correlation recovery")
+            
+            return len(orders) > 0  # Success if at least one leg executed
+            
+        except Exception as e:
+            self.logger.error(f"Error executing triangle arbitrage: {e}")
+            return False
     
     def calculate_adaptive_threshold(self) -> float:
         """
@@ -719,107 +845,37 @@ class TriangleArbitrageDetector:
         self.logger.info("🔍 Arbitrage detection stopped")
     
     def detect_opportunities(self):
-        """Main detection method with adaptive analysis"""
+        """
+        ⚡ CRITICAL: Main detection method called by AdaptiveEngine
+        Must implement real-time arbitrage detection
+        """
         try:
-            # Update market regime and adaptive threshold
-            self.detect_market_regime()
-            adaptive_threshold = self.calculate_adaptive_threshold()
+            if not self.is_running:
+                return
+                
+            self.logger.debug(f"🔍 Detecting arbitrage opportunities (threshold: {self.arbitrage_threshold})")
             
-            # Optimize triangle selection based on current market conditions
-            optimized_triangles = self.optimize_triangle_selection(self.triangle_combinations)
+            # Generate triangles for current market regime
+            triangles_to_check = self._get_priority_triangles()
             
-            triangles_checked = 0
-            opportunities_found = 0
-            valid_arbitrages = 0
-            
-            self.logger.info(f"🔍 Starting adaptive detection: {len(optimized_triangles)} triangles "
-                           f"(regime: {self.market_regime}, threshold: {adaptive_threshold:.4f})")
-            
-            for triangle in optimized_triangles:
-                if not self.is_running:
-                    break
-                
-                triangles_checked += 1
-                
-                # Validate execution speed first
-                if not self.validate_execution_speed(triangle):
-                    self.logger.warning(f"Skipping {triangle} due to slow execution speed")
-                    continue
-                
-                # Calculate arbitrage percentage
-                arbitrage_percent = self.calculate_arbitrage(triangle, triangles_checked)
-                
-                if arbitrage_percent is None:
-                    continue
-                
-                valid_arbitrages += 1
-                
-                # Use adaptive threshold instead of fixed threshold
-                if arbitrage_percent > adaptive_threshold:
-                    opportunities_found += 1
+            for triangle in triangles_to_check:
+                try:
+                    opportunity = self._calculate_triangle_opportunity(triangle)
                     
-                    # Multi-timeframe analysis for promising opportunities
-                    h1_analysis = self.analyze_timeframe(triangle, 'H1')
-                    m30_analysis = self.analyze_timeframe(triangle, 'M30')
-                    m15_analysis = self.analyze_timeframe(triangle, 'M15')
-                    m5_analysis = self.analyze_timeframe(triangle, 'M5')
-                    m1_analysis = self.analyze_timeframe(triangle, 'M1')
-                    
-                    # Create opportunity context with adaptive parameters
-                    opportunity = {
-                        'triangle': triangle,
-                        'h1': h1_analysis,
-                        'm30': m30_analysis,
-                        'm15': m15_analysis,
-                        'm5': m5_analysis,
-                        'm1': m1_analysis,
-                        'arbitrage_percent': arbitrage_percent,
-                        'adaptive_threshold': adaptive_threshold,
-                        'market_regime': self.market_regime,
-                        'timestamp': datetime.now(),
-                        'spread_acceptable': self._check_spread_acceptable(triangle),
-                        'volatility': self._calculate_volatility(triangle),
-                        'execution_speed_ms': self.performance_metrics['avg_execution_time']
-                    }
-                    
-                    # AI evaluation with adaptive parameters
-                    ai_decision = self.ai.evaluate_arbitrage_opportunity(opportunity)
-                    
-                    if ai_decision.should_act and ai_decision.confidence > 0.05:
-                        self.logger.info(f"🎯 ADAPTIVE ARBITRAGE OPPORTUNITY: {triangle}, "
-                                       f"Percent: {arbitrage_percent:.4f}%, "
-                                       f"Threshold: {adaptive_threshold:.4f}%, "
-                                       f"Regime: {self.market_regime}, "
-                                       f"Confidence: {ai_decision.confidence:.2f}")
+                    if opportunity and opportunity['profit_potential'] > self.arbitrage_threshold:
+                        self.total_opportunities_detected += 1
+                        self.logger.info(f"🎯 Arbitrage opportunity found: {opportunity['profit_potential']:.4f}")
                         
-                        # Execute with Never-Cut-Loss approach
-                        self.execute_triangle_entry_never_cut_loss(triangle, ai_decision)
-                        
-                        # Update performance metrics
-                        self.performance_metrics['total_opportunities'] += 1
-                        self.performance_metrics['successful_trades'] += 1
-                        
-                    else:
-                        # Log opportunities that don't meet criteria
-                        self.logger.debug(f"🔍 Opportunity below threshold: {triangle}, "
-                                        f"Percent: {arbitrage_percent:.4f}%, "
-                                        f"Threshold: {adaptive_threshold:.4f}%, "
-                                        f"Confidence: {ai_decision.confidence:.2f}")
-                
-                # Log progress every 5 triangles
-                if triangles_checked % 5 == 0:
-                    self.logger.debug(f"Progress: {triangles_checked}/{len(optimized_triangles)} triangles, "
-                                    f"{valid_arbitrages} valid arbitrages, {opportunities_found} opportunities")
-            
-            # Summary logging
-            self.logger.info(f"🔍 Adaptive detection summary: {triangles_checked} triangles checked, "
-                           f"{valid_arbitrages} valid arbitrages, {opportunities_found} opportunities found "
-                           f"(regime: {self.market_regime})")
+                        # Execute triangle if conditions met
+                        success = self._execute_triangle_arbitrage(opportunity)
+                        if success:
+                            self.active_triangles[opportunity['id']] = opportunity
+                            
+                except Exception as e:
+                    self.logger.error(f"Error checking triangle {triangle}: {e}")
                     
         except Exception as e:
             self.logger.error(f"Error in detect_opportunities: {e}")
-            import traceback
-            self.logger.error(traceback.format_exc())
     
     def analyze_timeframe(self, triangle: Tuple[str, str, str], timeframe: str) -> Dict:
         """Analyze triangle for specific timeframe"""

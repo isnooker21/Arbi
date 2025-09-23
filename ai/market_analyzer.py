@@ -128,6 +128,128 @@ class MarketAnalyzer:
             self.logger.error(f"Error analyzing market conditions: {e}")
             return {}
     
+    def _calculate_market_volatility(self) -> float:
+        """
+        ⚡ CRITICAL: Calculate current market volatility using EURUSD as proxy
+        """
+        try:
+            # Get recent price data for EURUSD
+            price_data = self.broker.get_historical_data('EURUSD', 'M1', 100)
+            if not price_data or len(price_data) < 10:
+                return 0.01  # Default volatility
+            
+            # Calculate returns
+            returns = []
+            for i in range(1, len(price_data)):
+                prev_close = price_data[i-1]['close']
+                curr_close = price_data[i]['close']
+                if prev_close > 0:
+                    returns.append((curr_close - prev_close) / prev_close)
+            
+            if not returns:
+                return 0.01
+            
+            # Calculate standard deviation (volatility)
+            volatility = np.std(returns)
+            return float(volatility)
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating market volatility: {e}")
+            return 0.01
+    
+    def _calculate_trend_strength(self) -> float:
+        """
+        ⚡ CRITICAL: Calculate trend strength using linear regression slope
+        """
+        try:
+            # Get recent price data for EURUSD
+            price_data = self.broker.get_historical_data('EURUSD', 'M5', 50)
+            if not price_data or len(price_data) < 10:
+                return 0.0  # No trend
+            
+            # Extract close prices
+            closes = [float(candle['close']) for candle in price_data]
+            
+            # Calculate linear regression slope
+            x = np.arange(len(closes))
+            y = np.array(closes)
+            
+            # Simple linear regression
+            slope = np.polyfit(x, y, 1)[0]
+            
+            # Normalize slope to get trend strength (0-1)
+            trend_strength = min(1.0, abs(slope) / 0.001)  # Normalize by 0.001
+            return float(trend_strength)
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating trend strength: {e}")
+            return 0.0
+    
+    def _calculate_correlation_stability(self) -> float:
+        """
+        ⚡ CRITICAL: Calculate correlation stability between major pairs
+        """
+        try:
+            # Major pairs for correlation analysis
+            major_pairs = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD']
+            
+            # Get recent price data for all pairs
+            price_data = {}
+            for pair in major_pairs:
+                data = self.broker.get_historical_data(pair, 'M5', 20)
+                if data and len(data) >= 10:
+                    price_data[pair] = [float(candle['close']) for candle in data]
+            
+            if len(price_data) < 3:
+                return 0.8  # Default stability
+            
+            # Calculate correlation matrix
+            df = pd.DataFrame(price_data)
+            correlation_matrix = df.corr()
+            
+            # Calculate average correlation stability
+            correlations = []
+            for i in range(len(correlation_matrix.columns)):
+                for j in range(i+1, len(correlation_matrix.columns)):
+                    corr = correlation_matrix.iloc[i, j]
+                    if not np.isnan(corr):
+                        correlations.append(abs(corr))
+            
+            if not correlations:
+                return 0.8
+            
+            # Return average correlation as stability score
+            stability = np.mean(correlations)
+            return float(stability)
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating correlation stability: {e}")
+            return 0.8
+    
+    def _determine_market_regime(self, volatility: float, trend_strength: float, correlation_stability: float) -> str:
+        """
+        ⚡ CRITICAL: Determine market regime based on calculated metrics
+        """
+        try:
+            # High volatility regime
+            if volatility > 0.02:
+                return 'volatile'
+            
+            # Strong trend regime
+            if trend_strength > 0.7:
+                return 'trending'
+            
+            # Low correlation stability (ranging market)
+            if correlation_stability < 0.5:
+                return 'ranging'
+            
+            # Normal market
+            return 'normal'
+            
+        except Exception as e:
+            self.logger.error(f"Error determining market regime: {e}")
+            return 'normal'
+    
     def _detect_market_regime(self, symbols: List[str]) -> Dict:
         """
         ตรวจจับ Market Regime ปัจจุบัน
