@@ -341,7 +341,7 @@ class TradingSystem:
             # Start all components
             self.position_manager.start_position_monitoring()
             self.arbitrage_detector.start_detection()
-            self.correlation_manager.start_correlation_monitoring()
+            # Correlation manager doesn't need separate monitoring - it's integrated with arbitrage detector
             
             # Start adaptive engine (main trading engine)
             self.adaptive_engine.start_adaptive_trading()
@@ -379,7 +379,8 @@ class TradingSystem:
                 self.arbitrage_detector.stop_detection()
             
             if self.correlation_manager:
-                self.correlation_manager.stop_correlation_monitoring()
+                # Correlation manager doesn't need separate monitoring - it's integrated with arbitrage detector
+                pass
             
             if self.position_manager:
                 self.position_manager.stop_position_monitoring()
@@ -577,10 +578,8 @@ class TradingSystem:
             # Try to restart correlation manager
             if self.correlation_manager:
                 try:
-                    self.correlation_manager.stop_correlation_monitoring()
-                    threading.Event().wait(1)  # Wait 1 second
-                    self.correlation_manager.start_correlation_monitoring()
-                    self.logger.info("✅ Correlation manager restarted")
+                    # Correlation manager doesn't need separate monitoring - it's integrated with arbitrage detector
+                    self.logger.info("✅ Correlation manager is integrated with arbitrage detector")
                 except Exception as e:
                     self.logger.error(f"Failed to restart correlation manager: {e}")
             
