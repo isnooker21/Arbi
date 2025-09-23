@@ -466,19 +466,18 @@ class BrokerAPI:
                 if not mt5.symbol_select(symbol, True):
                     self.logger.warning(f"⚠️ Could not select symbol {symbol}, but continuing...")
                 
-                # Prepare request for REAL TRADING
-                # Let broker choose the filling type automatically
+                # Prepare request for REAL TRADING (ตาม Huakuy_)
                 request = {
                     "action": mt5.TRADE_ACTION_DEAL,
                     "symbol": symbol,
                     "volume": volume,
                     "type": order_type_mt5,
                     "price": price,
-                    "deviation": 20,
-                    "magic": 234000,
-                    "comment": comment or "Arbitrage Bot",
+                    "deviation": 10,  # ตาม Huakuy_
+                    "magic": 0,       # ตาม Huakuy_
+                    "comment": comment or "python script open",  # ตาม Huakuy_
                     "type_time": mt5.ORDER_TIME_GTC,
-                    # Let broker choose type_filling automatically
+                    "type_filling": mt5.ORDER_FILLING_IOC,  # ตาม Huakuy_
                 }
                 
                 # Add stop loss and take profit
@@ -497,81 +496,32 @@ class BrokerAPI:
                     self.logger.error(f"❌ Not connected to MT5")
                     return None
                 
-                # Send order - let broker choose filling type
+                # Send order (ตาม Huakuy_)
                 self.logger.info(f"🔍 Sending order to MT5: {request}")
                 result = mt5.order_send(request)
                 
-                # Debug: Check what we got
+                # Check result (ตาม Huakuy_)
                 if result is None:
-                    self.logger.warning(f"⚠️ MT5 returned None for {symbol}")
-                    self.logger.info(f"🔍 This means order was not sent to MT5")
-                else:
-                    self.logger.info(f"✅ MT5 returned result: {result}")
-                    self.logger.info(f"🔍 Result retcode: {result.retcode}")
-                    self.logger.info(f"🔍 Result comment: {result.comment}")
-                
-                if result is None:
-                    self.logger.warning(f"⚠️ No result from MT5 for {symbol} - checking for success...")
-                    # Try to get last error
-                    error = mt5.last_error()
-                    if error:
-                        error_code, error_desc = error
-                        if error_code == 1:  # Success code
-                            self.logger.info(f"✅ MT5 Success: {error_desc}")
-                            # Check if position was actually created
-                            positions = mt5.positions_get(symbol=symbol)
-                            if positions:
-                                # Find the most recent position
-                                latest_position = max(positions, key=lambda p: p.time)
-                                self.logger.info(f"✅ Order executed successfully: {symbol} {order_type} {volume} @ {price}")
-                                return {
-                                    'order_id': latest_position.ticket,
-                                    'symbol': symbol,
-                                    'type': order_type,
-                                    'volume': volume,
-                                    'price': price,
-                                    'sl': sl,
-                                    'tp': tp,
-                                    'retcode': 10009,  # TRADE_RETCODE_DONE
-                                    'comment': 'Order executed successfully'
-                                }
-                            else:
-                                # No position found, but MT5 says success
-                                self.logger.warning(f"⚠️ MT5 reports success but no position found for {symbol}")
-                                return None
-                        else:
-                            self.logger.error(f"MT5 Error: {error}")
-                    else:
-                        # No error but no result - check if position was created
-                        self.logger.info(f"🔍 No error reported - checking for position: {symbol}")
-                        positions = mt5.positions_get(symbol=symbol)
-                        if positions:
-                            # Find the most recent position
-                            latest_position = max(positions, key=lambda p: p.time)
-                            self.logger.info(f"✅ Order executed successfully: {symbol} {order_type} {volume} @ {price}")
-                            return {
-                                'order_id': latest_position.ticket,
-                                'symbol': symbol,
-                                'type': order_type,
-                                'volume': volume,
-                                'price': price,
-                                'sl': sl,
-                                'tp': tp,
-                                'retcode': 10009,  # TRADE_RETCODE_DONE
-                                'comment': 'Order executed successfully (no error)'
-                            }
-                        else:
-                            self.logger.warning(f"⚠️ No error but no position found for {symbol}")
-                            return None
+                    self.logger.error(f"❌ Order send failed - no result from MT5 for {symbol}")
                     return None
                 
                 if result.retcode != mt5.TRADE_RETCODE_DONE:
-                    self.logger.error(f"❌ Order failed: {result.retcode} - {result.comment}")
+                    self.logger.error(f"❌ Order failed, retcode={result.retcode}, comment={result.comment}")
                     return None
                 
                 # Success!
-                self.logger.info(f"✅ Order executed successfully: {symbol} {order_type} {volume} @ {price}")
-                self.logger.info(f"   Order ID: {result.order}, Retcode: {result.retcode}")
+                self.logger.info(f"✅ Order placed successfully, order_id={result.order}")
+                return {
+                    'order_id': result.order,
+                    'symbol': symbol,
+                    'type': order_type,
+                    'volume': volume,
+                    'price': price,
+                    'sl': sl,
+                    'tp': tp,
+                    'retcode': result.retcode,
+                    'comment': result.comment
+                }
                 
                 return {
                     'order_id': result.order,
