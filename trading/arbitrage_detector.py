@@ -502,6 +502,7 @@ class TriangleArbitrageDetector:
                 # ตรวจสอบ PnL จริงของแต่ละตำแหน่ง
                 total_group_pnl = 0.0
                 all_positions_profitable = True
+                valid_positions = 0
                 
                 for position in group_data['positions']:
                     # หา order_id จาก broker API
@@ -510,22 +511,34 @@ class TriangleArbitrageDetector:
                         # ตรวจสอบ PnL จาก broker API
                         all_positions = self.broker.get_all_positions()
                         position_pnl = 0.0
+                        position_found = False
                         
                         for pos in all_positions:
                             if pos['ticket'] == order_id:
                                 position_pnl = pos['profit']
+                                position_found = True
+                                valid_positions += 1
                                 break
                         
-                        total_group_pnl += position_pnl
-                        
-                        # ตรวจสอบว่าตำแหน่งนี้กำไรหรือไม่
-                        if position_pnl < 0:
-                            all_positions_profitable = False
-                        
-                        self.logger.debug(f"   Position {position['symbol']}: PnL = {position_pnl:.2f} USD")
+                        if position_found:
+                            total_group_pnl += position_pnl
+                            
+                            # ตรวจสอบว่าตำแหน่งนี้กำไรหรือไม่
+                            if position_pnl < 0:
+                                all_positions_profitable = False
+                            
+                            self.logger.debug(f"   Position {position['symbol']}: PnL = {position_pnl:.2f} USD")
+                        else:
+                            self.logger.warning(f"   Position {position['symbol']} not found in broker - may be closed")
                     else:
                         self.logger.warning(f"   No order_id found for position {position['symbol']}")
                         all_positions_profitable = False
+                
+                # ถ้าไม่มีตำแหน่งที่เปิดอยู่จริง ให้ลบกลุ่มนี้
+                if valid_positions == 0:
+                    self.logger.info(f"🗑️ Group {group_id} has no valid positions - removing from active groups")
+                    groups_to_close.append(group_id)
+                    continue
                 
                 # แสดงผล PnL รวมของกลุ่ม
                 pnl_status = "💰" if total_group_pnl > 0 else "💸" if total_group_pnl < 0 else "⚖️"
