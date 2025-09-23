@@ -29,9 +29,9 @@ import threading
 import time
 
 class TriangleArbitrageDetector:
-    def __init__(self, broker_api, ai_engine, correlation_manager=None):
+    def __init__(self, broker_api, ai_engine=None, correlation_manager=None):
         self.broker = broker_api
-        self.ai = ai_engine
+        # self.ai = ai_engine  # DISABLED for simple trading system
         self.correlation_manager = correlation_manager  # เพิ่ม correlation manager
         self.active_triangles = {}
         self.is_running = False
@@ -96,12 +96,18 @@ class TriangleArbitrageDetector:
         # ระบบป้องกันการส่ง recovery ซ้ำ
         self.recovery_in_progress = set()  # เก็บ group_id ที่กำลัง recovery
         
+        # ระบบ Save/Load ข้อมูล
+        self.persistence_file = "data/active_groups.json"
+        
         # If no triangles generated, create fallback triangles
         if len(self.triangle_combinations) == 0 and len(self.available_pairs) > 0:
             self.logger.warning("No triangles generated, creating fallback triangles...")
             self.triangle_combinations = [('EURUSD', 'GBPUSD', 'EURGBP')]  # Fixed fallback
         elif len(self.triangle_combinations) == 0:
             self.logger.error("❌ No triangles generated and no available pairs!")
+        
+        # Load existing active groups on startup
+        self._load_active_groups()
     
     def _get_available_pairs(self) -> List[str]:
         """Get list of available trading pairs from broker"""
@@ -225,6 +231,8 @@ class TriangleArbitrageDetector:
     def stop_detection(self):
         """Stop the arbitrage detection loop"""
         self.is_running = False
+        # บันทึกข้อมูลก่อนปิด
+        self._save_active_groups()
         self.logger.info("Stopping arbitrage detection...")
     
     def _simple_trading_loop(self):
@@ -377,7 +385,7 @@ class TriangleArbitrageDetector:
             
             # ตรวจสอบว่าส่งออเดอร์สำเร็จครบ 3 คู่
             if orders_sent == 3:
-                self.active_groups[group_id] = group_data
+                self._update_group_data(group_id, group_data)
                 self.logger.info(f"✅ Simple group {group_id} created successfully")
                 self.logger.info(f"   🚀 Orders sent: {orders_sent}/3")
                 self.logger.info(f"   ⏱️ Execution time: {total_execution_time:.1f}ms")
@@ -815,10 +823,7 @@ class TriangleArbitrageDetector:
                 self._close_recovery_positions_for_group(group_id)
             
             # ลบกลุ่มออกจาก active_groups
-            del self.active_groups[group_id]
-            
-            # ลบ recovery_in_progress
-            self.recovery_in_progress.discard(group_id)
+            self._remove_group_data(group_id)
             
             # Reset arbitrage_sent เพื่อให้สามารถส่งออเดอร์ใหม่ได้
             self.arbitrage_sent = False
@@ -1304,3 +1309,102 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error checking currency pair availability: {e}")
             return False
+    
+    def _save_active_groups(self):
+        """บันทึกข้อมูล active groups ลงไฟล์"""
+        try:
+            import json
+            import os
+            
+            # สร้างโฟลเดอร์ data ถ้าไม่มี
+            os.makedirs(os.path.dirname(self.persistence_file), exist_ok=True)
+            
+            # เตรียมข้อมูลสำหรับบันทึก
+            save_data = {
+                'active_groups': self.active_groups,
+                'recovery_in_progress': list(self.recovery_in_progress),
+                'group_counter': self.group_counter,
+                'arbitrage_sent': self.arbitrage_sent,
+                'arbitrage_send_time': self.arbitrage_send_time.isoformat() if self.arbitrage_send_time else None,
+                'used_currency_pairs': list(self.used_currency_pairs),
+                'group_currency_mapping': self.group_currency_mapping,
+                'saved_at': datetime.now().isoformat()
+            }
+            
+            # บันทึกลงไฟล์
+            with open(self.persistence_file, 'w') as f:
+                json.dump(save_data, f, indent=2, default=str)
+            
+            self.logger.debug(f"💾 Saved {len(self.active_groups)} active groups to {self.persistence_file}")
+            
+        except Exception as e:
+            self.logger.error(f"Error saving active groups: {e}")
+    
+    def _load_active_groups(self):
+        """โหลดข้อมูล active groups จากไฟล์"""
+        try:
+            import json
+            import os
+            from datetime import datetime
+            
+            if not os.path.exists(self.persistence_file):
+                self.logger.debug("No persistence file found, starting fresh")
+                return
+            
+            with open(self.persistence_file, 'r') as f:
+                save_data = json.load(f)
+            
+            # โหลดข้อมูลกลับมา
+            self.active_groups = save_data.get('active_groups', {})
+            self.recovery_in_progress = set(save_data.get('recovery_in_progress', []))
+            self.group_counter = save_data.get('group_counter', 0)
+            self.arbitrage_sent = save_data.get('arbitrage_sent', False)
+            
+            # แปลง arbitrage_send_time กลับเป็น datetime
+            arbitrage_send_time_str = save_data.get('arbitrage_send_time')
+            if arbitrage_send_time_str:
+                self.arbitrage_send_time = datetime.fromisoformat(arbitrage_send_time_str)
+            else:
+                self.arbitrage_send_time = None
+            
+            self.used_currency_pairs = set(save_data.get('used_currency_pairs', []))
+            self.group_currency_mapping = save_data.get('group_currency_mapping', {})
+            
+            saved_at = save_data.get('saved_at', 'Unknown')
+            
+            if self.active_groups:
+                self.logger.info(f"📂 Loaded {len(self.active_groups)} active groups from {self.persistence_file}")
+                self.logger.info(f"   Groups: {list(self.active_groups.keys())}")
+                self.logger.info(f"   Recovery in progress: {list(self.recovery_in_progress)}")
+                self.logger.info(f"   Saved at: {saved_at}")
+            else:
+                self.logger.debug("No active groups found in persistence file")
+                
+        except Exception as e:
+            self.logger.error(f"Error loading active groups: {e}")
+            # เริ่มต้นใหม่ถ้าโหลดไม่ได้
+            self.active_groups = {}
+            self.recovery_in_progress = set()
+            self.group_counter = 0
+            self.arbitrage_sent = False
+            self.arbitrage_send_time = None
+            self.used_currency_pairs = set()
+            self.group_currency_mapping = {}
+    
+    def _update_group_data(self, group_id: str, group_data: Dict):
+        """อัปเดตข้อมูลกลุ่มและบันทึกลงไฟล์"""
+        try:
+            self.active_groups[group_id] = group_data
+            self._save_active_groups()
+        except Exception as e:
+            self.logger.error(f"Error updating group data: {e}")
+    
+    def _remove_group_data(self, group_id: str):
+        """ลบข้อมูลกลุ่มและบันทึกลงไฟล์"""
+        try:
+            if group_id in self.active_groups:
+                del self.active_groups[group_id]
+            self.recovery_in_progress.discard(group_id)
+            self._save_active_groups()
+        except Exception as e:
+            self.logger.error(f"Error removing group data: {e}")

@@ -29,7 +29,7 @@ class AdaptiveEngine:
     และ Correlation Recovery แบบ Never-Cut-Loss
     """
     
-    def __init__(self, broker_api, arbitrage_detector, correlation_manager, market_analyzer):
+    def __init__(self, broker_api, arbitrage_detector, correlation_manager, market_analyzer=None):
         """
         เริ่มต้นระบบ Adaptive Engine
         
@@ -37,12 +37,12 @@ class AdaptiveEngine:
             broker_api: API สำหรับเชื่อมต่อกับโบรกเกอร์
             arbitrage_detector: ระบบตรวจจับ Arbitrage
             correlation_manager: ระบบจัดการ Correlation Recovery
-            market_analyzer: ระบบวิเคราะห์ตลาด
+            market_analyzer: ระบบวิเคราะห์ตลาด (DISABLED for simple trading)
         """
         self.broker = broker_api
         self.arbitrage_detector = arbitrage_detector
         self.correlation_manager = correlation_manager
-        self.market_analyzer = market_analyzer
+        # self.market_analyzer = market_analyzer  # DISABLED for simple trading system
         
         self.logger = logging.getLogger(__name__)
         
@@ -148,8 +148,8 @@ class AdaptiveEngine:
         try:
             while self.is_running:
                 try:
-                    # Update market regime
-                    self._update_market_regime()
+            # Update market regime - DISABLED for simple trading system
+            # self._update_market_regime()
                     
                     # Update position sizing parameters
                     self._update_position_sizing()
@@ -184,43 +184,47 @@ class AdaptiveEngine:
             self.logger.error(f"Critical error in adaptive trading loop: {e}")
     
     def _update_market_regime(self):
-        """อัปเดต Market Regime และปรับ parameters"""
+        """อัปเดต Market Regime และปรับ parameters - DISABLED"""
         try:
-            # Get current market regime
-            market_analysis = self.market_analyzer.analyze_market_conditions()
+            # DISABLED: Market regime detection ไม่ใช้ในระบบ simple trading
+            return
             
-            if not market_analysis:
-                return
-            
-            current_regime = market_analysis.get('market_regime', 'normal')
-            
-            # Update arbitrage detector parameters
-            if hasattr(self.arbitrage_detector, 'update_adaptive_parameters'):
-                regime_params = self.regime_parameters.get(current_regime, self.regime_parameters['normal'])
-                
-                adaptive_params = {
-                    'market_regime': current_regime,
-                    'volatility_threshold': regime_params['arbitrage_threshold']
-                }
-                
-                self.arbitrage_detector.update_adaptive_parameters(adaptive_params)
-            
-            # Update correlation manager parameters
-            if hasattr(self.correlation_manager, 'update_recovery_parameters'):
-                regime_params = self.regime_parameters.get(current_regime, self.regime_parameters['normal'])
-                
-                recovery_params = {
-                    'recovery_mode': 'active',
-                    'recovery_thresholds': {
-                        'min_correlation': 0.6,
-                        'max_correlation': 0.95,
-                        'min_loss_threshold': -0.01
-                    }
-                }
-                
-                self.correlation_manager.update_recovery_parameters(recovery_params)
-            
-            self.logger.debug(f"Market regime updated: {current_regime}")
+            # OLD CODE - DISABLED
+            # # Get current market regime
+            # market_analysis = self.market_analyzer.analyze_market_conditions()
+            # 
+            # if not market_analysis:
+            #     return
+            # 
+            # current_regime = market_analysis.get('market_regime', 'normal')
+            # 
+            # # Update arbitrage detector parameters
+            # if hasattr(self.arbitrage_detector, 'update_adaptive_parameters'):
+            #     regime_params = self.regime_parameters.get(current_regime, self.regime_parameters['normal'])
+            #     
+            #     adaptive_params = {
+            #         'market_regime': current_regime,
+            #         'volatility_threshold': regime_params['arbitrage_threshold']
+            #     }
+            #     
+            #     self.arbitrage_detector.update_adaptive_parameters(adaptive_params)
+            # 
+            # # Update correlation manager parameters
+            # if hasattr(self.correlation_manager, 'update_recovery_parameters'):
+            #     regime_params = self.regime_parameters.get(current_regime, self.regime_parameters['normal'])
+            #     
+            #     recovery_params = {
+            #         'recovery_mode': 'active',
+            #         'recovery_thresholds': {
+            #             'min_correlation': 0.6,
+            #             'max_correlation': 0.95,
+            #             'min_loss_threshold': -0.01
+            #         }
+            #     }
+            #     
+            #     self.correlation_manager.update_recovery_parameters(recovery_params)
+            # 
+            # self.logger.debug(f"Market regime updated: {current_regime}")
             
         except Exception as e:
             self.logger.error(f"Error updating market regime: {e}")

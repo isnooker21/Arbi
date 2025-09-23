@@ -43,7 +43,7 @@ from trading.adaptive_engine import AdaptiveEngine
 from trading.position_manager import PositionManager
 from trading.risk_manager import RiskManager
 
-from ai.market_analyzer import MarketAnalyzer
+# from ai.market_analyzer import MarketAnalyzer  # DISABLED - not used in simple trading system
 
 from data.data_feed import RealTimeDataFeed
 from data.database import DatabaseManager
@@ -73,7 +73,7 @@ class TradingSystem:
         self.arbitrage_detector = None
         self.correlation_manager = None
         self.adaptive_engine = None
-        self.market_analyzer = None
+        # self.market_analyzer = None  # DISABLED - not used in simple trading system
         self.data_feed = None
         self.database_manager = None
         
@@ -216,17 +216,18 @@ class TradingSystem:
             self.logger.info("Position manager initialized")
             
             # Initialize market analyzer (simplified)
-            self.market_analyzer = MarketAnalyzer(self.broker_api)
-            self.logger.info("Market analyzer initialized")
+        # Market Analyzer - DISABLED for simple trading system
+        # self.market_analyzer = MarketAnalyzer(self.broker_api)
+        # self.market_analyzer = None
             
             # Initialize trading components
             self.correlation_manager = CorrelationManager(
                 self.broker_api, 
-                self.market_analyzer  # Use market_analyzer instead of decision_engine
+                None  # No market analyzer needed for simple trading system
             )
             self.arbitrage_detector = TriangleArbitrageDetector(
                 self.broker_api, 
-                self.market_analyzer,  # Use market_analyzer instead of decision_engine
+                None,  # No market analyzer needed for simple trading system
                 self.correlation_manager  # Pass correlation_manager to arbitrage_detector
             )
             self.logger.info("Trading components initialized")
@@ -236,7 +237,7 @@ class TradingSystem:
                 self.broker_api,
                 self.arbitrage_detector,
                 self.correlation_manager,
-                self.market_analyzer
+                None  # No market analyzer needed for simple trading system
             )
             self.logger.info("Adaptive engine initialized")
             
@@ -372,8 +373,8 @@ class TradingSystem:
                 self.arbitrage_detector.stop_detection()
             
             if self.correlation_manager:
-                # Correlation manager doesn't need separate monitoring - it's integrated with arbitrage detector
-                pass
+                # Save recovery data before stopping
+                self.correlation_manager.stop()
             
             if self.position_manager:
                 self.position_manager.stop_position_monitoring()
@@ -439,11 +440,12 @@ class TradingSystem:
                         continue
                     
                     # Update market analysis
-                    if self.market_analyzer:
-                        try:
-                            market_conditions = self.market_analyzer.analyze_market_conditions()
-                        except Exception as e:
-                            self.logger.warning(f"Market analysis error: {e}")
+                    # Market analysis disabled for simple trading system
+                    # if self.market_analyzer:
+                    #     try:
+                    #         market_conditions = self.market_analyzer.analyze_market_conditions()
+                    #     except Exception as e:
+                    #         self.logger.warning(f"Market analysis error: {e}")
                     
                     # Check risk management
                     if self.risk_manager:
@@ -521,10 +523,10 @@ class TradingSystem:
             if self.correlation_manager:
                 self.correlation_manager.check_recovery_positions()
             
-            # Check market analyzer
-            if not self.market_analyzer:
-                self.logger.warning("⚠️ Market analyzer not initialized")
-                return False
+            # Check market analyzer - DISABLED for simple trading system
+            # if not self.market_analyzer:
+            #     self.logger.warning("⚠️ Market analyzer not initialized")
+            #     return False
             
             self.logger.debug("✅ System health check passed")
             return True
@@ -628,7 +630,7 @@ class TradingSystem:
                     'arbitrage_detector': self.arbitrage_detector is not None,
                     'correlation_manager': self.correlation_manager is not None,
                     'position_manager': self.position_manager is not None,
-                    'market_analyzer': self.market_analyzer is not None,
+                    # 'market_analyzer': self.market_analyzer is not None,  # DISABLED
                     'data_feed': self.data_feed is not None,
                     'risk_manager': self.risk_manager is not None
                 }

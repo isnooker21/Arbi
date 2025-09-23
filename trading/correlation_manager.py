@@ -23,9 +23,9 @@ from typing import Dict, List, Tuple, Optional
 import threading
 
 class CorrelationManager:
-    def __init__(self, broker_api, ai_engine):
+    def __init__(self, broker_api, ai_engine=None):
         self.broker = broker_api
-        self.ai = ai_engine
+        # self.ai = ai_engine  # DISABLED for simple trading system
         self.correlation_matrix = {}
         self.recovery_positions = {}
         self.is_running = False
@@ -66,6 +66,12 @@ class CorrelationManager:
         # Multi-timeframe correlation cache
         self.recovery_chains = {}  # เก็บข้อมูล recovery chain ของแต่ละกลุ่ม
         
+        # ระบบ Save/Load ข้อมูล
+        self.persistence_file = "data/recovery_positions.json"
+        
+        # Load existing recovery data on startup
+        self._load_recovery_data()
+        
     def start_chain_recovery(self, group_id: str, losing_pairs: List[Dict]):
         """เริ่ม chain recovery สำหรับกลุ่มที่ขาดทุน"""
         try:
@@ -83,6 +89,7 @@ class CorrelationManager:
             }
             
             self.recovery_chains[group_id] = recovery_chain
+            self._update_recovery_data()
             
             # เริ่ม recovery สำหรับแต่ละคู่ที่ขาดทุน
             for pair in losing_pairs:
@@ -811,6 +818,7 @@ class CorrelationManager:
                 
                 recovery_id = f"recovery_{group_id}_{symbol}_{int(datetime.now().timestamp())}"
                 self.recovery_positions[recovery_id] = correlation_position
+                self._update_recovery_data()
                 
                 self.logger.info(f"✅ Correlation recovery position opened: {symbol}")
                 return True
@@ -899,6 +907,7 @@ class CorrelationManager:
                 if success:
                     position['status'] = 'closed'
                     position['closed_at'] = datetime.now()
+                    self._update_recovery_data()
                     self.logger.info(f"✅ Recovery position closed: {position['symbol']}")
                 else:
                     self.logger.error(f"❌ Failed to close recovery position: {position['symbol']}")
@@ -927,6 +936,7 @@ class CorrelationManager:
                     position['status'] = 'closed'
                     position['closed_at'] = datetime.now()
                     position['close_reason'] = reason
+                    self._update_recovery_data()
                     self.logger.info(f"✅ Recovery position closed: {position['symbol']} (reason: {reason})")
                 else:
                     self.logger.error(f"❌ Failed to close recovery position: {position['symbol']}")
@@ -949,3 +959,103 @@ class CorrelationManager:
             'active_recovery_chains': len(self.recovery_chains),
             'active_recovery_positions': len([p for p in self.recovery_positions.values() if p['status'] == 'active'])
         }
+    
+    def _save_recovery_data(self):
+        """บันทึกข้อมูล recovery positions และ chains ลงไฟล์"""
+        try:
+            import json
+            import os
+            
+            # สร้างโฟลเดอร์ data ถ้าไม่มี
+            os.makedirs(os.path.dirname(self.persistence_file), exist_ok=True)
+            
+            # เตรียมข้อมูลสำหรับบันทึก
+            save_data = {
+                'recovery_positions': self.recovery_positions,
+                'recovery_chains': self.recovery_chains,
+                'recovery_metrics': self.recovery_metrics,
+                'saved_at': datetime.now().isoformat()
+            }
+            
+            # บันทึกลงไฟล์
+            with open(self.persistence_file, 'w') as f:
+                json.dump(save_data, f, indent=2, default=str)
+            
+            self.logger.debug(f"💾 Saved {len(self.recovery_positions)} recovery positions to {self.persistence_file}")
+            
+        except Exception as e:
+            self.logger.error(f"Error saving recovery data: {e}")
+    
+    def _load_recovery_data(self):
+        """โหลดข้อมูล recovery positions และ chains จากไฟล์"""
+        try:
+            import json
+            import os
+            from datetime import datetime
+            
+            if not os.path.exists(self.persistence_file):
+                self.logger.debug("No recovery persistence file found, starting fresh")
+                return
+            
+            with open(self.persistence_file, 'r') as f:
+                save_data = json.load(f)
+            
+            # โหลดข้อมูลกลับมา
+            self.recovery_positions = save_data.get('recovery_positions', {})
+            self.recovery_chains = save_data.get('recovery_chains', {})
+            self.recovery_metrics = save_data.get('recovery_metrics', {
+                'total_recoveries': 0,
+                'successful_recoveries': 0,
+                'failed_recoveries': 0,
+                'avg_recovery_time_hours': 0,
+                'total_recovered_amount': 0.0
+            })
+            
+            saved_at = save_data.get('saved_at', 'Unknown')
+            
+            if self.recovery_positions or self.recovery_chains:
+                self.logger.info(f"📂 Loaded recovery data from {self.persistence_file}")
+                self.logger.info(f"   Recovery positions: {len(self.recovery_positions)}")
+                self.logger.info(f"   Recovery chains: {len(self.recovery_chains)}")
+                self.logger.info(f"   Saved at: {saved_at}")
+            else:
+                self.logger.debug("No recovery data found in persistence file")
+                
+        except Exception as e:
+            self.logger.error(f"Error loading recovery data: {e}")
+            # เริ่มต้นใหม่ถ้าโหลดไม่ได้
+            self.recovery_positions = {}
+            self.recovery_chains = {}
+            self.recovery_metrics = {
+                'total_recoveries': 0,
+                'successful_recoveries': 0,
+                'failed_recoveries': 0,
+                'avg_recovery_time_hours': 0,
+                'total_recovered_amount': 0.0
+            }
+    
+    def _update_recovery_data(self):
+        """อัปเดตข้อมูล recovery และบันทึกลงไฟล์"""
+        try:
+            self._save_recovery_data()
+        except Exception as e:
+            self.logger.error(f"Error updating recovery data: {e}")
+    
+    def _remove_recovery_data(self, recovery_id: str):
+        """ลบข้อมูล recovery และบันทึกลงไฟล์"""
+        try:
+            if recovery_id in self.recovery_positions:
+                del self.recovery_positions[recovery_id]
+            self._save_recovery_data()
+        except Exception as e:
+            self.logger.error(f"Error removing recovery data: {e}")
+    
+    def stop(self):
+        """หยุดการทำงานของ Correlation Manager"""
+        try:
+            self.is_running = False
+            # บันทึกข้อมูลก่อนปิด
+            self._save_recovery_data()
+            self.logger.info("🛑 Correlation Manager stopped")
+        except Exception as e:
+            self.logger.error(f"Error stopping Correlation Manager: {e}")
