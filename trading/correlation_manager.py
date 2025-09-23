@@ -127,25 +127,14 @@ class CorrelationManager:
             self.logger.error(f"Error starting pair recovery: {e}")
     
     def _calculate_hedge_lot_size(self, original_lot: float, correlation: float, loss_percent: float) -> float:
-        """คำนวณขนาด lot สำหรับ hedge position"""
+        """คำนวณขนาด lot สำหรับ hedge position - ใช้ขนาดเดียวกับไม้เดิม"""
         try:
-            # คำนวณ hedge ratio ตาม correlation
-            hedge_ratio = min(2.0, max(0.5, correlation * 1.5))
-            
-            # ปรับขนาดตาม loss percent
-            loss_factor = min(2.0, max(0.8, abs(loss_percent) * 10))
-            
-            # คำนวณ lot size
-            hedge_lot = original_lot * hedge_ratio * loss_factor
+            # ใช้ lot size เดียวกันกับไม้เดิม (0.1 lot)
+            hedge_lot = original_lot
             
             # จำกัดขนาด lot
-            hedge_lot = min(hedge_lot, 10.0)  # สูงสุด 10 lot
+            hedge_lot = min(hedge_lot, 1.0)  # สูงสุด 1 lot
             hedge_lot = max(hedge_lot, 0.01)  # ต่ำสุด 0.01 lot
-            
-            # แปลงเป็นจำนวนเต็ม (lot size ต้องเป็นจำนวนเต็ม)
-            hedge_lot = round(hedge_lot, 2)
-            if hedge_lot != int(hedge_lot):
-                hedge_lot = int(hedge_lot) + 1
             
             return float(hedge_lot)
             
@@ -780,18 +769,9 @@ class CorrelationManager:
             # Calculate correlation volume
             correlation_volume = self._calculate_hedge_volume(original_position, correlation_candidate)
             
-            # Calculate correlation ratio
-            correlation_ratio = min(2.0, max(0.5, correlation * 1.5))
-            
-            # Calculate correlation lot size
+            # ใช้ lot size เดียวกันกับไม้เดิม (0.1 lot)
             lot_size = original_position.get('lot_size', original_position.get('volume', 0.1))
-            correlation_lot_size = lot_size * correlation_ratio
-            
-            # แปลงเป็นจำนวนเต็ม (lot size ต้องเป็นจำนวนเต็ม)
-            correlation_lot_size = round(correlation_lot_size, 2)
-            if correlation_lot_size != int(correlation_lot_size):
-                correlation_lot_size = int(correlation_lot_size) + 1
-            correlation_lot_size = float(correlation_lot_size)
+            correlation_lot_size = lot_size
             
             # Send correlation order
             success = self._send_correlation_order(symbol, correlation_lot_size, group_id)
@@ -809,7 +789,7 @@ class CorrelationManager:
                     'lot_size': correlation_lot_size,
                     'entry_price': entry_price,
                     'correlation': correlation,
-                    'correlation_ratio': correlation_ratio,
+                    'correlation_ratio': 1.0,  # ใช้ lot size เดียวกัน
                     'original_pair': original_position['symbol'],
                     'group_id': group_id,
                     'opened_at': datetime.now(),
