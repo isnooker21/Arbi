@@ -128,7 +128,7 @@ class CorrelationManager:
             self.logger.error(f"Error starting pair recovery: {e}")
     
     def _calculate_hedge_lot_size(self, original_lot: float, correlation: float, loss_percent: float, original_symbol: str = None) -> float:
-        """คำนวณขนาด lot สำหรับ hedge position - ใช้ balance-based sizing"""
+        """คำนวณขนาด lot สำหรับ hedge position - ใช้ uniform pip value"""
         try:
             # ดึง balance จาก broker
             balance = self.broker.get_account_balance()
@@ -136,21 +136,32 @@ class CorrelationManager:
                 self.logger.warning("Cannot get account balance - using original lot size")
                 return original_lot
             
-            # คำนวณ pip value สำหรับคู่เงินที่จะ hedge
+            # คำนวณ pip value ของ original position
             if original_symbol:
-                pip_value = TradingCalculations.calculate_pip_value(original_symbol, 0.01)
+                original_pip_value = TradingCalculations.calculate_pip_value(original_symbol, original_lot, self.broker)
                 
-                # คำนวณ lot size ตาม balance และ risk
-                hedge_lot = TradingCalculations.calculate_lot_from_balance(
-                    balance=balance,
-                    pip_value=pip_value,
-                    risk_percent=1.0,  # 1% risk
-                    max_loss_pips=100
-                )
+                # คำนวณ target pip value ตาม balance (base $10K = $10 pip value)
+                base_balance = 10000.0
+                balance_multiplier = balance / base_balance
+                target_pip_value = 10.0 * balance_multiplier
+                
+                # คำนวณ lot size ที่ให้ pip value เท่ากับ target
+                # ใช้ correlation เพื่อปรับขนาด hedge
+                hedge_pip_value = target_pip_value * correlation
+                
+                # หา lot size ที่ให้ pip value ตาม target
+                # ใช้คู่เงินเดิมเป็น base (สมมติว่า hedge ใช้คู่เงินเดียวกัน)
+                pip_value_per_001 = TradingCalculations.calculate_pip_value(original_symbol, 0.01, self.broker)
+                hedge_lot = (hedge_pip_value * 0.01) / pip_value_per_001
+                
+                # Round to valid lot size
+                hedge_lot = TradingCalculations.round_to_valid_lot_size(hedge_lot)
                 
                 # จำกัดขนาด lot
                 hedge_lot = min(hedge_lot, 1.0)  # สูงสุด 1 lot
-                hedge_lot = max(hedge_lot, 0.01)  # ต่ำสุด 0.01 lot
+                hedge_lot = max(hedge_lot, 0.1)  # ต่ำสุด 0.1 lot
+                
+                self.logger.info(f"📊 Hedge lot calculation: Original={original_lot:.4f}, Target Pip=${target_pip_value:.2f}, Hedge Lot={hedge_lot:.4f}")
                 
                 return float(hedge_lot)
             else:

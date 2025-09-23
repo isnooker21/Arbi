@@ -307,12 +307,13 @@ class TriangleArbitrageDetector:
             
             self.logger.info(f"💰 Account Balance: {balance:.2f} USD")
             
-            # คำนวณ lot sizes ตาม balance
+            # คำนวณ lot sizes ให้ pip value เท่ากัน + scale ตาม balance
             triangle_symbols = ['EURUSD', 'GBPUSD', 'EURGBP']
-            lot_sizes = TradingCalculations.get_triangle_lot_sizes(
+            lot_sizes = TradingCalculations.get_uniform_triangle_lots(
                 triangle_symbols=triangle_symbols,
                 balance=balance,
-                risk_percent=1.0  # 1% risk per trade
+                target_pip_value=10.0,  # $10 pip value base
+                broker_api=self.broker  # ส่ง broker API สำหรับดึงอัตราแลกเปลี่ยน
             )
             
             self.logger.info(f"📊 Calculated lot sizes: {lot_sizes}")

@@ -230,7 +230,7 @@ class AdaptiveEngine:
             self.logger.error(f"Error updating market regime: {e}")
     
     def _update_position_sizing(self):
-        """อัปเดต Position Sizing ตามยอดเงินในบัญชี - ใช้ balance real-time"""
+        """อัปเดต Position Sizing ตามยอดเงินในบัญชี - ใช้ uniform pip value"""
         try:
             # Get account balance real-time
             balance = self.broker.get_account_balance()
@@ -250,24 +250,21 @@ class AdaptiveEngine:
             
             self.logger.info(f"💰 Account Status - Balance: {balance:.2f}, Equity: {equity:.2f}, Free Margin: {free_margin:.2f}")
             
-            # Determine account tier based on balance
-            account_tier = self._determine_account_tier(balance)
+            # Calculate balance multiplier for uniform pip value
+            base_balance = 10000.0
+            balance_multiplier = balance / base_balance
+            target_pip_value = 10.0 * balance_multiplier
             
-            # Update position sizing parameters
-            tier_params = self.position_sizing['account_tiers'][account_tier]
-            
-            # Calculate dynamic lot size based on balance
-            base_lot_size = self.position_sizing['base_lot_size']
-            lot_multiplier = tier_params['lot_multiplier']
-            dynamic_lot_size = base_lot_size * lot_multiplier
+            self.logger.info(f"📊 Uniform pip value: Base=${10.0:.2f}, Multiplier={balance_multiplier:.2f}x, Target=${target_pip_value:.2f}")
             
             # Update arbitrage detector with balance information
             if hasattr(self.arbitrage_detector, 'update_adaptive_parameters'):
                 self.arbitrage_detector.update_adaptive_parameters({
-                    'position_size': dynamic_lot_size,
                     'account_balance': balance,
                     'account_equity': equity,
-                    'free_margin': free_margin
+                    'free_margin': free_margin,
+                    'target_pip_value': target_pip_value,
+                    'balance_multiplier': balance_multiplier
                 })
             
             # Update correlation manager with balance information
@@ -275,10 +272,12 @@ class AdaptiveEngine:
                 self.correlation_manager.update_recovery_parameters({
                     'account_balance': balance,
                     'account_equity': equity,
-                    'free_margin': free_margin
+                    'free_margin': free_margin,
+                    'target_pip_value': target_pip_value,
+                    'balance_multiplier': balance_multiplier
                 })
             
-            self.logger.info(f"📊 Position sizing updated: {account_tier} tier, lot size: {dynamic_lot_size}")
+            self.logger.info(f"📊 Position sizing updated: Balance=${balance:.2f}, Target Pip Value=${target_pip_value:.2f}")
             
         except Exception as e:
             self.logger.error(f"Error updating position sizing: {e}")

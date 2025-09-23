@@ -384,58 +384,115 @@ class TradingCalculations:
             return 0.0
     
     @staticmethod
-    def calculate_pip_value(symbol: str, lot_size: float = 0.01, account_currency: str = "USD") -> float:
-        """Calculate pip value for a given symbol and lot size"""
+    def calculate_pip_value(symbol: str, lot_size: float = 0.01, broker_api=None, account_currency: str = "USD") -> float:
+        """คำนวณ pip value ที่แม่นยำตามสูตรที่ถูกต้อง"""
         try:
-            # กำหนด pip value ต่อ 0.01 lot สำหรับแต่ละคู่เงิน
-            # คำนวณจาก contract size และ exchange rate
-            pip_values_per_001_lot = {
-                # Major pairs (USD base)
-                'EURUSD': 1.0,    # $1 per 0.01 lot per pip
-                'GBPUSD': 1.0,    # $1 per 0.01 lot per pip
-                'AUDUSD': 1.0,    # $1 per 0.01 lot per pip
-                'NZDUSD': 1.0,    # $1 per 0.01 lot per pip
-                'USDCAD': 0.75,   # $0.75 per 0.01 lot per pip
-                'USDCHF': 0.91,   # $0.91 per 0.01 lot per pip
-                
-                # JPY pairs
-                'USDJPY': 0.91,   # $0.91 per 0.01 lot per pip
-                'EURJPY': 0.91,   # $0.91 per 0.01 lot per pip
-                'GBPJPY': 0.91,   # $0.91 per 0.01 lot per pip
-                'AUDJPY': 0.91,   # $0.91 per 0.01 lot per pip
-                'NZDJPY': 0.91,   # $0.91 per 0.01 lot per pip
-                'CADJPY': 0.91,   # $0.91 per 0.01 lot per pip
-                'CHFJPY': 0.91,   # $0.91 per 0.01 lot per pip
-                
-                # Cross pairs
-                'EURGBP': 1.0,    # $1 per 0.01 lot per pip
-                'EURCHF': 1.0,    # $1 per 0.01 lot per pip
-                'EURCAD': 1.0,    # $1 per 0.01 lot per pip
-                'EURAUD': 1.0,    # $1 per 0.01 lot per pip
-                'EURNZD': 1.0,    # $1 per 0.01 lot per pip
-                'GBPCHF': 1.0,    # $1 per 0.01 lot per pip
-                'GBPCAD': 1.0,    # $1 per 0.01 lot per pip
-                'GBPAUD': 1.0,    # $1 per 0.01 lot per pip
-                'GBPNZD': 1.0,    # $1 per 0.01 lot per pip
-                'AUDCHF': 1.0,    # $1 per 0.01 lot per pip
-                'AUDCAD': 1.0,    # $1 per 0.01 lot per pip
-                'AUDNZD': 1.0,    # $1 per 0.01 lot per pip
-                'NZDCAD': 1.0,    # $1 per 0.01 lot per pip
-                'NZDCHF': 1.0,    # $1 per 0.01 lot per pip
-                'CADCHF': 1.0,    # $1 per 0.01 lot per pip
-            }
+            # ตัด suffix (.m, .raw, .pro) ออก
+            clean_symbol = symbol.upper().split('.')[0]
             
-            # ดึง pip value ต่อ 0.01 lot
-            base_pip_value = pip_values_per_001_lot.get(symbol.upper(), 1.0)
+            # ตรวจสอบ input parameters
+            if lot_size <= 0:
+                logging.getLogger(__name__).warning(f"Invalid lot size: {lot_size}, using 0.01")
+                lot_size = 0.01
             
-            # คำนวณ pip value สำหรับ lot size ที่กำหนด
-            pip_value = base_pip_value * (lot_size / 0.01)
+            if len(clean_symbol) != 6:
+                return 10.0  # fallback
+            
+            base_currency = clean_symbol[:3]
+            quote_currency = clean_symbol[3:]
+            
+            # Contract size
+            contract_size = 100000 * lot_size
+            
+            # Determine pip size
+            pip_size = 0.01 if quote_currency == 'JPY' else 0.0001
+            
+            # Case 1: Quote currency is USD (EURUSD, GBPUSD, etc.)
+            if quote_currency == 'USD':
+                pip_value = contract_size * pip_size
+                logging.getLogger(__name__).debug(f"USD Quote: {clean_symbol} = {contract_size} × {pip_size} = {pip_value:.2f}")
+                
+            # Case 2: JPY pairs (USDJPY, EURJPY, etc.)
+            elif quote_currency == 'JPY':
+                usd_jpy_rate = TradingCalculations.get_exchange_rate('USDJPY', broker_api)
+                pip_value = (contract_size * pip_size) / usd_jpy_rate
+                logging.getLogger(__name__).debug(f"JPY Pair: {clean_symbol} = ({contract_size} × {pip_size}) / {usd_jpy_rate:.2f} = {pip_value:.2f}")
+                
+            # Case 3: USD base pairs (USDCHF, USDCAD, etc.)
+            elif base_currency == 'USD':
+                usd_xxx_rate = TradingCalculations.get_exchange_rate(clean_symbol, broker_api)
+                pip_value = (contract_size * pip_size) / usd_xxx_rate
+                logging.getLogger(__name__).debug(f"USD Base: {clean_symbol} = ({contract_size} × {pip_size}) / {usd_xxx_rate:.2f} = {pip_value:.2f}")
+                
+            # Case 4: Cross pairs (EURGBP, EURAUD, etc.)
+            else:
+                quote_to_usd_rate = TradingCalculations.get_quote_to_usd_rate(quote_currency, broker_api)
+                pip_value = (contract_size * pip_size) * quote_to_usd_rate
+                logging.getLogger(__name__).debug(f"Cross Pair: {clean_symbol} = {contract_size} × {pip_size} × {quote_to_usd_rate:.4f} = {pip_value:.2f}")
             
             return pip_value
             
         except Exception as e:
             logging.getLogger(__name__).error(f"Error calculating pip value for {symbol}: {e}")
-            return 1.0  # Default fallback
+            # Fallback: ใช้ค่า default
+            return 100000 * lot_size * 0.0001
+    
+    
+    @staticmethod
+    def get_exchange_rate(symbol: str, broker_api) -> float:
+        """ดึงอัตราแลกเปลี่ยนจาก broker หรือใช้ fallback"""
+        try:
+            if broker_api and hasattr(broker_api, 'get_current_price'):
+                try:
+                    price_data = broker_api.get_current_price(symbol)
+                    if price_data and isinstance(price_data, (int, float)) and price_data > 0:
+                        return float(price_data)
+                except:
+                    pass
+            
+            # Fallback rates (approximate)
+            fallback_rates = {
+                'EURUSD': 1.10,
+                'GBPUSD': 1.27, 
+                'AUDUSD': 0.67,
+                'NZDUSD': 0.62,
+                'USDJPY': 149.50,
+                'USDCAD': 1.35,
+                'USDCHF': 0.92
+            }
+            
+            return fallback_rates.get(symbol, 1.0)
+            
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Error getting exchange rate for {symbol}: {e}")
+            return 1.0
+    
+    @staticmethod
+    def get_quote_to_usd_rate(currency: str, broker_api) -> float:
+        """ได้อัตราแลกเปลี่ยนจาก quote currency เป็น USD"""
+        try:
+            if currency == 'USD':
+                return 1.0
+            elif currency == 'EUR':
+                return TradingCalculations.get_exchange_rate('EURUSD', broker_api)
+            elif currency == 'GBP':  
+                return TradingCalculations.get_exchange_rate('GBPUSD', broker_api)
+            elif currency == 'AUD':
+                return TradingCalculations.get_exchange_rate('AUDUSD', broker_api)
+            elif currency == 'CAD':
+                usd_cad = TradingCalculations.get_exchange_rate('USDCAD', broker_api)
+                return 1.0 / usd_cad
+            elif currency == 'CHF':
+                usd_chf = TradingCalculations.get_exchange_rate('USDCHF', broker_api)
+                return 1.0 / usd_chf
+            elif currency == 'NZD':
+                return TradingCalculations.get_exchange_rate('NZDUSD', broker_api)
+            else:
+                return 1.0  # fallback
+                
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Error getting quote to USD rate for {currency}: {e}")
+            return 1.0
     
     @staticmethod
     def calculate_lot_from_balance(balance: float, pip_value: float, risk_percent: float = 1.0, max_loss_pips: float = 100) -> float:
@@ -452,12 +509,18 @@ class TradingCalculations:
             # lot_size = risk_amount / (pip_value * max_loss_pips)
             theoretical_lot = risk_amount / (pip_value * max_loss_pips)
             
+            # Debug log
+            logging.getLogger(__name__).info(f"💰 Lot calculation: Balance={balance:.2f}, Risk%={risk_percent:.1f}%, Risk Amount={risk_amount:.2f}, Pip Value={pip_value:.2f}, Max Loss Pips={max_loss_pips}, Theoretical Lot={theoretical_lot:.4f}")
+            
             # Round to valid lot size
-            return TradingCalculations.round_to_valid_lot_size(theoretical_lot)
+            final_lot = TradingCalculations.round_to_valid_lot_size(theoretical_lot)
+            logging.getLogger(__name__).info(f"📊 Final lot size: {final_lot:.4f}")
+            
+            return final_lot
             
         except Exception as e:
             logging.getLogger(__name__).error(f"Error calculating lot from balance: {e}")
-            return 0.01  # Minimum lot size
+            return 0.1  # Minimum lot size
     
     @staticmethod
     def round_to_valid_lot_size(calculated_lot: float, min_lot: float = 0.01, lot_step: float = 0.01) -> float:
@@ -469,14 +532,16 @@ class TradingCalculations:
             # Round to nearest lot step
             rounded_lot = round(calculated_lot / lot_step) * lot_step
             
-            # Ensure minimum lot size
+            # Ensure minimum lot size (broker requirement)
             if rounded_lot < min_lot:
                 rounded_lot = min_lot
+                logging.getLogger(__name__).info(f"📊 Lot size adjusted to minimum: {calculated_lot:.4f} → {rounded_lot:.2f}")
             
             # Ensure maximum lot size (safety limit)
-            max_lot = 10.0
+            max_lot = 5.0
             if rounded_lot > max_lot:
                 rounded_lot = max_lot
+                logging.getLogger(__name__).warning(f"📊 Lot size capped at maximum: {rounded_lot:.2f}")
             
             return rounded_lot
             
@@ -485,8 +550,8 @@ class TradingCalculations:
             return min_lot
     
     @staticmethod
-    def get_triangle_lot_sizes(triangle_symbols: List[str], balance: float, risk_percent: float = 1.0) -> Dict[str, float]:
-        """Calculate lot sizes for triangle arbitrage based on balance"""
+    def get_uniform_triangle_lots(triangle_symbols: List[str], balance: float, target_pip_value: float = 10.0, broker_api=None) -> Dict[str, float]:
+        """คำนวณ lot sizes ให้ pip value เท่ากัน + scale ตาม balance"""
         try:
             if not triangle_symbols or len(triangle_symbols) != 3:
                 return {}
@@ -494,31 +559,56 @@ class TradingCalculations:
             if balance <= 0:
                 return {}
             
-            # คำนวณ risk amount ต่อ leg
-            total_risk = balance * (risk_percent / 100)
-            risk_per_leg = total_risk / 3  # แบ่งความเสี่ยงเท่าๆ กันทั้ง 3 legs
+            # คำนวณ balance multiplier (base $10K = 1.0x)
+            base_balance = 10000.0
+            balance_multiplier = balance / base_balance
+            
+            # คำนวณ target pip value ตาม balance
+            scaled_pip_value = target_pip_value * balance_multiplier
+            
+            logging.getLogger(__name__).info(f"💰 Uniform lot calculation: Balance=${balance:.2f}, Multiplier={balance_multiplier:.2f}x, Target Pip Value=${scaled_pip_value:.2f}")
             
             lot_sizes = {}
             
             for symbol in triangle_symbols:
                 # คำนวณ pip value ต่อ 0.01 lot
-                pip_value = TradingCalculations.calculate_pip_value(symbol, 0.01)
+                pip_value_per_001 = TradingCalculations.calculate_pip_value(symbol, 0.01, broker_api)
                 
-                # คำนวณ lot size สำหรับ leg นี้
-                lot_size = TradingCalculations.calculate_lot_from_balance(
-                    balance=risk_per_leg * 3,  # ใช้ balance เต็มสำหรับคำนวณ
-                    pip_value=pip_value,
-                    risk_percent=risk_percent,
-                    max_loss_pips=100
-                )
+                # คำนวณ lot size ที่ให้ pip value ตาม target
+                # pip_value = lot_size * pip_value_per_001 / 0.01
+                # lot_size = pip_value * 0.01 / pip_value_per_001
+                if pip_value_per_001 > 0:
+                    lot_size = (scaled_pip_value / pip_value_per_001) * 0.01
+                else:
+                    lot_size = 0.1  # Fallback
+                
+                # Round to valid lot size (0.01 step)
+                lot_size = TradingCalculations.round_to_valid_lot_size(lot_size)
+                
+                # ใช้ lot ขั้นต่ำ 0.1 ถ้าคำนวณได้ต่ำกว่า
+                if lot_size < 0.1:
+                    lot_size = 0.1
+                    logging.getLogger(__name__).info(f"📊 {symbol}: Lot size adjusted to minimum: {lot_size:.2f}")
+                else:
+                    logging.getLogger(__name__).info(f"📊 {symbol}: Using calculated lot size: {lot_size:.4f}")
+                
+                # คำนวณ pip value จริงที่ได้
+                actual_pip_value = TradingCalculations.calculate_pip_value(symbol, lot_size, broker_api)
                 
                 lot_sizes[symbol] = lot_size
+                logging.getLogger(__name__).info(f"📊 {symbol}: Lot Size={lot_size:.4f}, Actual Pip Value=${actual_pip_value:.2f}")
             
             return lot_sizes
             
         except Exception as e:
-            logging.getLogger(__name__).error(f"Error calculating triangle lot sizes: {e}")
+            logging.getLogger(__name__).error(f"Error calculating uniform triangle lots: {e}")
             return {}
+    
+    @staticmethod
+    def get_triangle_lot_sizes(triangle_symbols: List[str], balance: float, risk_percent: float = 1.0, broker_api=None) -> Dict[str, float]:
+        """Calculate lot sizes for triangle arbitrage based on balance (legacy method)"""
+        # ใช้ uniform method แทน
+        return TradingCalculations.get_uniform_triangle_lots(triangle_symbols, balance, 10.0, broker_api)
     
     @staticmethod
     def calculate_drawdown(equity_curve: List[float]) -> Tuple[float, float, float]:
