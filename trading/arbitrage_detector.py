@@ -182,8 +182,8 @@ class TriangleArbitrageDetector:
                 # Log every triangle for debugging
                 self.logger.info(f"Triangle {triangles_checked}: {triangle} = {arbitrage_percent:.4f}%")
                 
-                # Only count as opportunity if > 0.001% (much lower threshold)
-                if arbitrage_percent > 0.001:
+                # Only count as opportunity if > 0.0001% (ultra low threshold)
+                if arbitrage_percent > 0.0001:
                     opportunities_found += 1
                 
                 # Log every 10 triangles checked
@@ -191,8 +191,8 @@ class TriangleArbitrageDetector:
                     self.logger.info(f"Progress: {triangles_checked}/{len(self.triangle_combinations)} triangles, "
                                    f"{valid_arbitrages} valid arbitrages, {opportunities_found} opportunities")
                 
-                # Only do full analysis for opportunities > 0.001%
-                if arbitrage_percent < 0.001:
+                # Only do full analysis for opportunities > 0.0001%
+                if arbitrage_percent < 0.0001:
                     continue
                 
                 # Multi-timeframe analysis (only for promising opportunities)
@@ -219,12 +219,12 @@ class TriangleArbitrageDetector:
                 # AI evaluation
                 ai_decision = self.ai.evaluate_arbitrage_opportunity(opportunity)
                 
-                if ai_decision.should_act and ai_decision.confidence > 0.3:
+                if ai_decision.should_act and ai_decision.confidence > 0.2:
                     self.logger.info(f"🎯 ARBITRAGE OPPORTUNITY: {triangle}, "
                                    f"Percent: {arbitrage_percent:.4f}%, "
                                    f"Confidence: {ai_decision.confidence:.2f}")
                     self.execute_triangle_entry(triangle, ai_decision)
-                elif arbitrage_percent and arbitrage_percent > 0.005:
+                elif arbitrage_percent and arbitrage_percent > 0.001:
                     # Log opportunities that are close but don't meet criteria
                     self.logger.info(f"🔍 Near opportunity: {triangle}, "
                                    f"Percent: {arbitrage_percent:.4f}%, "

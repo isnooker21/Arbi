@@ -40,6 +40,7 @@ from trading.arbitrage_detector import TriangleArbitrageDetector
 from trading.correlation_manager import CorrelationManager
 from trading.position_manager import PositionManager
 from trading.risk_manager import RiskManager
+from trading.flexible_trader import FlexibleTrader
 
 from ai.rule_engine import RuleEngine
 from ai.learning_module import LearningModule
@@ -74,6 +75,7 @@ class TradingSystem:
         self.position_manager = None
         self.arbitrage_detector = None
         self.correlation_manager = None
+        self.flexible_trader = None
         self.rule_engine = None
         self.learning_module = None
         self.market_analyzer = None
@@ -250,6 +252,10 @@ class TradingSystem:
                 self.broker_api, 
                 self.decision_engine
             )
+            self.flexible_trader = FlexibleTrader(
+                self.broker_api, 
+                self.decision_engine
+            )
             self.logger.info("Trading components initialized")
             
             # Initialize data feed
@@ -338,6 +344,7 @@ class TradingSystem:
             self.position_manager.start_position_monitoring()
             self.arbitrage_detector.start_detection()
             self.correlation_manager.start_correlation_monitoring()
+            self.flexible_trader.start_flexible_trading()
             
             self.is_running = True
             self.emergency_stop = False
@@ -369,6 +376,9 @@ class TradingSystem:
             
             if self.correlation_manager:
                 self.correlation_manager.stop_correlation_monitoring()
+            
+            if self.flexible_trader:
+                self.flexible_trader.stop_flexible_trading()
             
             if self.position_manager:
                 self.position_manager.stop_position_monitoring()
