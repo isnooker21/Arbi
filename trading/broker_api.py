@@ -466,27 +466,15 @@ class BrokerAPI:
                 if not mt5.symbol_select(symbol, True):
                     self.logger.warning(f"⚠️ Could not select symbol {symbol}, but continuing...")
                 
-                # Get symbol info to determine filling type
-                symbol_info = mt5.symbol_info(symbol)
-                if symbol_info is None:
-                    self.logger.error(f"❌ Symbol {symbol} not found in MT5")
-                    return None
-                
-                # Determine appropriate filling type
-                filling_type = self._get_filling_type(symbol_info)
-                
-                # Prepare request for REAL TRADING
+                # Prepare request for REAL TRADING (แบบง่ายเหมือน Huakuy_)
                 request = {
                     "action": mt5.TRADE_ACTION_DEAL,
                     "symbol": symbol,
                     "volume": volume,
                     "type": order_type_mt5,
                     "price": price,
-                    "deviation": 20,  # Increased deviation for better execution
                     "magic": 234000,  # Use unique magic number
                     "comment": comment or "Arbitrage Trade",
-                    "type_time": mt5.ORDER_TIME_GTC,
-                    "type_filling": filling_type,  # Use appropriate filling type
                 }
                 
                 # Add stop loss and take profit
@@ -506,48 +494,36 @@ class BrokerAPI:
                     return None
                 
                 # Send order
-                self.logger.info(f"🔍 Sending order to MT5: {request}")
+                self.logger.info(f"🚀 ส่ง Order: {symbol} {order_type_mt5} Volume: {volume}")
                 result = mt5.order_send(request)
                 
                 # Check result
                 if result is None:
-                    error_code = mt5.last_error()
-                    self.logger.error(f"❌ Order send failed - no result from MT5 for {symbol}, error: {error_code}")
+                    last_error = mt5.last_error()
+                    self.logger.error(f"❌ ส่ง Order ไม่สำเร็จ: {last_error}")
                     return None
                 
                 # Log detailed result
-                self.logger.info(f"📊 Order result: retcode={result.retcode}, deal={result.deal}, order={result.order}")
+                self.logger.info(f"📋 Result: RetCode={result.retcode}")
                 
-                if result.retcode != mt5.TRADE_RETCODE_DONE:
-                    error_msg = self._get_error_message(result.retcode)
-                    self.logger.error(f"❌ Order failed: {error_msg} (retcode={result.retcode})")
+                if result.retcode == 10009:  # TRADE_RETCODE_DONE
+                    self.logger.info(f"✅ สำเร็จ! Deal: {result.deal}, Order: {result.order}")
+                    return {
+                        'order_id': result.order,
+                        'symbol': symbol,
+                        'type': order_type,
+                        'volume': volume,
+                        'price': result.price,
+                        'sl': sl,
+                        'tp': tp,
+                        'retcode': result.retcode,
+                        'comment': result.comment,
+                        'deal': result.deal
+                    }
+                else:
+                    error_desc = self._get_error_message(result.retcode)
+                    self.logger.error(f"❌ ไม่สำเร็จ: RetCode {result.retcode} - {error_desc}")
                     return None
-                
-                # Success!
-                self.logger.info(f"✅ Order placed successfully, order_id={result.order}")
-                return {
-                    'order_id': result.order,
-                    'symbol': symbol,
-                    'type': order_type,
-                    'volume': volume,
-                    'price': price,
-                    'sl': sl,
-                    'tp': tp,
-                    'retcode': result.retcode,
-                    'comment': result.comment
-                }
-                
-                return {
-                    'order_id': result.order,
-                    'symbol': symbol,
-                    'type': order_type,
-                    'volume': volume,
-                    'price': price,
-                    'sl': sl,
-                    'tp': tp,
-                    'retcode': result.retcode,
-                    'comment': result.comment
-                }
             
             return None
             
@@ -570,51 +546,39 @@ class BrokerAPI:
                 
                 position = position[0]
                 
-                # Get symbol info to determine filling type
-                symbol_info = mt5.symbol_info(position.symbol)
-                if symbol_info is None:
-                    self.logger.error(f"❌ Symbol {position.symbol} not found for closing")
-                    return False
-                
-                # Determine appropriate filling type for closing
-                filling_type = self._get_filling_type(symbol_info)
-                
                 # Determine close order type
                 close_type = mt5.ORDER_TYPE_SELL if position.type == mt5.POSITION_TYPE_BUY else mt5.ORDER_TYPE_BUY
                 
-                # Prepare close request
+                # Prepare close request (แบบง่ายเหมือน Huakuy_)
                 request = {
                     "action": mt5.TRADE_ACTION_DEAL,
                     "symbol": position.symbol,
                     "volume": position.volume,
                     "type": close_type,
                     "position": order_id,
-                    "deviation": 20,
                     "magic": 234000,
                     "comment": "Close Position",
-                    "type_time": mt5.ORDER_TIME_GTC,
-                    "type_filling": filling_type,  # Use appropriate filling type
                 }
                 
                 # Send close order
-                self.logger.info(f"🔍 Closing position {order_id}: {request}")
+                self.logger.info(f"🚀 ปิด Position: {order_id}")
                 result = mt5.order_send(request)
                 
                 if result is None:
-                    error_code = mt5.last_error()
-                    self.logger.error(f"❌ Close order failed - no result from MT5, error: {error_code}")
+                    last_error = mt5.last_error()
+                    self.logger.error(f"❌ ปิด Position ไม่สำเร็จ: {last_error}")
                     return False
                 
                 # Log detailed result
-                self.logger.info(f"📊 Close result: retcode={result.retcode}, deal={result.deal}, order={result.order}")
+                self.logger.info(f"📋 Close Result: RetCode={result.retcode}")
                 
-                if result.retcode != mt5.TRADE_RETCODE_DONE:
-                    error_msg = self._get_error_message(result.retcode)
-                    self.logger.error(f"❌ Close order failed: {error_msg} (retcode={result.retcode})")
+                if result.retcode == 10009:  # TRADE_RETCODE_DONE
+                    self.logger.info(f"✅ ปิดสำเร็จ! Deal: {result.deal}, Order: {result.order}")
+                    return True
+                else:
+                    error_desc = self._get_error_message(result.retcode)
+                    self.logger.error(f"❌ ไม่สำเร็จ: RetCode {result.retcode} - {error_desc}")
                     return False
-                
-                self.logger.info(f"✅ Position {order_id} closed successfully")
-                return True
             
             return False
             
