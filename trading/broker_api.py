@@ -462,6 +462,19 @@ class BrokerAPI:
                         return None
                     price = tick.ask if order_type.upper() == 'BUY' else tick.bid
                 
+                # Validate symbol first
+                symbol_info = mt5.symbol_info(symbol)
+                if symbol_info is None:
+                    self.logger.error(f"❌ Symbol {symbol} not found in MT5")
+                    return None
+                
+                # Check if symbol is selectable
+                if not symbol_info.selectable:
+                    self.logger.warning(f"⚠️ Symbol {symbol} is not selectable, trying to select...")
+                    if not mt5.symbol_select(symbol, True):
+                        self.logger.error(f"❌ Failed to select symbol {symbol}")
+                        return None
+                
                 # Prepare request for REAL TRADING
                 request = {
                     "action": mt5.TRADE_ACTION_DEAL,
@@ -484,14 +497,42 @@ class BrokerAPI:
                 
                 # Send order
                 self.logger.info(f"📤 Sending REAL order: {symbol} {order_type} {volume} @ {price}")
+                self.logger.debug(f"📋 Order request: {request}")
+                
+                # Try multiple order methods
                 result = mt5.order_send(request)
+                
+                # If first attempt fails, try with different filling type
+                if result is None:
+                    self.logger.info(f"🔄 Retrying order with different filling type...")
+                    request["type_filling"] = mt5.ORDER_FILLING_IOC
+                    result = mt5.order_send(request)
                 
                 if result is None:
                     self.logger.error(f"❌ Order send failed: No result from MT5 for {symbol}")
                     # Try to get last error
                     error = mt5.last_error()
                     if error:
-                        self.logger.error(f"MT5 Error: {error}")
+                        error_code, error_desc = error
+                        if error_code == 1:  # Success code
+                            self.logger.info(f"✅ MT5 Success: {error_desc}")
+                            # Try to get the result again
+                            result = mt5.last_result()
+                            if result:
+                                self.logger.info(f"✅ Order executed successfully: {symbol} {order_type} {volume} @ {price}")
+                                return {
+                                    'order_id': result.order,
+                                    'symbol': symbol,
+                                    'type': order_type,
+                                    'volume': volume,
+                                    'price': price,
+                                    'sl': sl,
+                                    'tp': tp,
+                                    'retcode': result.retcode,
+                                    'comment': result.comment
+                                }
+                        else:
+                            self.logger.error(f"MT5 Error: {error}")
                     return None
                 
                 if result.retcode != mt5.TRADE_RETCODE_DONE:
