@@ -25,7 +25,7 @@ import logging
 from typing import Dict, List, Tuple, Optional
 import asyncio
 import threading
-import talib
+# import talib  # ไม่ใช้ในระบบนี้
 import time
 
 class TriangleArbitrageDetector:
