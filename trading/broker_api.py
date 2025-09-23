@@ -579,12 +579,25 @@ class BrokerAPI:
                 self.logger.info(f"📋 Close Result: RetCode={result.retcode}")
                 
                 if result.retcode == 10009:  # TRADE_RETCODE_DONE
+                    # คำนวณ PnL จากข้อมูล position
+                    pnl = position.profit
                     self.logger.info(f"✅ ปิดสำเร็จ! Deal: {result.deal}, Order: {result.order}")
-                    return True
+                    self.logger.info(f"   💰 PnL: {pnl:.2f} USD")
+                    return {
+                        'success': True,
+                        'order_id': result.order,
+                        'deal_id': result.deal,
+                        'pnl': pnl,
+                        'symbol': position.symbol,
+                        'volume': position.volume
+                    }
                 else:
                     error_desc = self._get_error_message(result.retcode)
                     self.logger.error(f"❌ ไม่สำเร็จ: RetCode {result.retcode} - {error_desc}")
-                    return False
+                    return {
+                        'success': False,
+                        'error': error_desc
+                    }
             
             return False
             

@@ -439,7 +439,8 @@ class CorrelationManager:
                     'hedge_position': order,
                     'correlation': correlation,
                     'start_time': datetime.now(),
-                    'status': 'active'
+                    'status': 'active',
+                    'order_id': order.get('order_id') if isinstance(order, dict) else None
                 }
                 
                 self.logger.info(f"✅ Hedge position executed: {symbol} {order_type} {hedge_volume}")
@@ -479,6 +480,72 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"Error calculating hedge volume: {e}")
             return 0.1  # Default fallback
+    
+    def check_recovery_positions(self):
+        """ตรวจสอบสถานะของ recovery positions และปิดเมื่อกำไร"""
+        try:
+            if not self.is_running:
+                return
+            
+            positions_to_close = []
+            
+            for recovery_id, recovery_data in self.recovery_positions.items():
+                if recovery_data['status'] != 'active':
+                    continue
+                
+                # ตรวจสอบ PnL ของ recovery position
+                order_id = recovery_data.get('order_id')
+                if order_id:
+                    all_positions = self.broker.get_all_positions()
+                    recovery_pnl = 0.0
+                    
+                    for pos in all_positions:
+                        if pos['ticket'] == order_id:
+                            recovery_pnl = pos['profit']
+                            break
+                    
+                    # ถ้า recovery position กำไร ให้ปิด
+                    if recovery_pnl > 0:
+                        self.logger.info(f"✅ Recovery position {recovery_id} profitable - closing")
+                        positions_to_close.append(recovery_id)
+                    else:
+                        self.logger.debug(f"Recovery position {recovery_id} PnL: {recovery_pnl:.2f} USD")
+            
+            # ปิด recovery positions ที่กำไร
+            for recovery_id in positions_to_close:
+                self._close_recovery_position(recovery_id)
+                
+        except Exception as e:
+            self.logger.error(f"Error checking recovery positions: {e}")
+    
+    def _close_recovery_position(self, recovery_id: str):
+        """ปิด recovery position"""
+        try:
+            if recovery_id not in self.recovery_positions:
+                return
+            
+            recovery_data = self.recovery_positions[recovery_id]
+            order_id = recovery_data.get('order_id')
+            
+            if order_id:
+                # ปิดออเดอร์
+                result = self.broker.close_order(order_id)
+                
+                if isinstance(result, dict) and result.get('success'):
+                    pnl = result.get('pnl', 0)
+                    self.logger.info(f"✅ Recovery position {recovery_id} closed - PnL: {pnl:.2f} USD")
+                    
+                    # อัพเดท metrics
+                    self.recovery_metrics['successful_recoveries'] += 1
+                    self.recovery_metrics['total_recovered_amount'] += pnl
+                else:
+                    self.logger.warning(f"Failed to close recovery position {recovery_id}")
+            
+            # ลบ recovery position
+            del self.recovery_positions[recovery_id]
+            
+        except Exception as e:
+            self.logger.error(f"Error closing recovery position {recovery_id}: {e}")
     
     def perform_portfolio_rebalancing(self):
         """

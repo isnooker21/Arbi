@@ -29,9 +29,10 @@ import threading
 import time
 
 class TriangleArbitrageDetector:
-    def __init__(self, broker_api, ai_engine):
+    def __init__(self, broker_api, ai_engine, correlation_manager=None):
         self.broker = broker_api
         self.ai = ai_engine
+        self.correlation_manager = correlation_manager  # เพิ่ม correlation manager
         self.active_triangles = {}
         self.is_running = False
         self.logger = logging.getLogger(__name__)
@@ -1466,21 +1467,49 @@ class TriangleArbitrageDetector:
                     groups_to_close.append(group_id)
                     continue
                 
-                # ตรวจสอบสถานะของแต่ละตำแหน่ง
-                all_profitable = True
+                # ตรวจสอบ PnL จริงของแต่ละตำแหน่ง
+                total_group_pnl = 0.0
+                all_positions_profitable = True
+                
                 for position in group_data['positions']:
-                    # ตรวจสอบ PnL ของแต่ละตำแหน่ง
-                    # TODO: ใช้ broker API ตรวจสอบ PnL จริง
-                    # position_pnl = self.broker.get_position_pnl(position['symbol'])
-                    # if position_pnl < 0:
-                    #     all_profitable = False
-                    #     break
-                    pass  # ใช้ mock data ชั่วคราว
+                    # หา order_id จาก broker API
+                    order_id = position.get('order_id')
+                    if order_id:
+                        # ตรวจสอบ PnL จาก broker API
+                        all_positions = self.broker.get_all_positions()
+                        position_pnl = 0.0
+                        
+                        for pos in all_positions:
+                            if pos['ticket'] == order_id:
+                                position_pnl = pos['profit']
+                                break
+                        
+                        total_group_pnl += position_pnl
+                        
+                        # ตรวจสอบว่าตำแหน่งนี้กำไรหรือไม่
+                        if position_pnl < 0:
+                            all_positions_profitable = False
+                        
+                        self.logger.debug(f"   Position {position['symbol']}: PnL = {position_pnl:.2f} USD")
+                    else:
+                        self.logger.warning(f"   No order_id found for position {position['symbol']}")
+                        all_positions_profitable = False
+                
+                # แสดงผล PnL รวมของกลุ่ม
+                pnl_status = "💰" if total_group_pnl > 0 else "💸" if total_group_pnl < 0 else "⚖️"
+                self.logger.info(f"📊 Group {group_id} PnL: {pnl_status} {total_group_pnl:.2f} USD")
                 
                 # ถ้าทุกตำแหน่งกำไร ให้ปิดกลุ่ม
-                if all_profitable:
+                if all_positions_profitable and total_group_pnl > 0:
                     self.logger.info(f"✅ Group {group_id} all positions profitable - closing group")
                     groups_to_close.append(group_id)
+                elif total_group_pnl < -10:  # ถ้าขาดทุนมากกว่า 10 USD ให้ปิดกลุ่ม
+                    self.logger.warning(f"⚠️ Group {group_id} losing too much - closing group")
+                    groups_to_close.append(group_id)
+                elif total_group_pnl < 0 and self.correlation_manager:  # ถ้าขาดทุนและมี correlation manager
+                    # เริ่ม correlation recovery
+                    self.logger.info(f"🔄 Group {group_id} losing - starting correlation recovery")
+                    self._start_correlation_recovery(group_id, group_data, total_group_pnl)
             
             # ปิดกลุ่มที่ครบเงื่อนไข
             for group_id in groups_to_close:
@@ -1488,6 +1517,45 @@ class TriangleArbitrageDetector:
                 
         except Exception as e:
             self.logger.error(f"Error checking group status: {e}")
+    
+    def _start_correlation_recovery(self, group_id: str, group_data: Dict, total_pnl: float):
+        """เริ่ม correlation recovery สำหรับกลุ่มที่ขาดทุน"""
+        try:
+            if not self.correlation_manager:
+                self.logger.warning("Correlation manager not available")
+                return
+            
+            # หาตำแหน่งที่ขาดทุน
+            losing_pairs = []
+            for position in group_data['positions']:
+                order_id = position.get('order_id')
+                if order_id:
+                    # ตรวจสอบ PnL จาก broker API
+                    all_positions = self.broker.get_all_positions()
+                    position_pnl = 0.0
+                    
+                    for pos in all_positions:
+                        if pos['ticket'] == order_id:
+                            position_pnl = pos['profit']
+                            break
+                    
+                    if position_pnl < 0:
+                        losing_pairs.append({
+                            'symbol': position['symbol'],
+                            'direction': position['direction'],
+                            'loss_percent': (position_pnl / 100) * 100,  # แปลงเป็นเปอร์เซ็นต์
+                            'order_id': order_id,
+                            'volume': position.get('lot_size', 0.1)
+                        })
+            
+            if losing_pairs:
+                self.logger.info(f"🔄 Starting correlation recovery for {len(losing_pairs)} losing pairs")
+                self.correlation_manager.start_chain_recovery(group_id, losing_pairs)
+            else:
+                self.logger.info("No losing pairs found for correlation recovery")
+                
+        except Exception as e:
+            self.logger.error(f"Error starting correlation recovery: {e}")
     
     def _close_group(self, group_id: str):
         """ปิดกลุ่ม arbitrage พร้อมกันทั้งกลุ่ม"""
@@ -1529,13 +1597,28 @@ class TriangleArbitrageDetector:
                     
                     if order_id:
                         result = self.broker.close_order(order_id)
-                        results[result_index] = {
-                            'success': result,
-                            'symbol': order_data['symbol'],
-                            'direction': order_data['direction'],
-                            'order_id': order_id,
-                            'index': result_index
-                        }
+                        
+                        if isinstance(result, dict):
+                            results[result_index] = {
+                                'success': result['success'],
+                                'symbol': order_data['symbol'],
+                                'direction': order_data['direction'],
+                                'order_id': order_id,
+                                'pnl': result.get('pnl', 0),
+                                'deal_id': result.get('deal_id'),
+                                'index': result_index
+                            }
+                        else:
+                            # Fallback for old return format
+                            results[result_index] = {
+                                'success': result,
+                                'symbol': order_data['symbol'],
+                                'direction': order_data['direction'],
+                                'order_id': order_id,
+                                'pnl': 0,
+                                'deal_id': None,
+                                'index': result_index
+                            }
                     else:
                         # Fallback: หา order_id จาก broker API
                         all_positions = self.broker.get_all_positions()
@@ -1553,13 +1636,27 @@ class TriangleArbitrageDetector:
                         
                         if found_order_id:
                             result = self.broker.close_order(found_order_id)
-                            results[result_index] = {
-                                'success': result,
-                                'symbol': order_data['symbol'],
-                                'direction': order_data['direction'],
-                                'order_id': found_order_id,
-                                'index': result_index
-                            }
+                            
+                            if isinstance(result, dict):
+                                results[result_index] = {
+                                    'success': result['success'],
+                                    'symbol': order_data['symbol'],
+                                    'direction': order_data['direction'],
+                                    'order_id': found_order_id,
+                                    'pnl': result.get('pnl', 0),
+                                    'deal_id': result.get('deal_id'),
+                                    'index': result_index
+                                }
+                            else:
+                                results[result_index] = {
+                                    'success': result,
+                                    'symbol': order_data['symbol'],
+                                    'direction': order_data['direction'],
+                                    'order_id': found_order_id,
+                                    'pnl': 0,
+                                    'deal_id': None,
+                                    'index': result_index
+                                }
                         else:
                             self.logger.warning(f"Order not found for {order_data['symbol']}")
                             results[result_index] = {
@@ -1567,6 +1664,8 @@ class TriangleArbitrageDetector:
                                 'symbol': order_data['symbol'],
                                 'direction': order_data['direction'],
                                 'order_id': None,
+                                'pnl': 0,
+                                'deal_id': None,
                                 'index': result_index,
                                 'error': 'Order not found'
                             }
@@ -1578,6 +1677,8 @@ class TriangleArbitrageDetector:
                         'symbol': order_data['symbol'],
                         'direction': order_data['direction'],
                         'order_id': None,
+                        'pnl': 0,
+                        'deal_id': None,
                         'index': result_index,
                         'error': str(e)
                     }
@@ -1602,10 +1703,14 @@ class TriangleArbitrageDetector:
             self.logger.info(f"   ⏱️ Total closing time: {total_execution_time:.1f}ms")
             
             # ตรวจสอบผลลัพธ์และนับออเดอร์ที่ปิดสำเร็จ
+            total_pnl = 0.0
             for result in results:
                 if result and result['success']:
                     orders_closed += 1
-                    self.logger.info(f"   ✅ Closed: {result['symbol']} {result['direction']} (Order: {result['order_id']})")
+                    pnl = result.get('pnl', 0)
+                    total_pnl += pnl
+                    pnl_status = "💰" if pnl > 0 else "💸" if pnl < 0 else "⚖️"
+                    self.logger.info(f"   ✅ Closed: {result['symbol']} {result['direction']} (Order: {result['order_id']}) {pnl_status} PnL: {pnl:.2f} USD")
                 elif result:
                     self.logger.warning(f"   ❌ Failed to close: {result['symbol']} {result['direction']}")
                     if 'error' in result:
@@ -1621,8 +1726,11 @@ class TriangleArbitrageDetector:
             # ลบกลุ่มออกจาก active_groups
             del self.active_groups[group_id]
             
+            # แสดงผล PnL รวมของกลุ่ม
+            pnl_status = "💰" if total_pnl > 0 else "💸" if total_pnl < 0 else "⚖️"
             self.logger.info(f"✅ Group {group_id} closed successfully")
             self.logger.info(f"   🚀 Orders closed simultaneously: {orders_closed}/{len(positions_to_close)}")
+            self.logger.info(f"   {pnl_status} Total PnL: {total_pnl:.2f} USD")
             self.logger.info(f"   📊 คู่เงินที่ใช้ได้แล้ว: {self.used_currency_pairs}")
             self.logger.info("🔄 เริ่มตรวจสอบ arbitrage ใหม่")
             

@@ -227,13 +227,14 @@ class TradingSystem:
             self.logger.info("Market analyzer initialized")
             
             # Initialize trading components
-            self.arbitrage_detector = TriangleArbitrageDetector(
-                self.broker_api, 
-                self.market_analyzer  # Use market_analyzer instead of decision_engine
-            )
             self.correlation_manager = CorrelationManager(
                 self.broker_api, 
                 self.market_analyzer  # Use market_analyzer instead of decision_engine
+            )
+            self.arbitrage_detector = TriangleArbitrageDetector(
+                self.broker_api, 
+                self.market_analyzer,  # Use market_analyzer instead of decision_engine
+                self.correlation_manager  # Pass correlation_manager to arbitrage_detector
             )
             self.logger.info("Trading components initialized")
             
@@ -521,6 +522,10 @@ class TradingSystem:
             if not self.correlation_manager or not self.correlation_manager.is_running:
                 self.logger.warning("⚠️ Correlation manager not running")
                 return False
+            
+            # Check recovery positions
+            if self.correlation_manager:
+                self.correlation_manager.check_recovery_positions()
             
             # Check market analyzer
             if not self.market_analyzer:
