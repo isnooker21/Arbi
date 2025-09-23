@@ -570,6 +570,15 @@ class BrokerAPI:
                 
                 position = position[0]
                 
+                # Get symbol info to determine filling type
+                symbol_info = mt5.symbol_info(position.symbol)
+                if symbol_info is None:
+                    self.logger.error(f"❌ Symbol {position.symbol} not found for closing")
+                    return False
+                
+                # Determine appropriate filling type for closing
+                filling_type = self._get_filling_type(symbol_info)
+                
                 # Determine close order type
                 close_type = mt5.ORDER_TYPE_SELL if position.type == mt5.POSITION_TYPE_BUY else mt5.ORDER_TYPE_BUY
                 
@@ -584,16 +593,27 @@ class BrokerAPI:
                     "magic": 234000,
                     "comment": "Close Position",
                     "type_time": mt5.ORDER_TIME_GTC,
-                    "type_filling": mt5.ORDER_FILLING_IOC,
+                    "type_filling": filling_type,  # Use appropriate filling type
                 }
                 
                 # Send close order
+                self.logger.info(f"🔍 Closing position {order_id}: {request}")
                 result = mt5.order_send(request)
                 
-                if result.retcode != mt5.TRADE_RETCODE_DONE:
-                    self.logger.error(f"Close order failed: {result.retcode} - {result.comment}")
+                if result is None:
+                    error_code = mt5.last_error()
+                    self.logger.error(f"❌ Close order failed - no result from MT5, error: {error_code}")
                     return False
                 
+                # Log detailed result
+                self.logger.info(f"📊 Close result: retcode={result.retcode}, deal={result.deal}, order={result.order}")
+                
+                if result.retcode != mt5.TRADE_RETCODE_DONE:
+                    error_msg = self._get_error_message(result.retcode)
+                    self.logger.error(f"❌ Close order failed: {error_msg} (retcode={result.retcode})")
+                    return False
+                
+                self.logger.info(f"✅ Position {order_id} closed successfully")
                 return True
             
             return False
@@ -730,25 +750,36 @@ class BrokerAPI:
     def _get_filling_type(self, symbol_info) -> int:
         """Determine appropriate filling type for symbol"""
         try:
+            # Check if filling_mode attribute exists
+            if not hasattr(symbol_info, 'filling_mode'):
+                self.logger.warning("Symbol info has no filling_mode attribute, using RETURN")
+                return mt5.ORDER_FILLING_RETURN
+            
             # Check symbol filling modes
             filling_mode = symbol_info.filling_mode
             
-            # Prefer FOK (Fill or Kill) for better execution
-            if filling_mode & mt5.SYMBOL_FILLING_FOK:
-                return mt5.ORDER_FILLING_FOK
-            # Fallback to IOC (Immediate or Cancel)
-            elif filling_mode & mt5.SYMBOL_FILLING_IOC:
-                return mt5.ORDER_FILLING_IOC
-            # Last resort - Return (Fill at any price)
-            elif filling_mode & mt5.SYMBOL_FILLING_RETURN:
-                return mt5.ORDER_FILLING_RETURN
+            # Check if MT5 constants exist
+            if hasattr(mt5, 'SYMBOL_FILLING_FOK') and hasattr(mt5, 'ORDER_FILLING_FOK'):
+                # Prefer FOK (Fill or Kill) for better execution
+                if filling_mode & mt5.SYMBOL_FILLING_FOK:
+                    return mt5.ORDER_FILLING_FOK
+                # Fallback to IOC (Immediate or Cancel)
+                elif filling_mode & mt5.SYMBOL_FILLING_IOC:
+                    return mt5.ORDER_FILLING_IOC
+                # Last resort - Return (Fill at any price)
+                elif filling_mode & mt5.SYMBOL_FILLING_RETURN:
+                    return mt5.ORDER_FILLING_RETURN
+                else:
+                    # Default to FOK
+                    return mt5.ORDER_FILLING_FOK
             else:
-                # Default to FOK
-                return mt5.ORDER_FILLING_FOK
+                # Fallback to RETURN if constants don't exist
+                self.logger.warning("MT5 filling constants not available, using RETURN")
+                return mt5.ORDER_FILLING_RETURN
                 
         except Exception as e:
-            self.logger.warning(f"Error determining filling type: {e}, using FOK")
-            return mt5.ORDER_FILLING_FOK
+            self.logger.warning(f"Error determining filling type: {e}, using RETURN")
+            return mt5.ORDER_FILLING_RETURN
     
     def _get_error_message(self, retcode: int) -> str:
         """Get human-readable error message for MT5 retcode"""
@@ -787,6 +818,7 @@ class BrokerAPI:
             mt5.TRADE_RETCODE_FIFO_CLOSE: "FIFO close required",
             mt5.TRADE_RETCODE_CLOSE_ORDER_EXIST: "มีคำสั่งปิดอยู่แล้ว",
             mt5.TRADE_RETCODE_LIMIT_POSITIONS: "เกินขีดจำกัดตำแหน่ง",
+            10030: "Unsupported filling mode - ใช้ filling type ที่ไม่รองรับ",
         }
         
         return error_messages.get(retcode, f"Unknown error (code: {retcode})")
