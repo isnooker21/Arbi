@@ -439,7 +439,7 @@ class BrokerAPI:
             return None
     
     def place_order(self, symbol: str, order_type: str, volume: float, 
-                   price: float = None, sl: float = None, tp: float = None) -> Optional[Dict]:
+                   price: float = None, sl: float = None, tp: float = None, comment: str = None) -> Optional[Dict]:
         """Place an order"""
         try:
             if not self._connected:
@@ -471,7 +471,7 @@ class BrokerAPI:
                     "price": price,
                     "deviation": 20,
                     "magic": 234000,
-                    "comment": "Python Arbitrage Bot",
+                    "comment": comment or "Python Arbitrage Bot",
                     "type_time": mt5.ORDER_TIME_GTC,
                     "type_filling": mt5.ORDER_FILLING_IOC,
                 }
