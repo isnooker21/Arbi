@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-ระบบเทรด Forex แบบ Triangular Arbitrage ร่วมกับ Correlation Recovery
-พร้อม AI Engine และ GUI สำหรับควบคุมระบบ
+ระบบเทรด Forex แบบ Adaptive Arbitrage + Correlation Recovery
+พร้อม Never-Cut-Loss และ Auto Position Sizing
 
 ไฟล์หลักของระบบเทรดอัตโนมัติที่รวมทุกส่วนเข้าด้วยกัน:
-- ระบบตรวจจับ Arbitrage แบบสามเหลี่ยม
-- ระบบกู้คืนตำแหน่งด้วย Correlation
-- AI Engine ที่ใช้ Rule-based และ Machine Learning
+- ระบบตรวจจับ Arbitrage แบบ Adaptive
+- ระบบกู้คืนตำแหน่งด้วย Correlation Recovery
+- Adaptive Engine สำหรับจัดการ Market Regime
+- Never-Cut-Loss Strategy
+- Auto Position Sizing ตามยอดเงินในบัญชี
 - GUI สำหรับควบคุมและติดตามผลการเทรด
-- ระบบจัดการข้อมูลและฐานข้อมูล
 
 ผู้พัฒนา: AI Assistant
-เวอร์ชัน: 1.0.0
+เวอร์ชัน: 2.0.0 (Adaptive Engine)
 """
 
 import sys
@@ -38,17 +39,13 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from trading.broker_api import BrokerAPI
 from trading.arbitrage_detector import TriangleArbitrageDetector
 from trading.correlation_manager import CorrelationManager
+from trading.adaptive_engine import AdaptiveEngine
 from trading.position_manager import PositionManager
 from trading.risk_manager import RiskManager
-from trading.flexible_trader import FlexibleTrader
 
-from ai.rule_engine import RuleEngine
-from ai.learning_module import LearningModule
 from ai.market_analyzer import MarketAnalyzer
-from ai.decision_engine import DecisionEngine
 
 from data.data_feed import RealTimeDataFeed
-from data.historical_data import HistoricalDataManager
 from data.database import DatabaseManager
 
 from gui.main_window import MainWindow
@@ -59,15 +56,16 @@ class TradingSystem:
     
     หน้าที่หลัก:
     - เชื่อมต่อกับ Broker (MetaTrader5, OANDA, FXCM)
-    - เริ่มต้นระบบตรวจจับ Arbitrage และ Correlation
-    - จัดการ AI Engine และการตัดสินใจ
+    - เริ่มต้นระบบ Adaptive Engine
+    - จัดการ Never-Cut-Loss Strategy
+    - Auto Position Sizing ตามยอดเงินในบัญชี
     - ติดตามผลการเทรดและจัดการความเสี่ยง
     - รายงานสถานะและผลการดำเนินงาน
     """
     
     def __init__(self, auto_setup=True):
         self.logger = self._setup_logging()
-        self.logger.info("Initializing Forex Arbitrage AI Trading System...")
+        self.logger.info("Initializing Adaptive Forex Arbitrage + Correlation Recovery System...")
         
         # Initialize components
         self.broker_api = None
@@ -75,13 +73,9 @@ class TradingSystem:
         self.position_manager = None
         self.arbitrage_detector = None
         self.correlation_manager = None
-        self.flexible_trader = None
-        self.rule_engine = None
-        self.learning_module = None
+        self.adaptive_engine = None
         self.market_analyzer = None
-        self.decision_engine = None
         self.data_feed = None
-        self.historical_manager = None
         self.database_manager = None
         
         # System state
@@ -100,7 +94,7 @@ class TradingSystem:
         # Setup signal handlers
         self._setup_signal_handlers()
         
-        self.logger.info("Trading system initialized successfully")
+        self.logger.info("Adaptive trading system initialized successfully")
     
     def _auto_setup(self):
         """Auto Setup ระบบโดยอัตโนมัติ"""
@@ -214,10 +208,6 @@ class TradingSystem:
             self.database_manager = DatabaseManager()
             self.logger.info("Database manager initialized")
             
-            # Initialize historical data manager
-            self.historical_manager = HistoricalDataManager()
-            self.logger.info("Historical data manager initialized")
-            
             # Initialize broker API
             self.broker_api = BrokerAPI()
             self.logger.info("Broker API initialized")
@@ -232,31 +222,29 @@ class TradingSystem:
             self.position_manager = PositionManager(self.broker_api, self.risk_manager)
             self.logger.info("Position manager initialized")
             
-            # Initialize AI components
-            self.rule_engine = RuleEngine()
-            self.learning_module = LearningModule()
+            # Initialize market analyzer (simplified)
             self.market_analyzer = MarketAnalyzer(self.broker_api)
-            self.decision_engine = DecisionEngine(
-                self.rule_engine, 
-                self.learning_module, 
-                self.market_analyzer
-            )
-            self.logger.info("AI components initialized")
+            self.logger.info("Market analyzer initialized")
             
             # Initialize trading components
             self.arbitrage_detector = TriangleArbitrageDetector(
                 self.broker_api, 
-                self.decision_engine
+                self.market_analyzer  # Use market_analyzer instead of decision_engine
             )
             self.correlation_manager = CorrelationManager(
                 self.broker_api, 
-                self.decision_engine
-            )
-            self.flexible_trader = FlexibleTrader(
-                self.broker_api, 
-                self.decision_engine
+                self.market_analyzer  # Use market_analyzer instead of decision_engine
             )
             self.logger.info("Trading components initialized")
+            
+            # Initialize adaptive engine (main trading engine)
+            self.adaptive_engine = AdaptiveEngine(
+                self.broker_api,
+                self.arbitrage_detector,
+                self.correlation_manager,
+                self.market_analyzer
+            )
+            self.logger.info("Adaptive engine initialized")
             
             # Initialize data feed
             self.data_feed = RealTimeDataFeed(self.broker_api)
@@ -338,18 +326,20 @@ class TradingSystem:
                 else:
                     self.logger.info("Successfully connected to broker")
             
-            self.logger.info("🚀 Starting trading components...")
+            self.logger.info("🚀 Starting adaptive trading system...")
             
             # Start all components
             self.position_manager.start_position_monitoring()
             self.arbitrage_detector.start_detection()
             self.correlation_manager.start_correlation_monitoring()
-            self.flexible_trader.start_flexible_trading()
+            
+            # Start adaptive engine (main trading engine)
+            self.adaptive_engine.start_adaptive_trading()
             
             self.is_running = True
             self.emergency_stop = False
             
-            self.logger.info("✅ Trading system started successfully")
+            self.logger.info("✅ Adaptive trading system started successfully")
             
             # Start main trading loop in background thread
             self.trading_thread = threading.Thread(target=self._trading_loop, daemon=True)
@@ -368,7 +358,11 @@ class TradingSystem:
                 self.logger.warning("Trading system not running")
                 return
             
-            self.logger.info("🛑 Stopping trading system...")
+            self.logger.info("🛑 Stopping adaptive trading system...")
+            
+            # Stop adaptive engine first
+            if self.adaptive_engine:
+                self.adaptive_engine.stop_adaptive_trading()
             
             # Stop all components
             if self.arbitrage_detector:
@@ -376,9 +370,6 @@ class TradingSystem:
             
             if self.correlation_manager:
                 self.correlation_manager.stop_correlation_monitoring()
-            
-            if self.flexible_trader:
-                self.flexible_trader.stop_flexible_trading()
             
             if self.position_manager:
                 self.position_manager.stop_position_monitoring()
@@ -394,7 +385,7 @@ class TradingSystem:
                 if self.trading_thread.is_alive():
                     self.logger.warning("⚠️ Trading thread timeout")
             
-            self.logger.info("✅ Trading system stopped")
+            self.logger.info("✅ Adaptive trading system stopped")
             
         except Exception as e:
             self.logger.error(f"Error stopping trading system: {e}")
@@ -402,9 +393,13 @@ class TradingSystem:
     def emergency_stop(self):
         """Emergency stop all trading activities"""
         try:
-            self.logger.critical("EMERGENCY STOP ACTIVATED")
+            self.logger.critical("🚨 EMERGENCY STOP ACTIVATED")
             
             self.emergency_stop = True
+            
+            # Use adaptive engine emergency stop
+            if self.adaptive_engine:
+                self.adaptive_engine.emergency_stop()
             
             # Stop all trading
             self.stop()
@@ -418,7 +413,7 @@ class TradingSystem:
             if self.broker_api:
                 self.broker_api.disconnect()
             
-            self.logger.critical("Emergency stop completed")
+            self.logger.critical("🚨 Emergency stop completed")
             
         except Exception as e:
             self.logger.error(f"Error during emergency stop: {e}")
@@ -518,12 +513,13 @@ class TradingSystem:
                 'emergency_stop': self.emergency_stop,
                 'broker_connected': self.broker_api.is_connected() if self.broker_api else False,
                 'components': {
+                    'adaptive_engine': self.adaptive_engine is not None,
                     'arbitrage_detector': self.arbitrage_detector is not None,
                     'correlation_manager': self.correlation_manager is not None,
                     'position_manager': self.position_manager is not None,
-                    'ai_engine': self.decision_engine is not None,
+                    'market_analyzer': self.market_analyzer is not None,
                     'data_feed': self.data_feed is not None,
-                    'enhanced_risk_manager': self.risk_manager is not None
+                    'risk_manager': self.risk_manager is not None
                 }
             }
             
@@ -536,10 +532,18 @@ class TradingSystem:
             if self.arbitrage_detector:
                 triangle_performance = self.arbitrage_detector.get_triangle_performance()
                 status['active_triangles'] = triangle_performance.get('active_triangles', 0)
+                status['market_regime'] = triangle_performance.get('market_regime', 'unknown')
+                status['adaptive_threshold'] = triangle_performance.get('adaptive_threshold', 0.001)
             
             if self.correlation_manager:
                 correlation_performance = self.correlation_manager.get_correlation_performance()
                 status['active_recoveries'] = correlation_performance.get('active_recoveries', 0)
+                status['recovery_mode'] = correlation_performance.get('recovery_mode', 'unknown')
+            
+            if self.adaptive_engine:
+                engine_status = self.adaptive_engine.get_adaptive_engine_status()
+                status['engine_mode'] = engine_status.get('engine_mode', 'unknown')
+                status['performance_metrics'] = engine_status.get('performance_metrics', {})
             
             return status
             
@@ -564,9 +568,10 @@ def main():
     """Main application entry point with Auto Setup"""
     try:
         print("=" * 60)
-        print("ระบบเทรด Forex AI")
-        print("   Triangular Arbitrage & Correlation Recovery")
-        print("   พร้อม AI Engine และ Auto Setup")
+        print("ระบบเทรด Forex AI แบบ Adaptive")
+        print("   Adaptive Arbitrage + Correlation Recovery")
+        print("   Never-Cut-Loss + Auto Position Sizing")
+        print("   พร้อม Adaptive Engine และ Auto Setup")
         print("=" * 60)
         
         # Check command line arguments

@@ -1,46 +1,49 @@
 {
   "trading": {
-    "base_lot_size": 0.1,
-    "max_triangles": 5,
-    "max_grid_levels": 10,
-    "min_arbitrage_threshold": 0.0001,
-    "max_spread": 2.0,
-    "position_hold_time": 1800
+    "strategy": "adaptive_arbitrage_correlation_recovery",
+    "never_cut_loss": true,
+    "auto_position_sizing": true,
+    "market_regime_adaptation": true
   },
-  "risk_management": {
-    "max_daily_loss": 1000,
-    "max_drawdown_percent": 30,
-    "position_size_multiplier": 1.5,
-    "stop_loss_percent": 2.0,
-    "take_profit_percent": 1.0
+  "arbitrage": {
+    "enabled": true,
+    "adaptive_threshold": true,
+    "execution_speed_optimization": true,
+    "triangle_generation": "28_pairs"
   },
-  "ai": {
-    "learning_enabled": true,
-    "rule_adaptation_frequency": "daily",
-    "confidence_threshold": 0.1,
-    "max_rules_per_category": 50,
-    "performance_lookback_days": 30
+  "correlation_recovery": {
+    "enabled": true,
+    "active_recovery_mode": true,
+    "hedge_ratio_optimization": true,
+    "portfolio_rebalancing": true
   },
-  "flexible_trading": {
-    "enable_trend_following": true,
-    "enable_momentum_trading": true,
-    "enable_scalping": true,
-    "enable_grid_trading": true,
-    "min_trend_strength": 0.3,
-    "min_momentum_threshold": 0.001,
-    "scalp_threshold": 0.0005,
-    "grid_spacing": 0.001
+  "market_analysis": {
+    "regime_detection": true,
+    "volatility_analysis": true,
+    "correlation_stability": true,
+    "real_time_adaptation": true
   },
   "broker": {
     "default_broker": "MetaTrader5",
     "connection_timeout": 30,
     "retry_attempts": 3,
-    "data_refresh_rate": 50
+    "data_refresh_rate": 50,
+    "auto_account_detection": true
   },
   "gui": {
     "theme": "default",
     "chart_refresh_rate": 1000,
     "log_max_lines": 1000,
-    "window_size": "1400x800"
+    "window_size": "1400x800",
+    "show_arbitrage_opportunities": true,
+    "show_active_recoveries": true,
+    "show_portfolio_health": true,
+    "show_market_regime": true
+  },
+  "system": {
+    "adaptive_engine": true,
+    "performance_monitoring": true,
+    "auto_rebalancing": true,
+    "emergency_stop": true
   }
 }

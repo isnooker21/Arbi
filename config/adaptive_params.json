@@ -1,0 +1,192 @@
+{
+  "market_regimes": {
+    "volatile": {
+      "arbitrage_threshold": 0.002,
+      "position_size_multiplier": 0.8,
+      "recovery_aggressiveness": 0.6,
+      "max_triangles": 3,
+      "execution_speed_ms": 150,
+      "description": "High volatility market - conservative approach"
+    },
+    "trending": {
+      "arbitrage_threshold": 0.0015,
+      "position_size_multiplier": 1.2,
+      "recovery_aggressiveness": 0.8,
+      "max_triangles": 5,
+      "execution_speed_ms": 100,
+      "description": "Strong trend market - aggressive approach"
+    },
+    "ranging": {
+      "arbitrage_threshold": 0.0008,
+      "position_size_multiplier": 1.0,
+      "recovery_aggressiveness": 0.7,
+      "max_triangles": 7,
+      "execution_speed_ms": 80,
+      "description": "Range-bound market - balanced approach"
+    },
+    "normal": {
+      "arbitrage_threshold": 0.001,
+      "position_size_multiplier": 1.0,
+      "recovery_aggressiveness": 0.7,
+      "max_triangles": 5,
+      "execution_speed_ms": 100,
+      "description": "Normal market conditions - standard approach"
+    }
+  },
+  "position_sizing": {
+    "account_tiers": {
+      "small": {
+        "min_balance": 5000,
+        "max_balance": 10000,
+        "lot_multiplier": 1.0,
+        "base_lot_size": 0.1,
+        "max_position_size": 5.0,
+        "description": "Small account - conservative sizing"
+      },
+      "medium": {
+        "min_balance": 10000,
+        "max_balance": 50000,
+        "lot_multiplier": 1.5,
+        "base_lot_size": 0.15,
+        "max_position_size": 7.5,
+        "description": "Medium account - moderate sizing"
+      },
+      "large": {
+        "min_balance": 50000,
+        "max_balance": 100000,
+        "lot_multiplier": 2.0,
+        "base_lot_size": 0.2,
+        "max_position_size": 10.0,
+        "description": "Large account - aggressive sizing"
+      },
+      "premium": {
+        "min_balance": 100000,
+        "max_balance": 999999999,
+        "lot_multiplier": 3.0,
+        "base_lot_size": 0.3,
+        "max_position_size": 15.0,
+        "description": "Premium account - maximum sizing"
+      }
+    },
+    "risk_management": {
+      "risk_per_trade": 0.02,
+      "max_portfolio_risk": 0.1,
+      "max_drawdown": 0.15,
+      "correlation_limit": 0.8,
+      "description": "Risk management parameters"
+    }
+  },
+  "recovery_params": {
+    "correlation_thresholds": {
+      "min_correlation": 0.6,
+      "max_correlation": 0.95,
+      "optimal_correlation": 0.8
+    },
+    "loss_thresholds": {
+      "min_loss_threshold": -0.01,
+      "max_loss_threshold": -0.05,
+      "recovery_target": 0.0
+    },
+    "timing": {
+      "max_recovery_time_hours": 24,
+      "recovery_check_interval_minutes": 5,
+      "rebalancing_frequency_hours": 6
+    },
+    "hedge_ratios": {
+      "min_ratio": 0.5,
+      "max_ratio": 2.0,
+      "default_ratio": 1.0
+    },
+    "description": "Correlation recovery parameters"
+  },
+  "arbitrage_params": {
+    "detection": {
+      "min_threshold": 0.0001,
+      "max_threshold": 0.005,
+      "spread_tolerance": 0.5,
+      "execution_timeout_ms": 1000
+    },
+    "triangles": {
+      "max_active_triangles": 10,
+      "triangle_hold_time_minutes": 30,
+      "correlation_check_interval": 60
+    },
+    "execution": {
+      "max_slippage": 0.0005,
+      "commission_rate": 0.0001,
+      "min_profit_threshold": 0.0001
+    },
+    "description": "Arbitrage detection and execution parameters"
+  },
+  "market_analysis": {
+    "regime_detection": {
+      "analysis_interval_seconds": 300,
+      "volatility_periods": 96,
+      "trend_periods": 24,
+      "correlation_periods": 168
+    },
+    "thresholds": {
+      "volatility": {
+        "low": 0.0005,
+        "high": 0.002
+      },
+      "trend_strength": {
+        "weak": 0.3,
+        "strong": 0.7
+      },
+      "correlation_stability": {
+        "unstable": 0.3,
+        "stable": 0.7
+      }
+    },
+    "description": "Market analysis and regime detection parameters"
+  },
+  "performance_monitoring": {
+    "metrics": {
+      "update_interval_seconds": 60,
+      "history_days": 30,
+      "alert_thresholds": {
+        "max_drawdown": 0.1,
+        "min_win_rate": 0.4,
+        "max_loss_streak": 5
+      }
+    },
+    "logging": {
+      "log_level": "INFO",
+      "log_retention_days": 7,
+      "performance_log_interval_minutes": 15
+    },
+    "description": "Performance monitoring and logging parameters"
+  },
+  "broker_settings": {
+    "connection": {
+      "timeout_seconds": 30,
+      "retry_attempts": 3,
+      "heartbeat_interval_seconds": 60
+    },
+    "execution": {
+      "max_orders_per_minute": 60,
+      "order_timeout_seconds": 10,
+      "slippage_tolerance": 0.0005
+    },
+    "data": {
+      "refresh_rate_ms": 50,
+      "historical_data_limit": 1000,
+      "real_time_buffer_size": 100
+    },
+    "description": "Broker connection and execution settings"
+  },
+  "system_settings": {
+    "engine": {
+      "trading_loop_interval_seconds": 30,
+      "max_memory_usage_mb": 500,
+      "cpu_usage_limit_percent": 20
+    },
+    "threading": {
+      "max_worker_threads": 4,
+      "thread_timeout_seconds": 300,
+      "queue_size": 100
+    },
+    "description": "System performance and threading settings"
+  }
+}
