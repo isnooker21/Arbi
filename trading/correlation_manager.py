@@ -135,7 +135,12 @@ class CorrelationManager:
             hedge_lot = min(hedge_lot, 10.0)  # สูงสุด 10 lot
             hedge_lot = max(hedge_lot, 0.01)  # ต่ำสุด 0.01 lot
             
-            return round(hedge_lot, 2)
+            # แปลงเป็นจำนวนเต็ม (lot size ต้องเป็นจำนวนเต็ม)
+            hedge_lot = round(hedge_lot, 2)
+            if hedge_lot != int(hedge_lot):
+                hedge_lot = int(hedge_lot) + 1
+            
+            return float(hedge_lot)
             
         except Exception as e:
             self.logger.error(f"Error calculating hedge lot size: {e}")
@@ -742,6 +747,12 @@ class CorrelationManager:
             lot_size = original_position.get('lot_size', original_position.get('volume', 0.1))
             correlation_lot_size = lot_size * correlation_ratio
             
+            # แปลงเป็นจำนวนเต็ม (lot size ต้องเป็นจำนวนเต็ม)
+            correlation_lot_size = round(correlation_lot_size, 2)
+            if correlation_lot_size != int(correlation_lot_size):
+                correlation_lot_size = int(correlation_lot_size) + 1
+            correlation_lot_size = float(correlation_lot_size)
+            
             # Send correlation order
             success = self._send_correlation_order(symbol, correlation_lot_size, group_id)
             
@@ -788,7 +799,12 @@ class CorrelationManager:
             volume = min(volume, 10.0)  # สูงสุด 10 lot
             volume = max(volume, 0.01)  # ต่ำสุด 0.01 lot
             
-            return round(volume, 2)
+            # แปลงเป็นจำนวนเต็ม (lot size ต้องเป็นจำนวนเต็ม)
+            volume = round(volume, 2)
+            if volume != int(volume):
+                volume = int(volume) + 1
+            
+            return float(volume)
             
         except Exception as e:
             self.logger.error(f"Error calculating hedge volume: {e}")

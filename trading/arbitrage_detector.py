@@ -90,6 +90,9 @@ class TriangleArbitrageDetector:
         self.arbitrage_pairs = ['EURUSD', 'GBPUSD', 'EURGBP']
         self.triangle_combinations = [('EURUSD', 'GBPUSD', 'EURGBP')]  # Fixed triangle combination
         
+        # ใช้ lot size ปกติ 0.1 สำหรับทุกคู่เงิน
+        self.standard_lot_size = 0.1
+        
         # Log triangle combinations count
         self.logger.info(f"Available pairs: {len(self.available_pairs)}")
         self.logger.info(f"Generated {len(self.triangle_combinations)} triangle combinations (Major & Minor pairs only)")
@@ -307,7 +310,7 @@ class TriangleArbitrageDetector:
                     result = self.broker.place_order(
                         symbol=order_data['symbol'],
                         order_type=order_data['direction'],
-                        volume=self.position_size,
+                        volume=self.standard_lot_size,
                         comment=comment
                     )
                     
@@ -364,12 +367,12 @@ class TriangleArbitrageDetector:
                     group_data['positions'].append({
                         'symbol': result['symbol'],
                         'direction': result['direction'],
-                        'lot_size': self.position_size,
+                        'lot_size': self.standard_lot_size,
                         'status': 'active',
                         'order_id': result.get('order_id'),
                         'comment': f"SIMPLE_G{group_id.split('_')[-1]}_{result['symbol']}"
                     })
-                    self.logger.info(f"✅ Order sent: {result['symbol']} {result['direction']}")
+                    self.logger.info(f"✅ Order sent: {result['symbol']} {result['direction']} {self.standard_lot_size} lot")
                 elif result:
                     self.logger.error(f"❌ Order failed: {result['symbol']} {result['direction']}")
                     if 'error' in result:
@@ -524,8 +527,8 @@ class TriangleArbitrageDetector:
                     self.logger.info(f"✅ Group {group_id} profitable - Total PnL: {total_group_pnl:.2f} USD ({profit_percentage:.2f}%)")
                     self.logger.info(f"✅ Closing group {group_id} - All positions will be closed together")
                     groups_to_close.append(group_id)
-                elif total_group_pnl < 0 and self.correlation_manager:  # ถ้าขาดทุนและมี correlation manager
-                    # เริ่ม correlation recovery (ไม่ปิดขาดทุน)
+                elif self._should_start_recovery(group_id, group_data, total_group_pnl, profit_percentage):
+                    # เริ่ม correlation recovery ตามเงื่อนไขที่กำหนด
                     self.logger.info(f"🔄 Group {group_id} losing - Total PnL: {total_group_pnl:.2f} USD ({profit_percentage:.2f}%)")
                     self.logger.info(f"🔄 Starting correlation recovery - Never cut loss")
                     self._start_correlation_recovery(group_id, group_data, total_group_pnl)
@@ -536,6 +539,51 @@ class TriangleArbitrageDetector:
                 
         except Exception as e:
             self.logger.error(f"Error checking group status: {e}")
+    
+    def _should_start_recovery(self, group_id: str, group_data: Dict, total_pnl: float, profit_percentage: float) -> bool:
+        """ตรวจสอบว่าควรเริ่ม recovery หรือไม่ - เงื่อนไข 2 ชั้น"""
+        try:
+            # เงื่อนไข 1: ตรวจสอบ correlation manager
+            if not self.correlation_manager:
+                return False
+            
+            # เงื่อนไข 2: คำนวณ risk per lot (ชั้นที่ 1)
+            total_lot_size = sum(pos.get('lot_size', pos.get('volume', 0)) for pos in group_data['positions'])
+            if total_lot_size <= 0:
+                return False
+                
+            risk_per_lot = abs(total_pnl) / total_lot_size
+            if risk_per_lot < 0.05:  # risk น้อยกว่า 5%
+                self.logger.info(f"⏳ Group {group_id} risk too low ({risk_per_lot:.2%}) - Waiting for 5%")
+                return False
+            
+            # เงื่อนไข 3: ตรวจสอบระยะห่างราคา (ชั้นที่ 2)
+            max_price_distance = 0
+            for position in group_data['positions']:
+                symbol = position['symbol']
+                entry_price = position.get('entry_price', 0)
+                
+                # ดึงราคาปัจจุบัน
+                try:
+                    current_price = self.broker.get_current_price(symbol)
+                    if entry_price > 0 and current_price > 0:
+                        price_distance = abs(current_price - entry_price) * 10000  # แปลงเป็นจุด
+                        max_price_distance = max(max_price_distance, price_distance)
+                except Exception as e:
+                    self.logger.warning(f"Could not get price for {symbol}: {e}")
+                    continue
+            
+            if max_price_distance < 50:  # ระยะห่างน้อยกว่า 50 จุด
+                self.logger.info(f"⏳ Group {group_id} price distance too small ({max_price_distance:.1f} pips) - Waiting for 50 pips")
+                return False
+            
+            # ผ่านเงื่อนไขทั้งหมด - แก้ไม้ทันที
+            self.logger.info(f"✅ Group {group_id} meets recovery conditions - Risk: {risk_per_lot:.2%}, Distance: {max_price_distance:.1f} pips")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error checking recovery conditions: {e}")
+            return False
     
     def _start_correlation_recovery(self, group_id: str, group_data: Dict, total_pnl: float):
         """เริ่ม correlation recovery สำหรับกลุ่มที่ขาดทุน"""
