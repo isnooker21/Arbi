@@ -589,8 +589,8 @@ class TriangleArbitrageDetector:
                     self.logger.warning(f"Could not get price for {symbol}: {e}")
                     continue
             
-            if max_price_distance < 50:  # ระยะห่างน้อยกว่า 50 จุด
-                self.logger.info(f"⏳ Group {group_id} price distance too small ({max_price_distance:.1f} pips) - Waiting for 50 pips")
+            if max_price_distance < 10:  # ระยะห่างน้อยกว่า 10 จุด
+                self.logger.info(f"⏳ Group {group_id} price distance too small ({max_price_distance:.1f} pips) - Waiting for 10 pips")
                 return False
             
             # ผ่านเงื่อนไขทั้งหมด - แก้ไม้ทันที
