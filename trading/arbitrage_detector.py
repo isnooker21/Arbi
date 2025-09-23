@@ -1149,8 +1149,9 @@ class TriangleArbitrageDetector:
         self.logger.info("Starting arbitrage detection...")
         
         # Run detection in separate thread
-        detection_thread = threading.Thread(target=self._detection_loop, daemon=True)
-        detection_thread.start()
+        self.detection_thread = threading.Thread(target=self._detection_loop, daemon=True)
+        self.detection_thread.start()
+        self.logger.info("✅ Detection thread started")
     
     def stop_detection(self):
         """Stop the arbitrage detection loop"""
@@ -1165,11 +1166,12 @@ class TriangleArbitrageDetector:
         while self.is_running:
             try:
                 loop_count += 1
+                self.logger.debug(f"🔍 Detection loop #{loop_count} - is_running: {self.is_running}")
                 
                 # ตรวจสอบว่าส่งออเดอร์ arbitrage แล้วหรือไม่
                 if self.arbitrage_sent:
                     self.logger.debug(f"⏸️ Detection loop #{loop_count} - ส่งออเดอร์ arbitrage แล้ว - ใช้ Correlation Recovery")
-                    threading.Event().wait(30.0)  # รอนานขึ้นเมื่อใช้ Correlation Recovery
+                    time.sleep(30.0)  # รอนานขึ้นเมื่อใช้ Correlation Recovery
                     continue
                 
                 self.logger.info(f"🔍 Detection loop #{loop_count} - Checking {len(self.triangle_combinations)} triangles")
@@ -1177,19 +1179,23 @@ class TriangleArbitrageDetector:
                 self.detect_opportunities()
                 
                 # Sleep for 5 seconds between detection cycles (slower for better logging)
-                threading.Event().wait(5.0)
+                self.logger.debug(f"⏸️ Detection loop #{loop_count} - Sleeping for 5 seconds")
+                time.sleep(5.0)
+                self.logger.debug(f"✅ Detection loop #{loop_count} - Woke up from sleep")
             except Exception as e:
                 self.logger.error(f"Detection error: {e}")
                 import traceback
                 self.logger.error(traceback.format_exc())
-                threading.Event().wait(1)
+                time.sleep(1)
         
         self.logger.info("🔍 Arbitrage detection stopped")
     
     def detect_opportunities(self):
         """Main detection method called by AdaptiveEngine - Single Entry Mode"""
         try:
+            self.logger.debug("🔍 detect_opportunities called")
             if not self.is_running:
+                self.logger.debug("⏸️ is_running is False - stopping detection")
                 return
             
             # ตรวจสอบว่าส่งออเดอร์ arbitrage แล้วหรือไม่
