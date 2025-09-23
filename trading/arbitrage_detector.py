@@ -22,6 +22,7 @@ import logging
 from typing import Dict, List, Tuple, Optional
 import asyncio
 import threading
+import talib
 
 class TriangleArbitrageDetector:
     def __init__(self, broker_api, ai_engine):
@@ -210,6 +211,161 @@ class TriangleArbitrageDetector:
         self.logger.info(f"Created {len(fallback_triangles)} fallback triangles from common patterns")
         return fallback_triangles
     
+    def _calculate_technical_indicators(self, prices: List[float]) -> Dict:
+        """Calculate multi-timeframe technical indicators"""
+        try:
+            if len(prices) < 50:
+                return {}
+            
+            prices_array = np.array(prices, dtype=float)
+            
+            indicators = {
+                # Moving Averages
+                'sma_10': talib.SMA(prices_array, timeperiod=10)[-1],
+                'sma_20': talib.SMA(prices_array, timeperiod=20)[-1],
+                'sma_50': talib.SMA(prices_array, timeperiod=50)[-1],
+                'ema_12': talib.EMA(prices_array, timeperiod=12)[-1],
+                'ema_26': talib.EMA(prices_array, timeperiod=26)[-1],
+                
+                # MACD
+                'macd': talib.MACD(prices_array)[0][-1],  # MACD line
+                'macd_signal': talib.MACD(prices_array)[1][-1],  # Signal line
+                'macd_histogram': talib.MACD(prices_array)[2][-1],  # Histogram
+                
+                # RSI
+                'rsi': talib.RSI(prices_array, timeperiod=14)[-1],
+                
+                # Bollinger Bands
+                'bb_upper': talib.BBANDS(prices_array)[0][-1],
+                'bb_middle': talib.BBANDS(prices_array)[1][-1],
+                'bb_lower': talib.BBANDS(prices_array)[2][-1],
+                
+                # Stochastic
+                'stoch_k': talib.STOCH(prices_array, prices_array, prices_array)[0][-1],
+                'stoch_d': talib.STOCH(prices_array, prices_array, prices_array)[1][-1],
+                
+                # ADX (Trend Strength)
+                'adx': talib.ADX(prices_array, prices_array, prices_array, timeperiod=14)[-1],
+                
+                # Volume indicators (using price as proxy)
+                'volume_sma': np.mean(prices_array[-20:]) if len(prices_array) >= 20 else np.mean(prices_array),
+                
+                # Price position in Bollinger Bands
+                'bb_position': (prices[-1] - talib.BBANDS(prices_array)[2][-1]) / 
+                              (talib.BBANDS(prices_array)[0][-1] - talib.BBANDS(prices_array)[2][-1]),
+                
+                # Trend strength
+                'trend_strength': abs(talib.SMA(prices_array, timeperiod=20)[-1] - talib.SMA(prices_array, timeperiod=50)[-1]) / 
+                                 talib.SMA(prices_array, timeperiod=50)[-1] if talib.SMA(prices_array, timeperiod=50)[-1] > 0 else 0
+            }
+            
+            return indicators
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating technical indicators: {e}")
+            return {}
+    
+    def _analyze_multi_timeframe_signals(self, triangle: Tuple[str, str, str]) -> Dict:
+        """Analyze multi-timeframe signals for triangle"""
+        try:
+            pair1, pair2, pair3 = triangle
+            signals = {}
+            
+            timeframes = ['M1', 'M5', 'M15', 'M30', 'H1']
+            
+            for pair in triangle:
+                pair_signals = {}
+                
+                for tf in timeframes:
+                    try:
+                        # Get historical data
+                        data = self.broker.get_historical_data(pair, tf, 100)
+                        if data is None or len(data) < 50:
+                            continue
+                        
+                        # Convert to prices
+                        if hasattr(data, 'close'):
+                            prices = data['close'].tolist()
+                        else:
+                            prices = [candle['close'] for candle in data]
+                        
+                        # Calculate indicators
+                        indicators = self._calculate_technical_indicators(prices)
+                        
+                        if indicators:
+                            pair_signals[tf] = {
+                                'rsi': indicators.get('rsi', 50),
+                                'macd_signal': indicators.get('macd_histogram', 0),
+                                'bb_position': indicators.get('bb_position', 0.5),
+                                'trend_strength': indicators.get('trend_strength', 0),
+                                'adx': indicators.get('adx', 20),
+                                'stoch_k': indicators.get('stoch_k', 50),
+                                'stoch_d': indicators.get('stoch_d', 50)
+                            }
+                    
+                    except Exception as e:
+                        self.logger.error(f"Error analyzing {pair} {tf}: {e}")
+                        continue
+                
+                signals[pair] = pair_signals
+            
+            return signals
+            
+        except Exception as e:
+            self.logger.error(f"Error analyzing multi-timeframe signals: {e}")
+            return {}
+    
+    def _get_signal_strength(self, signals: Dict) -> float:
+        """Calculate overall signal strength from multi-timeframe analysis"""
+        try:
+            if not signals:
+                return 0.0
+            
+            total_strength = 0
+            count = 0
+            
+            for pair, pair_signals in signals.items():
+                for tf, tf_signals in pair_signals.items():
+                    # RSI signal (0-1)
+                    rsi = tf_signals.get('rsi', 50)
+                    if rsi < 30 or rsi > 70:  # Oversold/Overbought
+                        total_strength += 0.8
+                    elif 40 <= rsi <= 60:  # Neutral
+                        total_strength += 0.5
+                    else:
+                        total_strength += 0.3
+                    
+                    # MACD signal (0-1)
+                    macd = tf_signals.get('macd_signal', 0)
+                    if macd > 0:  # Bullish
+                        total_strength += 0.7
+                    else:  # Bearish
+                        total_strength += 0.4
+                    
+                    # Trend strength (0-1)
+                    trend = tf_signals.get('trend_strength', 0)
+                    total_strength += min(trend * 2, 1.0)  # Scale to 0-1
+                    
+                    # ADX signal (0-1)
+                    adx = tf_signals.get('adx', 20)
+                    if adx > 25:  # Strong trend
+                        total_strength += 0.8
+                    elif adx > 20:  # Moderate trend
+                        total_strength += 0.6
+                    else:  # Weak trend
+                        total_strength += 0.4
+                    
+                    count += 1
+            
+            if count == 0:
+                return 0.0
+            
+            return total_strength / count
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating signal strength: {e}")
+            return 0.0
+    
     def start_detection(self):
         """Start the arbitrage detection loop"""
         self.is_running = True
@@ -281,8 +437,18 @@ class TriangleArbitrageDetector:
                     self.logger.info(f"Progress: {triangles_checked}/{len(self.triangle_combinations)} triangles, "
                                    f"{valid_arbitrages} valid arbitrages, {opportunities_found} opportunities")
                 
-                # Only do full analysis for opportunities > 0.0001%
-                if arbitrage_percent < 0.0001:
+                # Use technical indicators to boost confidence even for small arbitrage
+                signals = self._analyze_multi_timeframe_signals(triangle)
+                signal_strength = self._get_signal_strength(signals)
+                
+                # Boost arbitrage percentage with signal strength
+                boosted_arbitrage = arbitrage_percent * (1 + signal_strength)
+                
+                self.logger.info(f"Triangle {triangles_checked}: {triangle} = {arbitrage_percent:.4f}% "
+                               f"(boosted: {boosted_arbitrage:.4f}%, signals: {signal_strength:.2f})")
+                
+                # Only do full analysis for opportunities > 0.0001% OR strong signals
+                if arbitrage_percent < 0.0001 and signal_strength < 0.3:
                     continue
                 
                 # Multi-timeframe analysis (only for promising opportunities)
@@ -301,6 +467,9 @@ class TriangleArbitrageDetector:
                     'm5': m5_analysis,
                     'm1': m1_analysis,
                     'arbitrage_percent': arbitrage_percent,
+                    'boosted_arbitrage': boosted_arbitrage,
+                    'signal_strength': signal_strength,
+                    'signals': signals,
                     'timestamp': datetime.now(),
                     'spread_acceptable': self._check_spread_acceptable(triangle),
                     'volatility': self._calculate_volatility(triangle)
@@ -309,7 +478,7 @@ class TriangleArbitrageDetector:
                 # AI evaluation
                 ai_decision = self.ai.evaluate_arbitrage_opportunity(opportunity)
                 
-                if ai_decision.should_act and ai_decision.confidence > 0.1:
+                if ai_decision.should_act and ai_decision.confidence > 0.05:
                     self.logger.info(f"🎯 ARBITRAGE OPPORTUNITY: {triangle}, "
                                    f"Percent: {arbitrage_percent:.4f}%, "
                                    f"Confidence: {ai_decision.confidence:.2f}")

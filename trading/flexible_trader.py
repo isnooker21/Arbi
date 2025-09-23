@@ -21,6 +21,7 @@ import logging
 from typing import Dict, List, Tuple, Optional
 import threading
 import json
+import talib
 
 class FlexibleTrader:
     def __init__(self, broker_api, ai_engine):
@@ -166,15 +167,26 @@ class FlexibleTrader:
                 # Check momentum
                 price_momentum = (prices[-1] - prices[-10]) / prices[-10]
                 
+                # Get multi-timeframe signals
+                signals = self._get_multi_timeframe_signals(pair)
+                signal_score = self._calculate_signal_score(signals)
+                
+                # Use indicators to boost trend strength
+                boosted_trend = trend_strength * (1 + signal_score)
+                
                 if abs(price_momentum) > self.settings.get('min_momentum_threshold', 0.001):
                     self.logger.info(f"📈 Trend Following Opportunity: {pair}, "
-                                   f"Trend: {trend_strength:.4f}, Momentum: {price_momentum:.4f}")
+                                   f"Trend: {trend_strength:.4f} (boosted: {boosted_trend:.4f}), "
+                                   f"Momentum: {price_momentum:.4f}, Signals: {signal_score:.2f}")
                     
                     # Create opportunity context
                     opportunity = {
                         'pair': pair,
                         'trading_type': 'trend_following',
                         'trend_strength': trend_strength,
+                        'boosted_trend': boosted_trend,
+                        'signal_score': signal_score,
+                        'signals': signals,
                         'price_momentum': price_momentum,
                         'direction': 'BUY' if price_momentum > 0 else 'SELL',
                         'timestamp': datetime.now()
@@ -183,7 +195,7 @@ class FlexibleTrader:
                     # AI evaluation
                     ai_decision = self.ai.evaluate_flexible_opportunity(opportunity)
                     
-                    if ai_decision.should_act and ai_decision.confidence > 0.1:
+                    if ai_decision.should_act and ai_decision.confidence > 0.05:
                         self.logger.info(f"🎯 EXECUTING Trend Following: {pair}, "
                                        f"Direction: {opportunity['direction']}, "
                                        f"Confidence: {ai_decision.confidence:.2f}")
@@ -239,7 +251,7 @@ class FlexibleTrader:
                     
                     ai_decision = self.ai.evaluate_flexible_opportunity(opportunity)
                     
-                    if ai_decision.should_act and ai_decision.confidence > 0.1:
+                    if ai_decision.should_act and ai_decision.confidence > 0.05:
                         self.logger.info(f"🎯 EXECUTING Momentum Trade: {pair}, "
                                        f"Direction: {opportunity['direction']}, "
                                        f"Confidence: {ai_decision.confidence:.2f}")
@@ -294,7 +306,7 @@ class FlexibleTrader:
                         
                         ai_decision = self.ai.evaluate_flexible_opportunity(opportunity)
                         
-                        if ai_decision.should_act and ai_decision.confidence > 0.1:
+                        if ai_decision.should_act and ai_decision.confidence > 0.05:
                             self.logger.info(f"🎯 EXECUTING Scalp Trade: {pair}, "
                                            f"Direction: {opportunity['direction']}, "
                                            f"Confidence: {ai_decision.confidence:.2f}")
@@ -329,14 +341,26 @@ class FlexibleTrader:
             volatility = np.std(prices[-20:]) / np.mean(prices[-20:])
             price_range = (max(prices[-20:]) - min(prices[-20:])) / np.mean(prices[-20:])
             
+            # Get multi-timeframe signals for grid trading
+            signals = self._get_multi_timeframe_signals(pair)
+            signal_score = self._calculate_signal_score(signals)
+            
+            # Use indicators to boost grid trading opportunities
             if volatility < 0.5 and price_range < 0.01:  # Ranging market
+                # Boost with signal score
+                boosted_volatility = volatility * (1 + signal_score * 0.5)
+                
                 self.logger.info(f"📊 Grid Trading Opportunity: {pair}, "
-                               f"Volatility: {volatility:.4f}, Range: {price_range:.4f}")
+                               f"Volatility: {volatility:.4f} (boosted: {boosted_volatility:.4f}), "
+                               f"Range: {price_range:.4f}, Signals: {signal_score:.2f}")
                 
                 opportunity = {
                     'pair': pair,
                     'trading_type': 'grid',
                     'volatility': volatility,
+                    'boosted_volatility': boosted_volatility,
+                    'signal_score': signal_score,
+                    'signals': signals,
                     'price_range': price_range,
                     'direction': 'BOTH',  # Grid trading both directions
                     'timestamp': datetime.now()
@@ -379,6 +403,180 @@ class FlexibleTrader:
         rsi = 100 - (100 / (1 + rs))
         
         return rsi
+    
+    def _calculate_enhanced_indicators(self, prices: List[float]) -> Dict:
+        """Calculate enhanced technical indicators for flexible trading"""
+        try:
+            if len(prices) < 50:
+                return {}
+            
+            prices_array = np.array(prices, dtype=float)
+            
+            indicators = {
+                # Moving Averages
+                'sma_5': talib.SMA(prices_array, timeperiod=5)[-1],
+                'sma_10': talib.SMA(prices_array, timeperiod=10)[-1],
+                'sma_20': talib.SMA(prices_array, timeperiod=20)[-1],
+                'ema_9': talib.EMA(prices_array, timeperiod=9)[-1],
+                'ema_21': talib.EMA(prices_array, timeperiod=21)[-1],
+                
+                # MACD
+                'macd': talib.MACD(prices_array)[0][-1],
+                'macd_signal': talib.MACD(prices_array)[1][-1],
+                'macd_histogram': talib.MACD(prices_array)[2][-1],
+                
+                # RSI
+                'rsi': talib.RSI(prices_array, timeperiod=14)[-1],
+                'rsi_fast': talib.RSI(prices_array, timeperiod=7)[-1],
+                
+                # Bollinger Bands
+                'bb_upper': talib.BBANDS(prices_array)[0][-1],
+                'bb_middle': talib.BBANDS(prices_array)[1][-1],
+                'bb_lower': talib.BBANDS(prices_array)[2][-1],
+                'bb_width': (talib.BBANDS(prices_array)[0][-1] - talib.BBANDS(prices_array)[2][-1]) / talib.BBANDS(prices_array)[1][-1],
+                
+                # Stochastic
+                'stoch_k': talib.STOCH(prices_array, prices_array, prices_array)[0][-1],
+                'stoch_d': talib.STOCH(prices_array, prices_array, prices_array)[1][-1],
+                
+                # Williams %R
+                'williams_r': talib.WILLR(prices_array, prices_array, prices_array, timeperiod=14)[-1],
+                
+                # CCI (Commodity Channel Index)
+                'cci': talib.CCI(prices_array, prices_array, prices_array, timeperiod=14)[-1],
+                
+                # ADX (Trend Strength)
+                'adx': talib.ADX(prices_array, prices_array, prices_array, timeperiod=14)[-1],
+                
+                # ATR (Average True Range)
+                'atr': talib.ATR(prices_array, prices_array, prices_array, timeperiod=14)[-1],
+                
+                # Price momentum
+                'momentum_5': (prices[-1] - prices[-6]) / prices[-6] if len(prices) >= 6 else 0,
+                'momentum_10': (prices[-1] - prices[-11]) / prices[-11] if len(prices) >= 11 else 0,
+                
+                # Volatility
+                'volatility': np.std(prices[-20:]) / np.mean(prices[-20:]) if len(prices) >= 20 else 0,
+                
+                # Trend signals
+                'trend_bullish': 1 if talib.SMA(prices_array, timeperiod=10)[-1] > talib.SMA(prices_array, timeperiod=20)[-1] else 0,
+                'trend_bearish': 1 if talib.SMA(prices_array, timeperiod=10)[-1] < talib.SMA(prices_array, timeperiod=20)[-1] else 0,
+                
+                # Breakout signals
+                'breakout_up': 1 if prices[-1] > talib.BBANDS(prices_array)[0][-1] else 0,
+                'breakout_down': 1 if prices[-1] < talib.BBANDS(prices_array)[2][-1] else 0,
+            }
+            
+            return indicators
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating enhanced indicators: {e}")
+            return {}
+    
+    def _get_multi_timeframe_signals(self, pair: str) -> Dict:
+        """Get multi-timeframe signals for a pair"""
+        try:
+            signals = {}
+            timeframes = ['M1', 'M5', 'M15', 'M30', 'H1']
+            
+            for tf in timeframes:
+                try:
+                    data = self.broker.get_historical_data(pair, tf, 100)
+                    if data is None or len(data) < 50:
+                        continue
+                    
+                    # Convert to prices
+                    if hasattr(data, 'close'):
+                        prices = data['close'].tolist()
+                    else:
+                        prices = [candle['close'] for candle in data]
+                    
+                    # Calculate indicators
+                    indicators = self._calculate_enhanced_indicators(prices)
+                    
+                    if indicators:
+                        signals[tf] = indicators
+                
+                except Exception as e:
+                    self.logger.error(f"Error getting signals for {pair} {tf}: {e}")
+                    continue
+            
+            return signals
+            
+        except Exception as e:
+            self.logger.error(f"Error getting multi-timeframe signals: {e}")
+            return {}
+    
+    def _calculate_signal_score(self, signals: Dict) -> float:
+        """Calculate overall signal score from multi-timeframe analysis"""
+        try:
+            if not signals:
+                return 0.0
+            
+            total_score = 0
+            count = 0
+            
+            for tf, indicators in signals.items():
+                # RSI score (0-1)
+                rsi = indicators.get('rsi', 50)
+                if rsi < 30:  # Oversold - strong buy signal
+                    total_score += 0.9
+                elif rsi > 70:  # Overbought - strong sell signal
+                    total_score += 0.9
+                elif 40 <= rsi <= 60:  # Neutral - moderate signal
+                    total_score += 0.5
+                else:
+                    total_score += 0.3
+                
+                # MACD score (0-1)
+                macd_hist = indicators.get('macd_histogram', 0)
+                if macd_hist > 0:  # Bullish
+                    total_score += 0.7
+                else:  # Bearish
+                    total_score += 0.4
+                
+                # Bollinger Bands score (0-1)
+                bb_position = (indicators.get('bb_middle', 0) - indicators.get('bb_lower', 0)) / \
+                             (indicators.get('bb_upper', 1) - indicators.get('bb_lower', 1)) if \
+                             indicators.get('bb_upper', 1) != indicators.get('bb_lower', 1) else 0.5
+                total_score += bb_position
+                
+                # Stochastic score (0-1)
+                stoch_k = indicators.get('stoch_k', 50)
+                if stoch_k < 20:  # Oversold
+                    total_score += 0.8
+                elif stoch_k > 80:  # Overbought
+                    total_score += 0.8
+                else:
+                    total_score += 0.5
+                
+                # ADX score (0-1) - trend strength
+                adx = indicators.get('adx', 20)
+                if adx > 25:  # Strong trend
+                    total_score += 0.8
+                elif adx > 20:  # Moderate trend
+                    total_score += 0.6
+                else:  # Weak trend
+                    total_score += 0.4
+                
+                # Breakout score (0-1)
+                breakout_up = indicators.get('breakout_up', 0)
+                breakout_down = indicators.get('breakout_down', 0)
+                if breakout_up or breakout_down:
+                    total_score += 0.9
+                else:
+                    total_score += 0.5
+                
+                count += 1
+            
+            if count == 0:
+                return 0.0
+            
+            return total_score / count
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating signal score: {e}")
+            return 0.0
     
     def _execute_flexible_trade(self, opportunity: Dict, ai_decision):
         """Execute flexible trading opportunity"""
