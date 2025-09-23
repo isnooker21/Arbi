@@ -1202,6 +1202,10 @@ class TriangleArbitrageDetector:
                 self.logger.debug("⏸️ มีกลุ่มเปิดอยู่ - หยุดตรวจสอบ arbitrage")
                 return
             
+            # ถ้าไม่มีกลุ่มที่เปิดอยู่ ให้ reset ข้อมูล
+            if len(self.active_groups) == 0:
+                self._reset_group_data()
+            
             # ตรวจสอบเพิ่มเติม: ถ้ามีคู่เงินที่ถูกใช้แล้ว ให้หยุดตรวจสอบ
             if len(self.used_currency_pairs) > 0:
                 self.logger.debug("⏸️ มีคู่เงินที่ถูกใช้แล้ว - หยุดตรวจสอบ arbitrage")
@@ -1564,6 +1568,8 @@ class TriangleArbitrageDetector:
         """ตรวจสอบสถานะของกลุ่มที่เปิดอยู่"""
         try:
             if not self.active_groups:
+                # ถ้าไม่มีกลุ่มที่เปิดอยู่ ให้ reset ข้อมูล
+                self._reset_group_data()
                 return
             
             groups_to_close = []
@@ -1849,6 +1855,9 @@ class TriangleArbitrageDetector:
             self.arbitrage_sent = False
             self.arbitrage_send_time = None
             
+            # Reset ข้อมูลกลุ่มให้ถูกต้อง
+            self._reset_group_data()
+            
             # แสดงผล PnL รวมของกลุ่ม
             pnl_status = "💰" if total_pnl > 0 else "💸" if total_pnl < 0 else "⚖️"
             self.logger.info(f"✅ Group {group_id} closed successfully")
@@ -1890,6 +1899,32 @@ class TriangleArbitrageDetector:
             
         except Exception as e:
             self.logger.error(f"Error closing recovery positions for group {group_id}: {e}")
+    
+    def _reset_group_data(self):
+        """Reset ข้อมูลกลุ่มให้ถูกต้อง"""
+        try:
+            # ตรวจสอบว่ามีกลุ่มที่เปิดอยู่จริงหรือไม่
+            if len(self.active_groups) == 0:
+                # ถ้าไม่มีกลุ่มที่เปิดอยู่ ให้ reset ข้อมูลทั้งหมด
+                self.used_currency_pairs.clear()
+                self.group_currency_mapping.clear()
+                self.logger.info("🔄 Reset ข้อมูลกลุ่ม - คู่เงินทั้งหมดปลดล็อคแล้ว")
+            else:
+                # ถ้ายังมีกลุ่มที่เปิดอยู่ ให้ตรวจสอบข้อมูลให้ถูกต้อง
+                current_used_pairs = set()
+                for group_id, group_data in self.active_groups.items():
+                    triangle = group_data.get('triangle', [])
+                    if triangle:
+                        group_pairs = set(triangle)
+                        current_used_pairs.update(group_pairs)
+                        self.group_currency_mapping[group_id] = group_pairs
+                
+                # อัพเดท used_currency_pairs ให้ตรงกับข้อมูลจริง
+                self.used_currency_pairs = current_used_pairs
+                self.logger.info(f"🔄 อัพเดทข้อมูลกลุ่ม - คู่เงินที่ใช้: {self.used_currency_pairs}")
+                
+        except Exception as e:
+            self.logger.error(f"Error resetting group data: {e}")
     
     def analyze_timeframe(self, triangle: Tuple[str, str, str], timeframe: str) -> Dict:
         """Analyze triangle for specific timeframe"""
