@@ -38,6 +38,12 @@ class TriangleArbitrageDetector:
         # Log triangle combinations count
         self.logger.info(f"Available pairs: {len(self.available_pairs)}")
         self.logger.info(f"Generated {len(self.triangle_combinations)} triangle combinations (Major & Minor pairs only)")
+        
+        # If no triangles generated, create fallback triangles
+        if len(self.triangle_combinations) == 0 and len(self.available_pairs) > 0:
+            self.logger.warning("No triangles generated, creating fallback triangles...")
+            self.triangle_combinations = self._create_fallback_triangles()
+            self.logger.info(f"Created {len(self.triangle_combinations)} fallback triangle combinations")
     
     def _get_available_pairs(self) -> List[str]:
         """Get list of available trading pairs from broker"""
@@ -142,6 +148,50 @@ class TriangleArbitrageDetector:
         self.logger.info(f"Generated {len(combinations)} unique triangle combinations")
         
         return combinations
+    
+    def _create_fallback_triangles(self) -> List[Tuple[str, str, str]]:
+        """Create fallback triangle combinations when normal generation fails"""
+        fallback_triangles = []
+        
+        # Common triangle patterns
+        common_triangles = [
+            ('EURUSD', 'USDJPY', 'EURJPY'),
+            ('GBPUSD', 'USDJPY', 'GBPJPY'),
+            ('EURUSD', 'USDCHF', 'EURCHF'),
+            ('GBPUSD', 'USDCHF', 'GBPCHF'),
+            ('EURUSD', 'USDCAD', 'EURCAD'),
+            ('GBPUSD', 'USDCAD', 'GBPCAD'),
+            ('EURUSD', 'AUDUSD', 'EURAUD'),
+            ('GBPUSD', 'AUDUSD', 'GBPAUD'),
+            ('EURUSD', 'NZDUSD', 'EURNZD'),
+            ('GBPUSD', 'NZDUSD', 'GBPNZD'),
+            ('USDJPY', 'JPYCHF', 'USDCHF'),
+            ('USDJPY', 'JPYCAD', 'USDCAD'),
+            ('USDJPY', 'JPYAUD', 'AUDUSD'),
+            ('USDJPY', 'JPYNZD', 'NZDUSD'),
+            ('EURGBP', 'GBPJPY', 'EURJPY'),
+            ('EURGBP', 'GBPCHF', 'EURCHF'),
+            ('EURGBP', 'GBPCAD', 'EURCAD'),
+            ('EURGBP', 'GBPAUD', 'EURAUD'),
+            ('EURGBP', 'GBPNZD', 'EURNZD'),
+            ('AUDCAD', 'CADCHF', 'AUDCHF'),
+            ('AUDCAD', 'CADJPY', 'AUDJPY'),
+            ('AUDCAD', 'CADNZD', 'AUDNZD'),
+            ('AUDCHF', 'CHFJPY', 'AUDJPY'),
+            ('AUDCHF', 'CHFCAD', 'AUDCAD'),
+            ('AUDCHF', 'CHFNZD', 'AUDNZD')
+        ]
+        
+        # Filter to only include triangles with available pairs
+        available_pairs_set = set(self.available_pairs)
+        
+        for triangle in common_triangles:
+            pair1, pair2, pair3 = triangle
+            if pair1 in available_pairs_set and pair2 in available_pairs_set and pair3 in available_pairs_set:
+                fallback_triangles.append(triangle)
+        
+        self.logger.info(f"Created {len(fallback_triangles)} fallback triangles from common patterns")
+        return fallback_triangles
     
     def start_detection(self):
         """Start the arbitrage detection loop"""

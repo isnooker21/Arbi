@@ -87,6 +87,49 @@ class DecisionEngine:
             self.logger.error(f"Error evaluating arbitrage opportunity: {e}")
             return AIDecision(False, 0.0, f"Error: {str(e)}", [], [], {})
     
+    def evaluate_flexible_opportunity(self, opportunity: Dict) -> 'AIDecision':
+        """
+        ประเมินโอกาส Flexible Trading (Trend, Momentum, Scalping, Grid, etc.)
+        
+        วิเคราะห์โอกาสการเทรดแบบยืดหยุ่นโดยพิจารณาจาก:
+        - ประเภทการเทรด (trend_following, momentum, scalping, grid)
+        - เงื่อนไขตลาดปัจจุบัน
+        - กฎเกณฑ์ที่กำหนดไว้
+        - ข้อมูลจาก Machine Learning
+        
+        Args:
+            opportunity: ข้อมูลโอกาส Flexible Trading
+            
+        Returns:
+            AIDecision: การตัดสินใจพร้อมเหตุผลและพารามิเตอร์
+        """
+        try:
+            # Get current market conditions
+            market_conditions = self.market_analyzer.analyze_market_conditions()
+            
+            # Prepare context for rule evaluation
+            context = self._prepare_flexible_context(opportunity, market_conditions)
+            
+            # Evaluate rules based on trading type
+            trading_type = opportunity.get('trading_type', 'unknown')
+            decision = self.rule_engine.evaluate_rules(context, 'flexible_trading')
+            
+            # Enhance decision with learning module insights
+            if decision.should_act:
+                decision = self._enhance_decision_with_learning(decision, opportunity, market_conditions)
+            
+            # Set position parameters based on trading type
+            self._set_flexible_position_parameters(decision, opportunity, market_conditions)
+            
+            # Record decision
+            self._record_decision(decision, opportunity, f'flexible_{trading_type}')
+            
+            return decision
+            
+        except Exception as e:
+            self.logger.error(f"Error evaluating flexible opportunity: {e}")
+            return AIDecision(False, 0.0, f"Error: {str(e)}", [], [], {})
+    
     def evaluate_recovery_opportunity(self, opportunity: Dict) -> 'AIDecision':
         """
         ประเมินโอกาสการฟื้นตัวของ Correlation
@@ -175,6 +218,54 @@ class DecisionEngine:
             
         except Exception as e:
             self.logger.error(f"Error preparing arbitrage context: {e}")
+            return {}
+    
+    def _prepare_flexible_context(self, opportunity: Dict, market_conditions: Dict) -> Dict:
+        """
+        เตรียมข้อมูลบริบทสำหรับการประเมินกฎเกณฑ์ Flexible Trading
+        
+        รวมข้อมูลจากโอกาสการเทรดแบบยืดหยุ่นและเงื่อนไขตลาด
+        เพื่อใช้ในการประเมินกฎเกณฑ์
+        
+        Args:
+            opportunity: ข้อมูลโอกาส Flexible Trading
+            market_conditions: เงื่อนไขตลาดปัจจุบัน
+            
+        Returns:
+            Dict: ข้อมูลบริบทที่พร้อมใช้
+        """
+        try:
+            context = {
+                'pair': opportunity.get('pair', ''),
+                'trading_type': opportunity.get('trading_type', ''),
+                'direction': opportunity.get('direction', ''),
+                'timestamp': opportunity.get('timestamp', datetime.now()),
+                
+                # Trading type specific conditions
+                'trend_strength': opportunity.get('trend_strength', 0),
+                'price_momentum': opportunity.get('price_momentum', 0),
+                'momentum': opportunity.get('momentum', 0),
+                'rsi': opportunity.get('rsi', 50),
+                'volatility': opportunity.get('volatility', 0),
+                'price_change': opportunity.get('price_change', 0),
+                'spread': opportunity.get('spread', 0),
+                'price_range': opportunity.get('price_range', 0),
+                
+                # Market conditions
+                'overall_trend': market_conditions.get('overall_trend', 'unknown'),
+                'volatility_level': market_conditions.get('volatility_level', 'medium'),
+                'session_type': market_conditions.get('session_type', 'unknown'),
+                'market_condition': market_conditions.get('market_condition', 'normal'),
+                
+                # Current time variables
+                'current_time': datetime.now().strftime('%H:%M'),
+                'day_of_week': datetime.now().strftime('%A').lower()
+            }
+            
+            return context
+            
+        except Exception as e:
+            self.logger.error(f"Error preparing flexible context: {e}")
             return {}
     
     def _prepare_recovery_context(self, opportunity: Dict, market_conditions: Dict) -> Dict:
@@ -351,6 +442,65 @@ class DecisionEngine:
             
         except Exception as e:
             self.logger.error(f"Error setting position parameters: {e}")
+    
+    def _set_flexible_position_parameters(self, decision: 'AIDecision', opportunity: Dict, 
+                                        market_conditions: Dict):
+        """
+        กำหนดพารามิเตอร์ของ Position สำหรับการตัดสินใจ Flexible Trading
+        
+        คำนวณ:
+        - ขนาด Position ตามประเภทการเทรดและความมั่นใจ
+        - ทิศทางตามสัญญาณการเทรด
+        - ตัวคูณขนาด Position
+        
+        Args:
+            decision: การตัดสินใจ
+            opportunity: ข้อมูลโอกาส Flexible Trading
+            market_conditions: เงื่อนไขตลาด
+        """
+        try:
+            # Base position size
+            base_lot_size = 0.1
+            
+            # Adjust based on confidence
+            confidence_multiplier = decision.confidence
+            
+            # Adjust based on trading type
+            trading_type = opportunity.get('trading_type', '')
+            type_multiplier = {
+                'trend_following': 1.0,
+                'momentum': 0.8,
+                'scalping': 0.5,
+                'grid': 0.6,
+                'breakout': 0.9,
+                'mean_reversion': 0.7
+            }.get(trading_type, 0.8)
+            
+            # Adjust based on volatility
+            volatility = opportunity.get('volatility', 0)
+            if volatility > 1.0:  # High volatility
+                volatility_multiplier = 0.8
+            elif volatility < 0.3:  # Low volatility
+                volatility_multiplier = 1.2
+            else:
+                volatility_multiplier = 1.0
+            
+            # Calculate final position size
+            final_lot_size = (base_lot_size * confidence_multiplier * 
+                            type_multiplier * volatility_multiplier)
+            
+            # Apply limits
+            final_lot_size = max(0.01, min(final_lot_size, 1.0))
+            
+            decision.set_position_size(final_lot_size)
+            decision.set_position_size_multiplier(type_multiplier)
+            
+            # Set direction
+            direction = opportunity.get('direction', 'BUY')
+            decision.set_direction({'main': direction})
+            
+        except Exception as e:
+            self.logger.error(f"Error setting flexible position parameters: {e}")
     
     def _set_recovery_parameters(self, decision: 'AIDecision', opportunity: Dict, 
                                market_conditions: Dict):
