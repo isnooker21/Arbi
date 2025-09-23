@@ -939,22 +939,22 @@ class CorrelationManager:
                 ai_decision = self.ai.evaluate_recovery_opportunity(opportunity)
                 
                 if ai_decision.should_act and ai_decision.confidence > 0.6:
-                        self.logger.info(f"🎯 ACTIVE RECOVERY OPPORTUNITY: {pair} -> {hedge_candidate['hedge_pair']}, "
-                                       f"Correlation: {hedge_candidate['correlation']:.3f}, "
-                                       f"Potential: {hedge_candidate['recovery_potential']:.3f}, "
-                                       f"Confidence: {ai_decision.confidence:.2f}")
-                        
-                        # Execute correlation hedge
-                        success = self.execute_correlation_hedge(opportunity)
-                        
-                        if success:
-                            self.logger.info(f"✅ Recovery initiated for {pair}")
-                            break  # Move to next stuck position
-                        else:
-                            self.logger.warning(f"❌ Failed to execute recovery for {pair}")
+                    self.logger.info(f"🎯 ACTIVE RECOVERY OPPORTUNITY: {pair} -> {hedge_candidate['hedge_pair']}, "
+                                   f"Correlation: {hedge_candidate['correlation']:.3f}, "
+                                   f"Potential: {hedge_candidate['recovery_potential']:.3f}, "
+                                   f"Confidence: {ai_decision.confidence:.2f}")
+                    
+                    # Execute correlation hedge
+                    success = self.execute_correlation_hedge(opportunity)
+                    
+                    if success:
+                        self.logger.info(f"✅ Recovery initiated for {pair}")
+                        break  # Move to next stuck position
                     else:
-                        self.logger.debug(f"🔍 Recovery opportunity below threshold: {pair} -> {hedge_candidate['hedge_pair']}, "
-                                        f"Confidence: {ai_decision.confidence:.2f}")
+                        self.logger.warning(f"❌ Failed to execute recovery for {pair}")
+                else:
+                    self.logger.debug(f"🔍 Recovery opportunity below threshold: {pair} -> {hedge_candidate['hedge_pair']}, "
+                                    f"Confidence: {ai_decision.confidence:.2f}")
             
             # Monitor existing recovery progress
             self.monitor_recovery_progress()
