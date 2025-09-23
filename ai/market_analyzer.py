@@ -66,189 +66,169 @@ class MarketAnalyzer:
         
     def analyze_market_conditions(self, symbols: List[str] = None) -> Dict:
         """
-        วิเคราะห์ Market Regime Detection แบบ Simplified
-        
-        วิเคราะห์แค่ Market Regime, Volatility, และ Correlation Stability
-        เน้น performance และ real-time analysis
-        
-        Args:
-            symbols: รายการคู่เงินที่ต้องการวิเคราะห์ (ถ้าไม่ระบุจะใช้ 5 คู่แรก)
-            
-        Returns:
-            Dict: ข้อมูล Market Regime ที่วิเคราะห์แล้ว
+        ⚡ CRITICAL: Real-time market regime detection
+        Called by AdaptiveEngine every 30 seconds
         """
         try:
-            # Check if analysis is needed (cache-based)
-            current_time = datetime.now()
-            if (self.last_analysis_time and 
-                (current_time - self.last_analysis_time).total_seconds() < self.analysis_interval):
-                return self.analysis_cache.get('last_analysis', {})
+            self.logger.debug("🔍 Analyzing market conditions for regime detection...")
             
-            if symbols is None:
-                symbols = self.broker.get_available_pairs()[:5]  # Limit to 5 for performance
+            # Use major pairs for analysis
+            analysis_pairs = ['EURUSD', 'GBPUSD', 'USDJPY'] if symbols is None else symbols[:3]
             
-            # Simplified market analysis
-            market_analysis = {
-                'timestamp': current_time,
-                'market_regime': self.market_regime,
-                'volatility_level': self.volatility_level,
-                'correlation_stability': self.correlation_stability,
-                'symbols_analyzed': len(symbols),
-                'analysis_type': 'simplified_regime_detection'
+            # Calculate market metrics
+            volatility = self._calculate_market_volatility(analysis_pairs)
+            trend_strength = self._calculate_trend_strength(analysis_pairs)
+            correlation_stability = self._calculate_correlation_stability(analysis_pairs)
+            
+            # Determine market regime
+            regime = self._determine_market_regime(volatility, trend_strength, correlation_stability)
+            confidence = self._calculate_regime_confidence(volatility, trend_strength)
+            
+            result = {
+                'timestamp': datetime.now(),
+                'market_regime': regime,
+                'volatility_level': volatility,
+                'trend_strength': trend_strength,
+                'correlation_stability': correlation_stability,
+                'regime_confidence': confidence,
+                'analysis_pairs': analysis_pairs
             }
             
-            # Analyze market regime
-            regime_analysis = self._detect_market_regime(symbols)
-            market_analysis.update(regime_analysis)
+            self.logger.info(f"📊 Market Regime: {regime} (confidence: {confidence:.2f})")
             
-            # Analyze volatility
-            volatility_analysis = self._analyze_volatility(symbols)
-            market_analysis.update(volatility_analysis)
-            
-            # Analyze correlation stability
-            correlation_analysis = self._analyze_correlation_stability(symbols)
-            market_analysis.update(correlation_analysis)
-            
-            # Update cache
-            self.analysis_cache['last_analysis'] = market_analysis
-            self.last_analysis_time = current_time
-            
-            # Update class variables
-            self.market_regime = market_analysis.get('market_regime', 'normal')
-            self.volatility_level = market_analysis.get('volatility_level', 'medium')
-            self.correlation_stability = market_analysis.get('correlation_stability', 'stable')
-            
-            self.logger.debug(f"Market regime analysis completed: {self.market_regime}, "
-                            f"volatility: {self.volatility_level}, "
-                            f"correlation: {self.correlation_stability}")
-            
-            return market_analysis
+            return result
             
         except Exception as e:
             self.logger.error(f"Error analyzing market conditions: {e}")
-            return {}
+            return {
+                'market_regime': 'normal',
+                'timestamp': datetime.now(),
+                'volatility_level': 0.001,
+                'trend_strength': 0.5,
+                'correlation_stability': 0.5,
+                'regime_confidence': 0.5
+            }
     
-    def _calculate_market_volatility(self) -> float:
-        """
-        ⚡ CRITICAL: Calculate current market volatility using EURUSD as proxy
-        """
+    def _calculate_market_volatility(self, pairs: List[str]) -> float:
+        """Calculate current market volatility"""
         try:
-            # Get recent price data for EURUSD
-            price_data = self.broker.get_historical_data('EURUSD', 'M1', 100)
-            if not price_data or len(price_data) < 10:
-                return 0.01  # Default volatility
+            volatilities = []
             
-            # Calculate returns
-            returns = []
-            for i in range(1, len(price_data)):
-                prev_close = price_data[i-1]['close']
-                curr_close = price_data[i]['close']
-                if prev_close > 0:
-                    returns.append((curr_close - prev_close) / prev_close)
+            for pair in pairs:
+                try:
+                    data = self.broker.get_historical_data(pair, 'H1', 24)
+                    if data is None or len(data) < 10:
+                        continue
+                        
+                    returns = data['close'].pct_change().dropna()
+                    if len(returns) < 5:
+                        continue
+                    
+                    volatility = returns.std()
+                    volatilities.append(volatility)
+                    
+                except Exception as e:
+                    continue
             
-            if not returns:
-                return 0.01
-            
-            # Calculate standard deviation (volatility)
-            volatility = np.std(returns)
-            return float(volatility)
+            return sum(volatilities) / len(volatilities) if volatilities else 0.001
             
         except Exception as e:
             self.logger.error(f"Error calculating market volatility: {e}")
-            return 0.01
+            return 0.001
     
-    def _calculate_trend_strength(self) -> float:
-        """
-        ⚡ CRITICAL: Calculate trend strength using linear regression slope
-        """
+    def _calculate_trend_strength(self, pairs: List[str]) -> float:
+        """Calculate trend strength (0-1)"""
         try:
-            # Get recent price data for EURUSD
-            price_data = self.broker.get_historical_data('EURUSD', 'M5', 50)
-            if not price_data or len(price_data) < 10:
-                return 0.0  # No trend
+            trend_strengths = []
             
-            # Extract close prices
-            closes = [float(candle['close']) for candle in price_data]
+            for pair in pairs:
+                try:
+                    data = self.broker.get_historical_data(pair, 'H4', 24)
+                    if data is None or len(data) < 6:
+                        continue
+                    
+                    prices = data['close'].values
+                    x = np.arange(len(prices))
+                    slope, _ = np.polyfit(x, prices, 1)
+                    
+                    # Normalize slope
+                    avg_price = prices.mean()
+                    relative_slope = abs(slope) / avg_price if avg_price > 0 else 0
+                    trend_strength = min(relative_slope * 1000, 1.0)
+                    trend_strengths.append(trend_strength)
+                    
+                except Exception as e:
+                    continue
             
-            # Calculate linear regression slope
-            x = np.arange(len(closes))
-            y = np.array(closes)
-            
-            # Simple linear regression
-            slope = np.polyfit(x, y, 1)[0]
-            
-            # Normalize slope to get trend strength (0-1)
-            trend_strength = min(1.0, abs(slope) / 0.001)  # Normalize by 0.001
-            return float(trend_strength)
+            return sum(trend_strengths) / len(trend_strengths) if trend_strengths else 0.5
             
         except Exception as e:
             self.logger.error(f"Error calculating trend strength: {e}")
-            return 0.0
+            return 0.5
     
-    def _calculate_correlation_stability(self) -> float:
-        """
-        ⚡ CRITICAL: Calculate correlation stability between major pairs
-        """
+    def _calculate_correlation_stability(self, pairs: List[str]) -> float:
+        """Calculate correlation stability"""
         try:
-            # Major pairs for correlation analysis
-            major_pairs = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD']
+            if len(pairs) < 2:
+                return 0.5
             
-            # Get recent price data for all pairs
-            price_data = {}
-            for pair in major_pairs:
-                data = self.broker.get_historical_data(pair, 'M5', 20)
-                if data and len(data) >= 10:
-                    price_data[pair] = [float(candle['close']) for candle in data]
+            pair1, pair2 = pairs[0], pairs[1]
             
-            if len(price_data) < 3:
-                return 0.8  # Default stability
+            data1 = self.broker.get_historical_data(pair1, 'H1', 24)
+            data2 = self.broker.get_historical_data(pair2, 'H1', 24)
             
-            # Calculate correlation matrix
-            df = pd.DataFrame(price_data)
-            correlation_matrix = df.corr()
+            if data1 is None or data2 is None or len(data1) < 10 or len(data2) < 10:
+                return 0.5
             
-            # Calculate average correlation stability
-            correlations = []
-            for i in range(len(correlation_matrix.columns)):
-                for j in range(i+1, len(correlation_matrix.columns)):
-                    corr = correlation_matrix.iloc[i, j]
-                    if not np.isnan(corr):
-                        correlations.append(abs(corr))
+            returns1 = data1['close'].pct_change().dropna()
+            returns2 = data2['close'].pct_change().dropna()
             
-            if not correlations:
-                return 0.8
+            min_length = min(len(returns1), len(returns2))
+            if min_length < 5:
+                return 0.5
             
-            # Return average correlation as stability score
-            stability = np.mean(correlations)
-            return float(stability)
+            returns1 = returns1.tail(min_length)
+            returns2 = returns2.tail(min_length)
+            
+            correlation = returns1.corr(returns2)
+            stability = abs(correlation) if not np.isnan(correlation) else 0.5
+            
+            return stability
             
         except Exception as e:
             self.logger.error(f"Error calculating correlation stability: {e}")
-            return 0.8
+            return 0.5
     
     def _determine_market_regime(self, volatility: float, trend_strength: float, correlation_stability: float) -> str:
-        """
-        ⚡ CRITICAL: Determine market regime based on calculated metrics
-        """
+        """Determine market regime"""
         try:
-            # High volatility regime
-            if volatility > 0.02:
+            VOLATILITY_HIGH = 0.0015
+            TREND_STRONG = 0.7
+            TREND_WEAK = 0.3
+            
+            if volatility > VOLATILITY_HIGH:
                 return 'volatile'
-            
-            # Strong trend regime
-            if trend_strength > 0.7:
+            elif trend_strength > TREND_STRONG:
                 return 'trending'
-            
-            # Low correlation stability (ranging market)
-            if correlation_stability < 0.5:
+            elif trend_strength < TREND_WEAK:
                 return 'ranging'
-            
-            # Normal market
+            else:
+                return 'normal'
+                
+        except Exception as e:
             return 'normal'
+    
+    def _calculate_regime_confidence(self, volatility: float, trend_strength: float) -> float:
+        """Calculate confidence (0-1)"""
+        try:
+            volatility_confidence = min(volatility * 1000, 1.0)
+            trend_confidence = abs(trend_strength - 0.5) * 2
+            
+            confidence = (volatility_confidence + trend_confidence) / 2
+            return min(max(confidence, 0.1), 1.0)
             
         except Exception as e:
-            self.logger.error(f"Error determining market regime: {e}")
-            return 'normal'
+            return 0.5
     
     def _detect_market_regime(self, symbols: List[str]) -> Dict:
         """

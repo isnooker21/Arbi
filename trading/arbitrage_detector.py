@@ -334,27 +334,49 @@ class TriangleArbitrageDetector:
     
     
     def _execute_triangle_arbitrage(self, opportunity: Dict) -> bool:
-        """
-        ⚡ CRITICAL: Execute triangle arbitrage with Never-Cut-Loss logic
-        If any leg fails, relies on correlation manager for recovery
-        """
+        """Execute triangle arbitrage with Never-Cut-Loss logic"""
         try:
-            # Execute all 3 legs simultaneously
+            self.logger.info(f"🚀 Executing triangle arbitrage: {opportunity['id']}")
+            
             orders = []
-            for leg in opportunity['legs']:
-                order = self.broker.place_order(
-                    symbol=leg['symbol'],
-                    order_type=leg['type'],
-                    volume=leg['volume']
-                )
-                if order:
-                    orders.append(order)
-                else:
-                    # If any leg fails, don't close others - let correlation manager handle
-                    self.logger.warning(f"⚠️ Leg execution failed: {leg['symbol']} - Will rely on correlation recovery")
+            failed_legs = []
             
-            return len(orders) > 0  # Success if at least one leg executed
+            # Execute all 3 legs
+            for i, leg in enumerate(opportunity['legs']):
+                try:
+                    order = self.broker.place_order(
+                        symbol=leg['symbol'],
+                        order_type=leg['type'],
+                        volume=leg['volume'],
+                        comment=f"ARBITRAGE_{opportunity['id']}_LEG{i+1}"
+                    )
+                    
+                    if order:
+                        orders.append(order)
+                        self.logger.debug(f"✅ Leg {i+1} executed: {leg['symbol']}")
+                    else:
+                        failed_legs.append(leg)
+                        self.logger.warning(f"⚠️ Leg {i+1} failed: {leg['symbol']} - Will use correlation recovery")
+                        
+                except Exception as e:
+                    failed_legs.append(leg)
+                    self.logger.error(f"❌ Leg {i+1} error: {e}")
             
+            # Evaluate success
+            if len(orders) > 0:
+                opportunity['execution_status'] = 'complete' if len(failed_legs) == 0 else 'partial'
+                opportunity['orders'] = orders
+                opportunity['failed_legs'] = failed_legs
+                opportunity['execution_time'] = datetime.now()
+                
+                if len(failed_legs) > 0:
+                    self.logger.warning(f"⚠️ Partial execution - correlation manager will handle failed legs")
+                
+                return True
+            else:
+                self.logger.error(f"❌ Complete execution failure")
+                return False
+                
         except Exception as e:
             self.logger.error(f"Error executing triangle arbitrage: {e}")
             return False
@@ -847,7 +869,6 @@ class TriangleArbitrageDetector:
     def detect_opportunities(self):
         """
         ⚡ CRITICAL: Main detection method called by AdaptiveEngine
-        Must implement real-time arbitrage detection
         """
         try:
             if not self.is_running:
@@ -855,24 +876,43 @@ class TriangleArbitrageDetector:
                 
             self.logger.debug(f"🔍 Detecting arbitrage opportunities (threshold: {self.arbitrage_threshold})")
             
-            # Generate triangles for current market regime
+            # Get triangles for current market regime
             triangles_to_check = self._get_priority_triangles()
+            
+            if not triangles_to_check:
+                self.logger.warning("No triangles available for checking")
+                return
+            
+            opportunities_found = 0
             
             for triangle in triangles_to_check:
                 try:
+                    # Calculate arbitrage opportunity
                     opportunity = self._calculate_triangle_opportunity(triangle)
                     
                     if opportunity and opportunity['profit_potential'] > self.arbitrage_threshold:
                         self.total_opportunities_detected += 1
-                        self.logger.info(f"🎯 Arbitrage opportunity found: {opportunity['profit_potential']:.4f}")
+                        opportunities_found += 1
+                        
+                        self.logger.info(f"🎯 Arbitrage opportunity found: {triangle}")
+                        self.logger.info(f"   Profit potential: {opportunity['profit_potential']:.4f}%")
                         
                         # Execute triangle if conditions met
                         success = self._execute_triangle_arbitrage(opportunity)
                         if success:
                             self.active_triangles[opportunity['id']] = opportunity
+                            self.performance_metrics['successful_trades'] += 1
+                            self.logger.info(f"✅ Triangle arbitrage executed: {opportunity['id']}")
                             
                 except Exception as e:
                     self.logger.error(f"Error checking triangle {triangle}: {e}")
+                    continue
+            
+            # Update performance metrics
+            self.performance_metrics['total_opportunities'] += opportunities_found
+            
+            if opportunities_found > 0:
+                self.logger.info(f"📊 Found {opportunities_found} arbitrage opportunities")
                     
         except Exception as e:
             self.logger.error(f"Error in detect_opportunities: {e}")
