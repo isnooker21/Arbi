@@ -519,9 +519,9 @@ class TradingSystem:
                 self.logger.warning("⚠️ Arbitrage detector not running")
                 return False
             
-            # Check correlation manager
-            if not self.correlation_manager or not self.correlation_manager.is_running:
-                self.logger.warning("⚠️ Correlation manager not running")
+            # Check correlation manager (ไม่ต้องตรวจสอบ is_running เพราะมัน integrated กับ arbitrage detector)
+            if not self.correlation_manager:
+                self.logger.warning("⚠️ Correlation manager not available")
                 return False
             
             # Check recovery positions

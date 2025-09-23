@@ -151,48 +151,60 @@ class PositionManager:
             self.logger.error(f"Error updating position metrics for {position_id}: {e}")
     
     def check_risk_triggers(self):
-        """Check for risk management triggers"""
+        """Check for risk management triggers - DISABLED for Never-Cut-Loss strategy"""
         try:
-            for position_id, position in self.positions.items():
-                if position['status'] != 'active':
-                    continue
-                
-                # Check stop loss
-                if self.risk_manager.should_trigger_stop_loss(position):
-                    self.logger.warning(f"Stop loss triggered for position {position_id}")
-                    self.close_position(position_id, "stop_loss")
-                
-                # Check maximum drawdown
-                elif self.risk_manager.should_trigger_max_drawdown(position):
-                    self.logger.warning(f"Max drawdown triggered for position {position_id}")
-                    self.close_position(position_id, "max_drawdown")
-                
-                # Check time-based exit
-                elif self.risk_manager.should_trigger_time_exit(position):
-                    self.logger.info(f"Time-based exit triggered for position {position_id}")
-                    self.close_position(position_id, "time_exit")
+            # DISABLED: ระบบ Never-Cut-Loss ไม่ปิดไม้เดี่ยว
+            # ระบบจะปิดไม้เฉพาะเมื่อทั้งกลุ่มมีกำไรเท่านั้น
+            self.logger.debug("Risk triggers disabled - Using Never-Cut-Loss strategy")
+            return
+            
+            # OLD CODE - DISABLED
+            # for position_id, position in self.positions.items():
+            #     if position['status'] != 'active':
+            #         continue
+            #     
+            #     # Check stop loss
+            #     if self.risk_manager.should_trigger_stop_loss(position):
+            #         self.logger.warning(f"Stop loss triggered for position {position_id}")
+            #         self.close_position(position_id, "stop_loss")
+            #     
+            #     # Check maximum drawdown
+            #     elif self.risk_manager.should_trigger_max_drawdown(position):
+            #         self.logger.warning(f"Max drawdown triggered for position {position_id}")
+            #         self.close_position(position_id, "max_drawdown")
+            #     
+            #     # Check time-based exit
+            #     elif self.risk_manager.should_trigger_time_exit(position):
+            #         self.logger.info(f"Time-based exit triggered for position {position_id}")
+            #         self.close_position(position_id, "time_exit")
                     
         except Exception as e:
             self.logger.error(f"Error checking risk triggers: {e}")
     
     def check_profit_loss_targets(self):
-        """Check for profit/loss targets"""
+        """Check for profit/loss targets - DISABLED for Never-Cut-Loss strategy"""
         try:
-            for position_id, position in self.positions.items():
-                if position['status'] != 'active':
-                    continue
-                
-                current_pnl = position.get('profit', 0)
-                
-                # Check take profit
-                if current_pnl > 0 and self.risk_manager.should_trigger_take_profit(position):
-                    self.logger.info(f"Take profit triggered for position {position_id}")
-                    self.close_position(position_id, "take_profit")
-                
-                # Check trailing stop
-                elif self.risk_manager.should_trigger_trailing_stop(position):
-                    self.logger.info(f"Trailing stop triggered for position {position_id}")
-                    self.close_position(position_id, "trailing_stop")
+            # DISABLED: ระบบ Never-Cut-Loss ไม่ปิดไม้เดี่ยว
+            # ระบบจะปิดไม้เฉพาะเมื่อทั้งกลุ่มมีกำไรเท่านั้น
+            self.logger.debug("Profit/loss targets disabled - Using Never-Cut-Loss strategy")
+            return
+            
+            # OLD CODE - DISABLED
+            # for position_id, position in self.positions.items():
+            #     if position['status'] != 'active':
+            #         continue
+            #     
+            #     current_pnl = position.get('profit', 0)
+            #     
+            #     # Check take profit
+            #     if current_pnl > 0 and self.risk_manager.should_trigger_take_profit(position):
+            #         self.logger.info(f"Take profit triggered for position {position_id}")
+            #         self.close_position(position_id, "take_profit")
+            #     
+            #     # Check trailing stop
+            #     elif self.risk_manager.should_trigger_trailing_stop(position):
+            #         self.logger.info(f"Trailing stop triggered for position {position_id}")
+            #         self.close_position(position_id, "trailing_stop")
                     
         except Exception as e:
             self.logger.error(f"Error checking profit/loss targets: {e}")
@@ -386,7 +398,8 @@ class PositionManager:
         try:
             total_pnl = 0.0
             
-            for position_id, position in self.positions.items():
+            # ใช้ list() เพื่อป้องกัน dictionary changed size during iteration
+            for position_id, position in list(self.positions.items()):
                 if 'pnl' in position:
                     total_pnl += position['pnl']
             

@@ -364,10 +364,16 @@ class TriangleArbitrageDetector:
             for result in results:
                 if result and result['success']:
                     orders_sent += 1
+                    # ดึงราคาปัจจุบันเป็น entry price
+                    entry_price = self.broker.get_current_price(result['symbol'])
+                    if not entry_price:
+                        entry_price = 0.0
+                    
                     group_data['positions'].append({
                         'symbol': result['symbol'],
                         'direction': result['direction'],
                         'lot_size': self.standard_lot_size,
+                        'entry_price': entry_price,
                         'status': 'active',
                         'order_id': result.get('order_id'),
                         'comment': f"SIMPLE_G{group_id.split('_')[-1]}_{result['symbol']}"
@@ -567,8 +573,18 @@ class TriangleArbitrageDetector:
                 try:
                     current_price = self.broker.get_current_price(symbol)
                     if entry_price > 0 and current_price > 0:
-                        price_distance = abs(current_price - entry_price) * 10000  # แปลงเป็นจุด
+                        # คำนวณ price distance ตามประเภทคู่เงิน
+                        if 'JPY' in symbol:
+                            # คู่เงินที่มี JPY ใช้ 100 เป็นตัวคูณ
+                            price_distance = abs(current_price - entry_price) * 100
+                        else:
+                            # คู่เงินอื่นใช้ 10000 เป็นตัวคูณ
+                            price_distance = abs(current_price - entry_price) * 10000
+                        
                         max_price_distance = max(max_price_distance, price_distance)
+                        self.logger.info(f"📊 {symbol}: Entry {entry_price:.5f}, Current {current_price:.5f}, Distance {price_distance:.1f} pips")
+                    else:
+                        self.logger.warning(f"⚠️ {symbol}: Entry price {entry_price}, Current price {current_price}")
                 except Exception as e:
                     self.logger.warning(f"Could not get price for {symbol}: {e}")
                     continue
