@@ -739,7 +739,8 @@ class CorrelationManager:
             correlation_ratio = min(2.0, max(0.5, correlation * 1.5))
             
             # Calculate correlation lot size
-            correlation_lot_size = original_position['lot_size'] * correlation_ratio
+            lot_size = original_position.get('lot_size', original_position.get('volume', 0.1))
+            correlation_lot_size = lot_size * correlation_ratio
             
             # Send correlation order
             success = self._send_correlation_order(symbol, correlation_lot_size, group_id)
@@ -777,8 +778,11 @@ class CorrelationManager:
             # ใช้ correlation ratio
             correlation_ratio = min(2.0, max(0.5, correlation_candidate['correlation'] * 1.5))
             
+            # ดึง lot_size จาก original_position (ใช้ key ที่ถูกต้อง)
+            lot_size = original_position.get('lot_size', original_position.get('volume', 0.1))
+            
             # คำนวณ volume
-            volume = original_position['lot_size'] * correlation_ratio
+            volume = lot_size * correlation_ratio
             
             # จำกัดขนาด volume
             volume = min(volume, 10.0)  # สูงสุด 10 lot
