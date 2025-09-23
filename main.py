@@ -648,6 +648,11 @@ class TradingSystem:
                 status['active_triangles'] = triangle_performance.get('active_triangles', 0)
                 status['market_regime'] = triangle_performance.get('market_regime', 'unknown')
                 status['adaptive_threshold'] = triangle_performance.get('adaptive_threshold', 0.001)
+                status['duplicate_prevention'] = {
+                    'used_currency_pairs': triangle_performance.get('used_currency_pairs', []),
+                    'active_groups_count': triangle_performance.get('active_groups_count', 0),
+                    'group_currency_mapping': triangle_performance.get('group_currency_mapping', {})
+                }
             
             if self.correlation_manager:
                 correlation_performance = self.correlation_manager.get_correlation_performance()

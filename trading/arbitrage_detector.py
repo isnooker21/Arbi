@@ -53,6 +53,8 @@ class TriangleArbitrageDetector:
         self.active_groups = {}  # เก็บข้อมูลกลุ่มที่เปิดอยู่
         self.group_counter = 0   # ตัวนับกลุ่ม
         self.is_arbitrage_paused = False  # หยุดตรวจสอบ arbitrage ใหม่
+        self.used_currency_pairs = set()  # เก็บคู่เงินที่ถูกใช้ในกลุ่มที่ยังเปิดอยู่
+        self.group_currency_mapping = {}  # เก็บการแมปกลุ่มกับคู่เงินที่ใช้
         
         # Rate limiting for order placement
         self.last_order_time = 0  # เวลาที่ส่งออเดอร์ล่าสุด
@@ -1223,6 +1225,16 @@ class TriangleArbitrageDetector:
                 self.logger.warning("🚫 มีกลุ่มเปิดอยู่แล้ว - หยุดสร้างกลุ่มใหม่")
                 return False
             
+            # ตรวจสอบว่าคู่เงินใดถูกใช้ไปแล้วในกลุ่มอื่น
+            pair1, pair2, pair3 = triangle
+            triangle_pairs = {pair1, pair2, pair3}
+            used_pairs = triangle_pairs.intersection(self.used_currency_pairs)
+            
+            if used_pairs:
+                self.logger.warning(f"🚫 คู่เงิน {used_pairs} ถูกใช้ในกลุ่มอื่นแล้ว - หยุดสร้างกลุ่ม")
+                self.logger.info(f"   คู่เงินที่ใช้แล้ว: {self.used_currency_pairs}")
+                return False
+            
             self.group_counter += 1
             group_id = f"arbitrage_group_{self.group_counter}"
             
@@ -1280,11 +1292,16 @@ class TriangleArbitrageDetector:
             if orders_sent == 3:
                 self.active_groups[group_id] = group_data
                 
+                # เพิ่มคู่เงินลงในรายการที่ใช้แล้ว
+                self.used_currency_pairs.update(triangle_pairs)
+                self.group_currency_mapping[group_id] = triangle_pairs
+                
                 # อัพเดท order tracking
                 self._update_order_tracking()
                 
                 self.logger.info(f"✅ Arbitrage group {group_id} created successfully")
                 self.logger.info(f"   Orders sent: {orders_sent}/3")
+                self.logger.info(f"   คู่เงินที่ใช้: {triangle_pairs}")
                 self.logger.info(f"   หยุดตรวจสอบ arbitrage จนกว่ากลุ่มจะปิด")
                 
                 return True
@@ -1376,10 +1393,18 @@ class TriangleArbitrageDetector:
                 # self.broker.close_position(position['symbol'])
                 self.logger.info(f"   Closing position: {position['symbol']}")
             
+            # ลบคู่เงินออกจากรายการที่ใช้แล้ว
+            if group_id in self.group_currency_mapping:
+                group_pairs = self.group_currency_mapping[group_id]
+                self.used_currency_pairs -= group_pairs
+                del self.group_currency_mapping[group_id]
+                self.logger.info(f"   คู่เงินที่ปลดล็อค: {group_pairs}")
+            
             # ลบกลุ่มออกจาก active_groups
             del self.active_groups[group_id]
             
             self.logger.info(f"✅ Group {group_id} closed successfully")
+            self.logger.info(f"   คู่เงินที่ใช้ได้แล้ว: {self.used_currency_pairs}")
             self.logger.info("🔄 เริ่มตรวจสอบ arbitrage ใหม่")
             
         except Exception as e:
@@ -1682,7 +1707,10 @@ class TriangleArbitrageDetector:
             'avg_execution_time_ms': self.performance_metrics['avg_execution_time'],
             'total_opportunities': self.performance_metrics['total_opportunities'],
             'successful_trades': self.performance_metrics['successful_trades'],
-            'market_regime_changes': self.performance_metrics['market_regime_changes']
+            'market_regime_changes': self.performance_metrics['market_regime_changes'],
+            'used_currency_pairs': list(self.used_currency_pairs),
+            'active_groups_count': len(self.active_groups),
+            'group_currency_mapping': self.group_currency_mapping
         }
     
     def get_adaptive_parameters(self) -> Dict:
@@ -1754,9 +1782,40 @@ class TriangleArbitrageDetector:
                 'success_rate': success_rate,
                 'market_regime': self.market_regime,
                 'adaptive_threshold': self.volatility_threshold,
-                'execution_speed_ms': self.performance_metrics['avg_execution_time']
+                'execution_speed_ms': self.performance_metrics['avg_execution_time'],
+                'duplicate_prevention': {
+                    'used_currency_pairs': list(self.used_currency_pairs),
+                    'active_groups_count': len(self.active_groups),
+                    'group_currency_mapping': self.group_currency_mapping
+                }
             }
             
         except Exception as e:
             self.logger.error(f"Error calculating portfolio health: {e}")
             return {}
+    
+    def get_duplicate_prevention_status(self) -> Dict:
+        """Get status of duplicate prevention system"""
+        try:
+            return {
+                'is_prevention_active': True,
+                'used_currency_pairs': list(self.used_currency_pairs),
+                'active_groups_count': len(self.active_groups),
+                'group_currency_mapping': self.group_currency_mapping,
+                'prevention_rules': {
+                    'rule_1': 'ไม่ให้กลุ่มใหม่ใช้คู่เงินที่กลุ่มเก่าใช้อยู่',
+                    'rule_2': 'ตรวจสอบก่อนสร้างกลุ่มใหม่ทุกครั้ง',
+                    'rule_3': 'ปลดล็อคคู่เงินเมื่อกลุ่มปิด'
+                }
+            }
+        except Exception as e:
+            self.logger.error(f"Error getting duplicate prevention status: {e}")
+            return {}
+    
+    def check_currency_pair_availability(self, symbol: str) -> bool:
+        """ตรวจสอบว่าคู่เงินสามารถใช้ได้หรือไม่"""
+        try:
+            return symbol not in self.used_currency_pairs
+        except Exception as e:
+            self.logger.error(f"Error checking currency pair availability: {e}")
+            return False
