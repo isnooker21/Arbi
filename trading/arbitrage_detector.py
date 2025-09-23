@@ -1255,6 +1255,7 @@ class TriangleArbitrageDetector:
             self.logger.info(f"🎯 Creating arbitrage group {group_id}")
             self.logger.info(f"   Triangle: {pair1}, {pair2}, {pair3}")
             self.logger.info(f"   Opportunity: {opportunity.get('arbitrage_percent', 0):.4f}%")
+            self.logger.info(f"   🚀 Sending orders simultaneously...")
             
             # สร้างข้อมูลกลุ่ม
             group_data = {
@@ -1267,38 +1268,93 @@ class TriangleArbitrageDetector:
                 'recovery_chain': []
             }
             
-            # ส่งออเดอร์ 3 คู่พร้อมกัน
+            # ส่งออเดอร์ 3 คู่พร้อมกันด้วย threading
             orders_sent = 0
+            order_results = []
             
-            # ออเดอร์คู่ที่ 1
-            if self._send_arbitrage_order(pair1, opportunity.get('pair1_direction', 'BUY'), group_id):
-                orders_sent += 1
-                group_data['positions'].append({
+            # สร้างข้อมูลออเดอร์ทั้ง 3 คู่
+            orders_to_send = [
+                {
                     'symbol': pair1,
                     'direction': opportunity.get('pair1_direction', 'BUY'),
-                    'lot_size': self.position_size,
-                    'status': 'active'
-                })
-            
-            # ออเดอร์คู่ที่ 2
-            if self._send_arbitrage_order(pair2, opportunity.get('pair2_direction', 'SELL'), group_id):
-                orders_sent += 1
-                group_data['positions'].append({
+                    'group_id': group_id,
+                    'index': 0
+                },
+                {
                     'symbol': pair2,
                     'direction': opportunity.get('pair2_direction', 'SELL'),
-                    'lot_size': self.position_size,
-                    'status': 'active'
-                })
-            
-            # ออเดอร์คู่ที่ 3
-            if self._send_arbitrage_order(pair3, opportunity.get('pair3_direction', 'BUY'), group_id):
-                orders_sent += 1
-                group_data['positions'].append({
+                    'group_id': group_id,
+                    'index': 1
+                },
+                {
                     'symbol': pair3,
                     'direction': opportunity.get('pair3_direction', 'BUY'),
-                    'lot_size': self.position_size,
-                    'status': 'active'
-                })
+                    'group_id': group_id,
+                    'index': 2
+                }
+            ]
+            
+            # ส่งออเดอร์พร้อมกันด้วย threading
+            threads = []
+            results = [None] * 3  # เก็บผลลัพธ์ของแต่ละออเดอร์
+            
+            def send_single_order(order_data, result_index):
+                """ส่งออเดอร์เดี่ยวใน thread แยก"""
+                try:
+                    result = self._send_arbitrage_order(
+                        order_data['symbol'], 
+                        order_data['direction'], 
+                        order_data['group_id']
+                    )
+                    results[result_index] = {
+                        'success': result,
+                        'symbol': order_data['symbol'],
+                        'direction': order_data['direction'],
+                        'index': result_index
+                    }
+                except Exception as e:
+                    self.logger.error(f"Error sending order for {order_data['symbol']}: {e}")
+                    results[result_index] = {
+                        'success': False,
+                        'symbol': order_data['symbol'],
+                        'direction': order_data['direction'],
+                        'index': result_index,
+                        'error': str(e)
+                    }
+            
+            # เริ่มส่งออเดอร์พร้อมกัน
+            start_time = datetime.now()
+            for i, order_data in enumerate(orders_to_send):
+                thread = threading.Thread(
+                    target=send_single_order, 
+                    args=(order_data, i),
+                    daemon=True
+                )
+                threads.append(thread)
+                thread.start()
+            
+            # รอให้ออเดอร์ทั้งหมดเสร็จสิ้น (timeout 5 วินาที)
+            for thread in threads:
+                thread.join(timeout=5.0)
+            
+            end_time = datetime.now()
+            total_execution_time = (end_time - start_time).total_seconds() * 1000  # milliseconds
+            self.logger.info(f"   ⏱️ Total execution time: {total_execution_time:.1f}ms")
+            
+            # ตรวจสอบผลลัพธ์และเพิ่มตำแหน่งที่สำเร็จ
+            for result in results:
+                if result and result['success']:
+                    orders_sent += 1
+                    group_data['positions'].append({
+                        'symbol': result['symbol'],
+                        'direction': result['direction'],
+                        'lot_size': self.position_size,
+                        'status': 'active'
+                    })
+                elif result:
+                    self.logger.warning(f"❌ Order failed: {result['symbol']} {result['direction']}")
+                    if 'error' in result:
+                        self.logger.error(f"   Error: {result['error']}")
             
             # ตรวจสอบว่าส่งออเดอร์สำเร็จครบ 3 คู่
             if orders_sent == 3:
@@ -1312,14 +1368,27 @@ class TriangleArbitrageDetector:
                 self._update_order_tracking()
                 
                 self.logger.info(f"✅ Arbitrage group {group_id} created successfully")
-                self.logger.info(f"   Orders sent: {orders_sent}/3")
-                self.logger.info(f"   คู่เงินที่ใช้: {triangle_pairs}")
-                self.logger.info(f"   หยุดตรวจสอบ arbitrage จนกว่ากลุ่มจะปิด")
+                self.logger.info(f"   🚀 Orders sent simultaneously: {orders_sent}/3")
+                self.logger.info(f"   📊 คู่เงินที่ใช้: {triangle_pairs}")
+                self.logger.info(f"   ⏸️ หยุดตรวจสอบ arbitrage จนกว่ากลุ่มจะปิด")
+                
+                # แสดงรายละเอียดออเดอร์ที่ส่งสำเร็จ
+                successful_orders = [r for r in results if r and r['success']]
+                for order in successful_orders:
+                    self.logger.info(f"   ✅ {order['symbol']} {order['direction']} - สำเร็จ")
                 
                 return True
             else:
                 self.logger.error(f"❌ Failed to create arbitrage group {group_id}")
                 self.logger.error(f"   Orders sent: {orders_sent}/3")
+                
+                # แสดงรายละเอียดออเดอร์ที่ล้มเหลว
+                failed_orders = [r for r in results if r and not r['success']]
+                for order in failed_orders:
+                    self.logger.error(f"   ❌ {order['symbol']} {order['direction']} - ล้มเหลว")
+                    if 'error' in order:
+                        self.logger.error(f"      Error: {order['error']}")
+                
                 return False
                 
         except Exception as e:
@@ -1333,6 +1402,9 @@ class TriangleArbitrageDetector:
             group_number = group_id.split('_')[-1]  # เอาเฉพาะหมายเลขกลุ่ม
             comment = f"ARB_G{group_number}_{symbol}"
             
+            # เริ่มส่งออเดอร์พร้อมกัน
+            start_time = datetime.now()
+            
             result = self.broker.place_order(
                 symbol=symbol,
                 order_type=direction,
@@ -1340,11 +1412,14 @@ class TriangleArbitrageDetector:
                 comment=comment
             )
             
+            end_time = datetime.now()
+            execution_time = (end_time - start_time).total_seconds() * 1000  # milliseconds
+            
             if result and result.get('retcode') == 10009:
-                self.logger.info(f"✅ Order sent: {symbol} {direction} {self.position_size} lot")
+                self.logger.debug(f"✅ Order sent: {symbol} {direction} {self.position_size} lot (took {execution_time:.1f}ms)")
                 return True
             else:
-                self.logger.error(f"❌ Order failed: {symbol} {direction}")
+                self.logger.error(f"❌ Order failed: {symbol} {direction} (took {execution_time:.1f}ms)")
                 return False
                 
         except Exception as e:
