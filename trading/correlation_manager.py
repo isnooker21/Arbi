@@ -43,7 +43,7 @@ class CorrelationManager:
         
         # Recovery thresholds - More flexible for all market conditions
         self.recovery_thresholds = {
-            'min_correlation': 0.6,      # ความสัมพันธ์ขั้นต่ำ 60%
+            'min_correlation': 0.5,      # ความสัมพันธ์ขั้นต่ำ 50% (ลดลงเพื่อให้ใช้ได้ทุกคู่)
             'max_correlation': 0.95,     # ความสัมพันธ์สูงสุด 95%
             'min_loss_threshold': -0.005, # ขาดทุนขั้นต่ำ -0.5%
             'max_recovery_time_hours': 24, # เวลาสูงสุด 24 ชั่วโมง
@@ -375,31 +375,54 @@ class CorrelationManager:
     def _find_optimal_hedge_pairs(self, base_symbol: str) -> List[Dict]:
         """
         ⚡ CRITICAL: Find optimal hedge pairs for a given symbol
+        ใช้ได้ทุกคู่เงินเพื่อจับคู่กับคู่ Arbitrage
         """
         try:
             hedge_candidates = []
             
+            # Get all available pairs from broker
+            all_pairs = self.broker.get_available_pairs()
+            if not all_pairs:
+                self.logger.warning("No available pairs for correlation recovery")
+                return []
+            
             # Get correlation data for the base symbol
             correlations = self.correlation_matrix.get(base_symbol, {})
             
-            for symbol, correlation in correlations.items():
-                # Check if correlation is within acceptable range
-                if (self.recovery_thresholds['min_correlation'] <= abs(correlation) <= 
-                    self.recovery_thresholds['max_correlation']):
-                    
-                    # Calculate hedge strength
-                    hedge_strength = abs(correlation)
-                    
-                    hedge_candidates.append({
-                        'symbol': symbol,
-                        'correlation': correlation,
-                        'hedge_strength': hedge_strength,
-                        'direction': 'opposite' if correlation > 0 else 'same'
-                    })
+            # If no correlation data, use all available pairs
+            if not correlations:
+                self.logger.info(f"No correlation data for {base_symbol}, using all available pairs")
+                for symbol in all_pairs:
+                    if symbol != base_symbol:
+                        # Use default correlation values
+                        correlation = 0.7  # Default correlation
+                        hedge_candidates.append({
+                            'symbol': symbol,
+                            'correlation': correlation,
+                            'hedge_strength': correlation,
+                            'direction': 'opposite' if correlation > 0 else 'same'
+                        })
+            else:
+                # Use correlation data
+                for symbol, correlation in correlations.items():
+                    # Check if correlation is within acceptable range
+                    if (self.recovery_thresholds['min_correlation'] <= abs(correlation) <= 
+                        self.recovery_thresholds['max_correlation']):
+                        
+                        # Calculate hedge strength
+                        hedge_strength = abs(correlation)
+                        
+                        hedge_candidates.append({
+                            'symbol': symbol,
+                            'correlation': correlation,
+                            'hedge_strength': hedge_strength,
+                            'direction': 'opposite' if correlation > 0 else 'same'
+                        })
             
             # Sort by hedge strength (highest first)
             hedge_candidates.sort(key=lambda x: x['hedge_strength'], reverse=True)
             
+            self.logger.info(f"Found {len(hedge_candidates)} hedge candidates for {base_symbol}")
             return hedge_candidates
             
         except Exception as e:

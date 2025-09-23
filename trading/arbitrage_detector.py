@@ -57,6 +57,10 @@ class TriangleArbitrageDetector:
         self.used_currency_pairs = set()  # เก็บคู่เงินที่ถูกใช้ในกลุ่มที่ยังเปิดอยู่
         self.group_currency_mapping = {}  # เก็บการแมปกลุ่มกับคู่เงินที่ใช้
         
+        # ระบบส่งออเดอร์รอบเดียวทันที
+        self.arbitrage_sent = False  # ตรวจสอบว่าส่งออเดอร์ arbitrage แล้วหรือไม่
+        self.arbitrage_send_time = None  # เวลาที่ส่งออเดอร์ arbitrage
+        
         # Rate limiting for order placement
         self.last_order_time = 0  # เวลาที่ส่งออเดอร์ล่าสุด
         self.min_order_interval = 10  # ระยะห่างขั้นต่ำระหว่างออเดอร์ (วินาที)
@@ -81,7 +85,10 @@ class TriangleArbitrageDetector:
         
         # Initialize pairs and combinations after logger is set
         self.available_pairs = self._get_available_pairs()
-        self.triangle_combinations = self._generate_triangle_combinations()
+        
+        # ใช้เฉพาะคู่เงิน Arbitrage 3 คู่ที่กำหนด
+        self.arbitrage_pairs = ['EURUSD', 'GBPUSD', 'EURGBP']
+        self.triangle_combinations = self._generate_fixed_triangle_combinations()
         
         # Log triangle combinations count
         self.logger.info(f"Available pairs: {len(self.available_pairs)}")
@@ -218,6 +225,33 @@ class TriangleArbitrageDetector:
         
         return combinations
     
+    def _generate_fixed_triangle_combinations(self) -> List[Tuple[str, str, str]]:
+        """
+        สร้าง triangle combinations จากคู่เงิน Arbitrage ที่กำหนด
+        ใช้เฉพาะ EURUSD, GBPUSD, EURGBP
+        """
+        combinations = []
+        
+        # ตรวจสอบว่าคู่เงินที่กำหนดมีอยู่ใน available_pairs หรือไม่
+        available_pairs_set = set(self.available_pairs)
+        valid_arbitrage_pairs = [pair for pair in self.arbitrage_pairs if pair in available_pairs_set]
+        
+        if len(valid_arbitrage_pairs) < 3:
+            self.logger.warning(f"⚠️ คู่เงิน Arbitrage ที่กำหนดไม่ครบ 3 คู่")
+            self.logger.warning(f"   คู่เงินที่กำหนด: {self.arbitrage_pairs}")
+            self.logger.warning(f"   คู่เงินที่ใช้ได้: {valid_arbitrage_pairs}")
+            return []
+        
+        # สร้าง triangle combination จากคู่เงินที่กำหนด
+        # EURUSD, GBPUSD, EURGBP
+        triangle = (valid_arbitrage_pairs[0], valid_arbitrage_pairs[1], valid_arbitrage_pairs[2])
+        combinations.append(triangle)
+        
+        self.logger.info(f"✅ สร้าง triangle combination จากคู่เงินที่กำหนด: {triangle}")
+        self.logger.info(f"   คู่เงิน Arbitrage: {valid_arbitrage_pairs}")
+        
+        return combinations
+    
     def _create_fallback_triangles(self) -> List[Tuple[str, str, str]]:
         """Create fallback triangle combinations when normal generation fails"""
         fallback_triangles = []
@@ -288,25 +322,14 @@ class TriangleArbitrageDetector:
             self.logger.error(f"Error updating adaptive parameters: {e}")
     
     def _get_priority_triangles(self) -> List[Tuple]:
-        """Get triangles prioritized by market regime"""
+        """Get triangles prioritized by market regime - ใช้เฉพาะคู่เงินที่กำหนด"""
         
         # เพิ่ม debug logging
         self.logger.info(f"🔍 Getting priority triangles for regime: {self.current_regime}")
         self.logger.info(f"🔍 Total triangle combinations available: {len(self.triangle_combinations)}")
         
-        if self.current_regime == 'volatile':
-            # In volatile markets, focus on major pairs only
-            priority_triangles = [
-                ('EURUSD', 'GBPUSD', 'EURGBP'),
-                ('EURUSD', 'USDJPY', 'EURJPY'),
-                ('GBPUSD', 'USDJPY', 'GBPJPY')
-            ]
-        elif self.current_regime == 'trending':
-            # In trending markets, include more triangles
-            priority_triangles = self.triangle_combinations[:6]  # First 6 triangles
-        else:
-            # Normal/ranging markets, use all available
-            priority_triangles = self.triangle_combinations
+        # ใช้เฉพาะ triangle combinations ที่สร้างจากคู่เงินที่กำหนด
+        priority_triangles = self.triangle_combinations
         
         # Filter triangles by available pairs
         available_pairs_set = set(self.available_pairs)
@@ -963,44 +986,29 @@ class TriangleArbitrageDetector:
             
             prices_array = np.array(prices, dtype=float)
             
+            # Simple technical indicators without talib
             indicators = {
                 # Moving Averages
-                'sma_10': talib.SMA(prices_array, timeperiod=10)[-1],
-                'sma_20': talib.SMA(prices_array, timeperiod=20)[-1],
-                'sma_50': talib.SMA(prices_array, timeperiod=50)[-1],
-                'ema_12': talib.EMA(prices_array, timeperiod=12)[-1],
-                'ema_26': talib.EMA(prices_array, timeperiod=26)[-1],
+                'sma_10': np.mean(prices_array[-10:]) if len(prices_array) >= 10 else np.mean(prices_array),
+                'sma_20': np.mean(prices_array[-20:]) if len(prices_array) >= 20 else np.mean(prices_array),
+                'sma_50': np.mean(prices_array[-50:]) if len(prices_array) >= 50 else np.mean(prices_array),
                 
-                # MACD
-                'macd': talib.MACD(prices_array)[0][-1],  # MACD line
-                'macd_signal': talib.MACD(prices_array)[1][-1],  # Signal line
-                'macd_histogram': talib.MACD(prices_array)[2][-1],  # Histogram
+                # Simple RSI calculation
+                'rsi': self._calculate_simple_rsi(prices_array),
                 
-                # RSI
-                'rsi': talib.RSI(prices_array, timeperiod=14)[-1],
-                
-                # Bollinger Bands
-                'bb_upper': talib.BBANDS(prices_array)[0][-1],
-                'bb_middle': talib.BBANDS(prices_array)[1][-1],
-                'bb_lower': talib.BBANDS(prices_array)[2][-1],
-                
-                # Stochastic
-                'stoch_k': talib.STOCH(prices_array, prices_array, prices_array)[0][-1],
-                'stoch_d': talib.STOCH(prices_array, prices_array, prices_array)[1][-1],
-                
-                # ADX (Trend Strength)
-                'adx': talib.ADX(prices_array, prices_array, prices_array, timeperiod=14)[-1],
+                # Simple Bollinger Bands
+                'bb_upper': np.mean(prices_array[-20:]) + 2 * np.std(prices_array[-20:]) if len(prices_array) >= 20 else np.mean(prices_array),
+                'bb_middle': np.mean(prices_array[-20:]) if len(prices_array) >= 20 else np.mean(prices_array),
+                'bb_lower': np.mean(prices_array[-20:]) - 2 * np.std(prices_array[-20:]) if len(prices_array) >= 20 else np.mean(prices_array),
                 
                 # Volume indicators (using price as proxy)
                 'volume_sma': np.mean(prices_array[-20:]) if len(prices_array) >= 20 else np.mean(prices_array),
                 
                 # Price position in Bollinger Bands
-                'bb_position': (prices[-1] - talib.BBANDS(prices_array)[2][-1]) / 
-                              (talib.BBANDS(prices_array)[0][-1] - talib.BBANDS(prices_array)[2][-1]),
+                'bb_position': 0.5,  # Default neutral position
                 
                 # Trend strength
-                'trend_strength': abs(talib.SMA(prices_array, timeperiod=20)[-1] - talib.SMA(prices_array, timeperiod=50)[-1]) / 
-                                 talib.SMA(prices_array, timeperiod=50)[-1] if talib.SMA(prices_array, timeperiod=50)[-1] > 0 else 0
+                'trend_strength': abs(np.mean(prices_array[-20:]) - np.mean(prices_array[-50:])) / np.mean(prices_array[-50:]) if len(prices_array) >= 50 and np.mean(prices_array[-50:]) > 0 else 0
             }
             
             return indicators
@@ -1008,6 +1016,31 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error calculating technical indicators: {e}")
             return {}
+    
+    def _calculate_simple_rsi(self, prices: np.ndarray, period: int = 14) -> float:
+        """Calculate simple RSI without talib"""
+        try:
+            if len(prices) < period + 1:
+                return 50.0  # Default neutral RSI
+            
+            deltas = np.diff(prices)
+            gains = np.where(deltas > 0, deltas, 0)
+            losses = np.where(deltas < 0, -deltas, 0)
+            
+            avg_gain = np.mean(gains[-period:])
+            avg_loss = np.mean(losses[-period:])
+            
+            if avg_loss == 0:
+                return 100.0
+            
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+            
+            return rsi
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating RSI: {e}")
+            return 50.0
     
     def _analyze_multi_timeframe_signals(self, triangle: Tuple[str, str, str]) -> Dict:
         """Analyze multi-timeframe signals for triangle"""
@@ -1152,6 +1185,11 @@ class TriangleArbitrageDetector:
             if not self.is_running:
                 return
             
+            # ตรวจสอบว่าส่งออเดอร์ arbitrage แล้วหรือไม่
+            if self.arbitrage_sent:
+                self.logger.debug("⏸️ ส่งออเดอร์ arbitrage แล้ว - ใช้ Correlation Recovery")
+                return
+            
             # เงื่อนไขเข้มงวด: ถ้ามีกลุ่มเปิดอยู่ ให้หยุดตรวจสอบ
             if len(self.active_groups) > 0:
                 self.logger.debug("⏸️ มีกลุ่มเปิดอยู่ - หยุดตรวจสอบ arbitrage")
@@ -1203,8 +1241,13 @@ class TriangleArbitrageDetector:
                         # สร้างกลุ่ม arbitrage และส่งออเดอร์ 3 คู่พร้อมกัน
                         success = self._create_arbitrage_group(triangle, opportunity)
                         if success:
+                            # ตั้งค่าว่าส่งออเดอร์ arbitrage แล้ว
+                            self.arbitrage_sent = True
+                            self.arbitrage_send_time = datetime.now()
+                            
                             # หยุดการตรวจสอบ arbitrage ใหม่ทันที
-                            self.logger.info("⏸️ ส่งกลุ่มสำเร็จ - หยุดตรวจสอบ")
+                            self.logger.info("⏸️ ส่งกลุ่มสำเร็จ - หยุดตรวจสอบ arbitrage")
+                            self.logger.info("🔄 เริ่มใช้ระบบ Correlation Recovery")
                             break  # ออกจากลูปทันที
                         else:
                             self.logger.warning(f"⚠️ Triangle arbitrage failed: {opportunity['id']}")
@@ -1725,6 +1768,10 @@ class TriangleArbitrageDetector:
             
             # ลบกลุ่มออกจาก active_groups
             del self.active_groups[group_id]
+            
+            # Reset arbitrage_sent เพื่อให้สามารถส่งออเดอร์ใหม่ได้
+            self.arbitrage_sent = False
+            self.arbitrage_send_time = None
             
             # แสดงผล PnL รวมของกลุ่ม
             pnl_status = "💰" if total_pnl > 0 else "💸" if total_pnl < 0 else "⚖️"
