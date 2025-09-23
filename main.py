@@ -320,11 +320,20 @@ class TradingSystem:
                     from trading.broker_api import BrokerAPI
                     self.broker_api = BrokerAPI("MetaTrader5")
                 
-                if not self.broker_api.connect():
-                    self.logger.error("Failed to connect to broker")
-                    return False
+                # Try multiple connection attempts
+                max_attempts = 3
+                for attempt in range(max_attempts):
+                    self.logger.info(f"Connection attempt {attempt + 1}/{max_attempts}")
+                    if self.broker_api.connect():
+                        self.logger.info("Successfully connected to broker")
+                        break
+                    else:
+                        self.logger.warning(f"Connection attempt {attempt + 1} failed")
+                        if attempt < max_attempts - 1:
+                            time.sleep(2)  # Wait 2 seconds before retry
                 else:
-                    self.logger.info("Successfully connected to broker")
+                    self.logger.error("Failed to connect to broker after all attempts")
+                    return False
             
             self.logger.info("🚀 Starting adaptive trading system...")
             
@@ -485,9 +494,18 @@ class TradingSystem:
         """
         try:
             # Check broker connection
-            if not self.broker_api or not self.broker_api.is_connected():
-                self.logger.warning("⚠️ Broker connection lost")
+            if not self.broker_api:
+                self.logger.warning("⚠️ Broker API not initialized")
                 return False
+                
+            if not self.broker_api.is_connected():
+                self.logger.warning("⚠️ Broker connection lost - attempting reconnection")
+                # Try to reconnect
+                if self.broker_api.connect():
+                    self.logger.info("✅ Broker reconnected successfully")
+                else:
+                    self.logger.error("❌ Failed to reconnect to broker")
+                    return False
             
             # Check adaptive engine
             if not self.adaptive_engine or not self.adaptive_engine.is_running:

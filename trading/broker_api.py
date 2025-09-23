@@ -466,18 +466,27 @@ class BrokerAPI:
                 if not mt5.symbol_select(symbol, True):
                     self.logger.warning(f"⚠️ Could not select symbol {symbol}, but continuing...")
                 
-                # Prepare request for REAL TRADING (ตาม Huakuy_)
+                # Get symbol info to determine filling type
+                symbol_info = mt5.symbol_info(symbol)
+                if symbol_info is None:
+                    self.logger.error(f"❌ Symbol {symbol} not found in MT5")
+                    return None
+                
+                # Determine appropriate filling type
+                filling_type = self._get_filling_type(symbol_info)
+                
+                # Prepare request for REAL TRADING
                 request = {
                     "action": mt5.TRADE_ACTION_DEAL,
                     "symbol": symbol,
                     "volume": volume,
                     "type": order_type_mt5,
                     "price": price,
-                    "deviation": 10,  # ตาม Huakuy_
-                    "magic": 0,       # ตาม Huakuy_
-                    "comment": comment or "python script open",  # ตาม Huakuy_
+                    "deviation": 20,  # Increased deviation for better execution
+                    "magic": 234000,  # Use unique magic number
+                    "comment": comment or "Arbitrage Trade",
                     "type_time": mt5.ORDER_TIME_GTC,
-                    "type_filling": mt5.ORDER_FILLING_IOC,  # ตาม Huakuy_
+                    "type_filling": filling_type,  # Use appropriate filling type
                 }
                 
                 # Add stop loss and take profit
@@ -496,17 +505,22 @@ class BrokerAPI:
                     self.logger.error(f"❌ Not connected to MT5")
                     return None
                 
-                # Send order (ตาม Huakuy_)
+                # Send order
                 self.logger.info(f"🔍 Sending order to MT5: {request}")
                 result = mt5.order_send(request)
                 
-                # Check result (ตาม Huakuy_)
+                # Check result
                 if result is None:
-                    self.logger.error(f"❌ Order send failed - no result from MT5 for {symbol}")
+                    error_code = mt5.last_error()
+                    self.logger.error(f"❌ Order send failed - no result from MT5 for {symbol}, error: {error_code}")
                     return None
                 
+                # Log detailed result
+                self.logger.info(f"📊 Order result: retcode={result.retcode}, deal={result.deal}, order={result.order}")
+                
                 if result.retcode != mt5.TRADE_RETCODE_DONE:
-                    self.logger.error(f"❌ Order failed, retcode={result.retcode}, comment={result.comment}")
+                    error_msg = self._get_error_message(result.retcode)
+                    self.logger.error(f"❌ Order failed: {error_msg} (retcode={result.retcode})")
                     return None
                 
                 # Success!
@@ -713,6 +727,87 @@ class BrokerAPI:
             self.logger.error(f"Error getting tick data: {e}")
             return {}
     
+    def _get_filling_type(self, symbol_info) -> int:
+        """Determine appropriate filling type for symbol"""
+        try:
+            # Check symbol filling modes
+            filling_mode = symbol_info.filling_mode
+            
+            # Prefer FOK (Fill or Kill) for better execution
+            if filling_mode & mt5.SYMBOL_FILLING_FOK:
+                return mt5.ORDER_FILLING_FOK
+            # Fallback to IOC (Immediate or Cancel)
+            elif filling_mode & mt5.SYMBOL_FILLING_IOC:
+                return mt5.ORDER_FILLING_IOC
+            # Last resort - Return (Fill at any price)
+            elif filling_mode & mt5.SYMBOL_FILLING_RETURN:
+                return mt5.ORDER_FILLING_RETURN
+            else:
+                # Default to FOK
+                return mt5.ORDER_FILLING_FOK
+                
+        except Exception as e:
+            self.logger.warning(f"Error determining filling type: {e}, using FOK")
+            return mt5.ORDER_FILLING_FOK
+    
+    def _get_error_message(self, retcode: int) -> str:
+        """Get human-readable error message for MT5 retcode"""
+        error_messages = {
+            mt5.TRADE_RETCODE_REQUOTE: "ราคาเปลี่ยนแปลง - ต้องใช้ราคาใหม่",
+            mt5.TRADE_RETCODE_REJECT: "คำสั่งถูกปฏิเสธ",
+            mt5.TRADE_RETCODE_ERROR: "ข้อผิดพลาดทั่วไป",
+            mt5.TRADE_RETCODE_TIMEOUT: "หมดเวลา - คำสั่งไม่สำเร็จ",
+            mt5.TRADE_RETCODE_INVALID_VOLUME: "ปริมาณการเทรดไม่ถูกต้อง",
+            mt5.TRADE_RETCODE_INVALID_PRICE: "ราคาไม่ถูกต้อง",
+            mt5.TRADE_RETCODE_INVALID_STOPS: "Stop Loss/Take Profit ไม่ถูกต้อง",
+            mt5.TRADE_RETCODE_TRADE_DISABLED: "การเทรดถูกปิดใช้งาน",
+            mt5.TRADE_RETCODE_MARKET_CLOSED: "ตลาดปิด",
+            mt5.TRADE_RETCODE_NO_MONEY: "เงินไม่เพียงพอ",
+            mt5.TRADE_RETCODE_PRICE_CHANGED: "ราคาเปลี่ยนแปลง",
+            mt5.TRADE_RETCODE_TOO_MANY_REQUESTS: "คำขอมากเกินไป",
+            mt5.TRADE_RETCODE_NO_CHANGES: "ไม่มีการเปลี่ยนแปลง",
+            mt5.TRADE_RETCODE_SERVER_DISABLES_AT: "เซิร์ฟเวอร์ปิดใช้งาน AT",
+            mt5.TRADE_RETCODE_CLIENT_DISABLES_AT: "ไคลเอนต์ปิดใช้งาน AT",
+            mt5.TRADE_RETCODE_LOCKED: "บัญชีถูกล็อค",
+            mt5.TRADE_RETCODE_FROZEN: "คำสั่งถูกแช่แข็ง",
+            mt5.TRADE_RETCODE_INVALID_FILL: "การเติมคำสั่งไม่ถูกต้อง",
+            mt5.TRADE_RETCODE_CONNECTION: "ปัญหาการเชื่อมต่อ",
+            mt5.TRADE_RETCODE_ONLY_REAL: "เฉพาะบัญชีจริงเท่านั้น",
+            mt5.TRADE_RETCODE_LIMIT_ORDERS: "เกินขีดจำกัดคำสั่ง",
+            mt5.TRADE_RETCODE_LIMIT_VOLUME: "เกินขีดจำกัดปริมาณ",
+            mt5.TRADE_RETCODE_INVALID_ORDER: "คำสั่งไม่ถูกต้อง",
+            mt5.TRADE_RETCODE_POSITION_CLOSED: "ตำแหน่งปิดแล้ว",
+            mt5.TRADE_RETCODE_INVALID_CLOSE_VOLUME: "ปริมาณปิดไม่ถูกต้อง",
+            mt5.TRADE_RETCODE_CLOSE_ORDER_EXIST: "มีคำสั่งปิดอยู่แล้ว",
+            mt5.TRADE_RETCODE_LIMIT_POSITIONS: "เกินขีดจำกัดตำแหน่ง",
+            mt5.TRADE_RETCODE_REJECT_CANCEL: "การยกเลิกถูกปฏิเสธ",
+            mt5.TRADE_RETCODE_LONG_ONLY: "เฉพาะ Long เท่านั้น",
+            mt5.TRADE_RETCODE_SHORT_ONLY: "เฉพาะ Short เท่านั้น",
+            mt5.TRADE_RETCODE_CLOSE_ONLY: "เฉพาะการปิดเท่านั้น",
+            mt5.TRADE_RETCODE_FIFO_CLOSE: "FIFO close required",
+            mt5.TRADE_RETCODE_CLOSE_ORDER_EXIST: "มีคำสั่งปิดอยู่แล้ว",
+            mt5.TRADE_RETCODE_LIMIT_POSITIONS: "เกินขีดจำกัดตำแหน่ง",
+        }
+        
+        return error_messages.get(retcode, f"Unknown error (code: {retcode})")
+    
     def is_connected(self) -> bool:
         """Check if connected to broker"""
-        return self._connected
+        try:
+            if not self._connected:
+                return False
+            
+            # Verify connection is still active
+            if self.broker_type == "MetaTrader5":
+                account_info = mt5.account_info()
+                if account_info is None:
+                    self._connected = False
+                    self.logger.warning("⚠️ MT5 connection lost")
+                    return False
+            
+            return self._connected
+            
+        except Exception as e:
+            self.logger.error(f"Error checking connection: {e}")
+            self._connected = False
+            return False
