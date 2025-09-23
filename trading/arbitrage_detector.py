@@ -1165,6 +1165,13 @@ class TriangleArbitrageDetector:
         while self.is_running:
             try:
                 loop_count += 1
+                
+                # ตรวจสอบว่าส่งออเดอร์ arbitrage แล้วหรือไม่
+                if self.arbitrage_sent:
+                    self.logger.debug(f"⏸️ Detection loop #{loop_count} - ส่งออเดอร์ arbitrage แล้ว - ใช้ Correlation Recovery")
+                    threading.Event().wait(30.0)  # รอนานขึ้นเมื่อใช้ Correlation Recovery
+                    continue
+                
                 self.logger.info(f"🔍 Detection loop #{loop_count} - Checking {len(self.triangle_combinations)} triangles")
                 
                 self.detect_opportunities()
@@ -1199,7 +1206,25 @@ class TriangleArbitrageDetector:
             if len(self.used_currency_pairs) > 0:
                 self.logger.debug("⏸️ มีคู่เงินที่ถูกใช้แล้ว - หยุดตรวจสอบ arbitrage")
                 self.logger.debug(f"   คู่เงินที่ถูกใช้: {self.used_currency_pairs}")
+                # ตั้งค่าว่าส่งออเดอร์ arbitrage แล้ว
+                self.arbitrage_sent = True
+                self.arbitrage_send_time = datetime.now()
                 return
+            
+            # ตรวจสอบเพิ่มเติม: ตรวจสอบว่ามีตำแหน่งที่เปิดอยู่จากกลุ่ม arbitrage หรือไม่
+            try:
+                all_positions = self.broker.get_all_positions()
+                if all_positions:
+                    arbitrage_positions = [pos for pos in all_positions if pos.get('comment', '').startswith('ARB_G')]
+                    if arbitrage_positions:
+                        self.logger.debug("⏸️ พบตำแหน่ง arbitrage ที่เปิดอยู่ - หยุดตรวจสอบ")
+                        self.logger.debug(f"   ตำแหน่งที่พบ: {[pos['symbol'] for pos in arbitrage_positions]}")
+                        # ตั้งค่าว่าส่งออเดอร์ arbitrage แล้ว
+                        self.arbitrage_sent = True
+                        self.arbitrage_send_time = datetime.now()
+                        return
+            except Exception as e:
+                self.logger.warning(f"Error checking existing positions: {e}")
                 
             self.logger.debug(f"🔍 Detecting arbitrage opportunities (threshold: {self.arbitrage_threshold})")
             
@@ -1270,9 +1295,15 @@ class TriangleArbitrageDetector:
     def _create_arbitrage_group(self, triangle: Tuple[str, str, str], opportunity: Dict) -> bool:
         """สร้างกลุ่ม arbitrage และส่งออเดอร์ 3 คู่พร้อมกัน"""
         try:
+            # ตรวจสอบว่าส่งออเดอร์ arbitrage แล้วหรือไม่
+            if self.arbitrage_sent:
+                self.logger.warning("🚫 ส่งออเดอร์ arbitrage แล้ว - หยุดสร้างกลุ่มใหม่")
+                return False
+            
             # เงื่อนไขเข้มงวด: ถ้ามีกลุ่มเปิดอยู่ ให้หยุด
             if len(self.active_groups) > 0:
                 self.logger.warning("🚫 มีกลุ่มเปิดอยู่แล้ว - หยุดสร้างกลุ่มใหม่")
+                self.logger.info(f"   กลุ่มที่เปิดอยู่: {list(self.active_groups.keys())}")
                 return False
             
             # ตรวจสอบเพิ่มเติม: ถ้ามีคู่เงินที่ถูกใช้แล้ว ให้หยุด
@@ -1280,6 +1311,18 @@ class TriangleArbitrageDetector:
                 self.logger.warning("🚫 มีคู่เงินที่ถูกใช้แล้ว - หยุดสร้างกลุ่มใหม่")
                 self.logger.info(f"   คู่เงินที่ใช้แล้ว: {self.used_currency_pairs}")
                 return False
+            
+            # ตรวจสอบเพิ่มเติม: ตรวจสอบว่ามีตำแหน่งที่เปิดอยู่จากกลุ่ม arbitrage หรือไม่
+            try:
+                all_positions = self.broker.get_all_positions()
+                if all_positions:
+                    arbitrage_positions = [pos for pos in all_positions if pos.get('comment', '').startswith('ARB_G')]
+                    if arbitrage_positions:
+                        self.logger.warning("🚫 พบตำแหน่ง arbitrage ที่เปิดอยู่แล้ว - หยุดสร้างกลุ่มใหม่")
+                        self.logger.info(f"   ตำแหน่งที่พบ: {[pos['symbol'] for pos in arbitrage_positions]}")
+                        return False
+            except Exception as e:
+                self.logger.warning(f"Error checking existing positions: {e}")
             
             # ตรวจสอบว่าคู่เงินใดถูกใช้ไปแล้วในกลุ่มอื่น (double check)
             pair1, pair2, pair3 = triangle
@@ -1457,6 +1500,28 @@ class TriangleArbitrageDetector:
     def _send_arbitrage_order(self, symbol: str, direction: str, group_id: str) -> bool:
         """ส่งออเดอร์ arbitrage"""
         try:
+            # ตรวจสอบว่าส่งออเดอร์ arbitrage แล้วหรือไม่
+            if self.arbitrage_sent:
+                self.logger.warning(f"🚫 ส่งออเดอร์ arbitrage แล้ว - หยุดส่งออเดอร์ {symbol}")
+                return {
+                    'success': False,
+                    'order_id': None,
+                    'symbol': symbol,
+                    'direction': direction,
+                    'error': 'Arbitrage already sent'
+                }
+            
+            # ตรวจสอบเพิ่มเติม: ตรวจสอบว่าคู่เงินนี้ถูกใช้แล้วหรือไม่
+            if symbol in self.used_currency_pairs:
+                self.logger.warning(f"🚫 คู่เงิน {symbol} ถูกใช้แล้ว - หยุดส่งออเดอร์")
+                return {
+                    'success': False,
+                    'order_id': None,
+                    'symbol': symbol,
+                    'direction': direction,
+                    'error': 'Currency pair already in use'
+                }
+            
             # สร้าง comment ที่แสดงกลุ่มและลำดับ
             group_number = group_id.split('_')[-1]  # เอาเฉพาะหมายเลขกลุ่ม
             comment = f"ARB_G{group_number}_{symbol}"
