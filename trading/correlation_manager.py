@@ -529,16 +529,11 @@ class CorrelationManager:
                             recovery_pnl = pos['profit']
                             break
                     
-                    # ถ้า recovery position กำไร ให้ปิด
-                    if recovery_pnl > 0:
-                        self.logger.info(f"✅ Recovery position {recovery_id} profitable - closing")
-                        positions_to_close.append(recovery_id)
-                    else:
-                        self.logger.debug(f"Recovery position {recovery_id} PnL: {recovery_pnl:.2f} USD")
+                    # เก็บข้อมูล PnL ของ recovery position ไว้ (ไม่ปิดไม้เดี่ยว)
+                    self.logger.debug(f"Recovery position {recovery_id} PnL: {recovery_pnl:.2f} USD")
             
-            # ปิด recovery positions ที่กำไร
-            for recovery_id in positions_to_close:
-                self._close_recovery_position(recovery_id)
+            # ไม่ปิด recovery positions แบบไม้เดี่ยว - รอให้กลุ่ม arbitrage กำไรก่อน
+            # positions_to_close จะถูกจัดการใน arbitrage_detector เมื่อกลุ่มกำไร
                 
         except Exception as e:
             self.logger.error(f"Error checking recovery positions: {e}")

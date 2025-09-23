@@ -1607,16 +1607,23 @@ class TriangleArbitrageDetector:
                 pnl_status = "💰" if total_group_pnl > 0 else "💸" if total_group_pnl < 0 else "⚖️"
                 self.logger.info(f"📊 Group {group_id} PnL: {pnl_status} {total_group_pnl:.2f} USD")
                 
-                # ถ้าทุกตำแหน่งกำไร ให้ปิดกลุ่ม
-                if all_positions_profitable and total_group_pnl > 0:
-                    self.logger.info(f"✅ Group {group_id} all positions profitable - closing group")
-                    groups_to_close.append(group_id)
-                elif total_group_pnl < -10:  # ถ้าขาดทุนมากกว่า 10 USD ให้ปิดกลุ่ม
-                    self.logger.warning(f"⚠️ Group {group_id} losing too much - closing group")
+                # คำนวณ % ของทุนจาก broker API
+                account_balance = self.broker.get_account_balance()
+                if account_balance is None:
+                    account_balance = 1000.0  # fallback ถ้าไม่สามารถดึงได้
+                    self.logger.warning("⚠️ Cannot get account balance, using fallback: 1000 USD")
+                
+                profit_percentage = (total_group_pnl / account_balance) * 100
+                
+                # ปิดกลุ่มเฉพาะเมื่อผลรวมเป็นบวก (ไม่ปิดขาดทุน)
+                if total_group_pnl > 0:
+                    self.logger.info(f"✅ Group {group_id} profitable - Total PnL: {total_group_pnl:.2f} USD ({profit_percentage:.2f}%)")
+                    self.logger.info(f"✅ Closing group {group_id} - All positions will be closed together")
                     groups_to_close.append(group_id)
                 elif total_group_pnl < 0 and self.correlation_manager:  # ถ้าขาดทุนและมี correlation manager
-                    # เริ่ม correlation recovery
-                    self.logger.info(f"🔄 Group {group_id} losing - starting correlation recovery")
+                    # เริ่ม correlation recovery (ไม่ปิดขาดทุน)
+                    self.logger.info(f"🔄 Group {group_id} losing - Total PnL: {total_group_pnl:.2f} USD ({profit_percentage:.2f}%)")
+                    self.logger.info(f"🔄 Starting correlation recovery - Never cut loss")
                     self._start_correlation_recovery(group_id, group_data, total_group_pnl)
             
             # ปิดกลุ่มที่ครบเงื่อนไข
@@ -1831,6 +1838,10 @@ class TriangleArbitrageDetector:
                 del self.group_currency_mapping[group_id]
                 self.logger.info(f"   📊 คู่เงินที่ปลดล็อค: {group_pairs}")
             
+            # ปิด recovery positions ที่เกี่ยวข้องกับกลุ่มนี้
+            if self.correlation_manager:
+                self._close_recovery_positions_for_group(group_id)
+            
             # ลบกลุ่มออกจาก active_groups
             del self.active_groups[group_id]
             
@@ -1848,6 +1859,37 @@ class TriangleArbitrageDetector:
             
         except Exception as e:
             self.logger.error(f"Error closing group {group_id}: {e}")
+    
+    def _close_recovery_positions_for_group(self, group_id: str):
+        """ปิด recovery positions ที่เกี่ยวข้องกับกลุ่ม arbitrage"""
+        try:
+            if not self.correlation_manager:
+                return
+            
+            # หา recovery positions ที่เกี่ยวข้องกับกลุ่มนี้
+            group_data = self.active_groups.get(group_id, {})
+            group_pairs = set(group_data.get('triangle', []))
+            
+            recovery_positions_to_close = []
+            
+            # ตรวจสอบ recovery positions ทั้งหมด
+            for recovery_id, recovery_data in self.correlation_manager.recovery_positions.items():
+                original_symbol = recovery_data.get('original_position', {}).get('symbol', '')
+                
+                # ถ้า recovery position นี้เกี่ยวข้องกับกลุ่ม arbitrage นี้
+                if original_symbol in group_pairs:
+                    recovery_positions_to_close.append(recovery_id)
+            
+            # ปิด recovery positions ที่เกี่ยวข้อง
+            for recovery_id in recovery_positions_to_close:
+                self.logger.info(f"🔄 Closing recovery position {recovery_id} for group {group_id}")
+                self.correlation_manager._close_recovery_position(recovery_id)
+            
+            if recovery_positions_to_close:
+                self.logger.info(f"✅ Closed {len(recovery_positions_to_close)} recovery positions for group {group_id}")
+            
+        except Exception as e:
+            self.logger.error(f"Error closing recovery positions for group {group_id}: {e}")
     
     def analyze_timeframe(self, triangle: Tuple[str, str, str], timeframe: str) -> Dict:
         """Analyze triangle for specific timeframe"""
