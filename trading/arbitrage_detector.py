@@ -81,11 +81,7 @@ class TriangleArbitrageDetector:
     def _get_available_pairs(self) -> List[str]:
         """Get list of available trading pairs from broker"""
         try:
-            # Check if broker is connected
-            if not hasattr(self.broker, '_connected') or not self.broker._connected:
-                self.logger.warning("Broker not connected, cannot get available pairs")
-                return []
-            
+            # Call broker method directly (it has its own fallback logic)
             all_pairs = self.broker.get_available_pairs()
             self.logger.info(f"Raw pairs from broker: {len(all_pairs) if all_pairs else 0}")
             if all_pairs and len(all_pairs) > 0:
