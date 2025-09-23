@@ -230,33 +230,55 @@ class AdaptiveEngine:
             self.logger.error(f"Error updating market regime: {e}")
     
     def _update_position_sizing(self):
-        """อัปเดต Position Sizing ตามยอดเงินในบัญชี"""
+        """อัปเดต Position Sizing ตามยอดเงินในบัญชี - ใช้ balance real-time"""
         try:
-            # Get account balance
-            account_info = self.broker.get_account_info()
-            if not account_info:
+            # Get account balance real-time
+            balance = self.broker.get_account_balance()
+            if not balance:
+                self.logger.warning("Cannot get account balance - using default position sizing")
                 return
             
-            balance = account_info.get('balance', 10000)  # Default to 10000 if not found
+            # Get account equity for more accurate sizing
+            equity = self.broker.get_account_equity()
+            if not equity:
+                equity = balance
             
-            # Determine account tier
+            # Get free margin
+            free_margin = self.broker.get_free_margin()
+            if not free_margin:
+                free_margin = balance * 0.9  # Assume 90% of balance is available
+            
+            self.logger.info(f"💰 Account Status - Balance: {balance:.2f}, Equity: {equity:.2f}, Free Margin: {free_margin:.2f}")
+            
+            # Determine account tier based on balance
             account_tier = self._determine_account_tier(balance)
             
             # Update position sizing parameters
             tier_params = self.position_sizing['account_tiers'][account_tier]
             
-            # Calculate dynamic lot size
+            # Calculate dynamic lot size based on balance
             base_lot_size = self.position_sizing['base_lot_size']
             lot_multiplier = tier_params['lot_multiplier']
             dynamic_lot_size = base_lot_size * lot_multiplier
             
-            # Update arbitrage detector lot size
+            # Update arbitrage detector with balance information
             if hasattr(self.arbitrage_detector, 'update_adaptive_parameters'):
                 self.arbitrage_detector.update_adaptive_parameters({
-                    'position_size': dynamic_lot_size
+                    'position_size': dynamic_lot_size,
+                    'account_balance': balance,
+                    'account_equity': equity,
+                    'free_margin': free_margin
                 })
             
-            self.logger.debug(f"Position sizing updated: {account_tier} tier, lot size: {dynamic_lot_size}")
+            # Update correlation manager with balance information
+            if hasattr(self.correlation_manager, 'update_recovery_parameters'):
+                self.correlation_manager.update_recovery_parameters({
+                    'account_balance': balance,
+                    'account_equity': equity,
+                    'free_margin': free_margin
+                })
+            
+            self.logger.info(f"📊 Position sizing updated: {account_tier} tier, lot size: {dynamic_lot_size}")
             
         except Exception as e:
             self.logger.error(f"Error updating position sizing: {e}")

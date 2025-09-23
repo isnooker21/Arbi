@@ -383,6 +383,40 @@ class BrokerAPI:
             self.logger.error(f"Error getting account balance: {e}")
             return None
     
+    def get_account_equity(self) -> Optional[float]:
+        """Get account equity (balance + floating PnL)"""
+        try:
+            if not self._connected:
+                return None
+            
+            if self.broker_type == "MetaTrader5":
+                account_info = mt5.account_info()
+                if account_info:
+                    return account_info.equity
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Error getting account equity: {e}")
+            return None
+    
+    def get_free_margin(self) -> Optional[float]:
+        """Get free margin (available for trading)"""
+        try:
+            if not self._connected:
+                return None
+            
+            if self.broker_type == "MetaTrader5":
+                account_info = mt5.account_info()
+                if account_info:
+                    return account_info.margin_free
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Error getting free margin: {e}")
+            return None
+    
     def get_spread(self, symbol: str) -> Optional[float]:
         """Get current spread for a symbol"""
         try:

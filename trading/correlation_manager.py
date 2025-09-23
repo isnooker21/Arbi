@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 import logging
 from typing import Dict, List, Tuple, Optional
 import threading
+from utils.calculations import TradingCalculations
 
 class CorrelationManager:
     def __init__(self, broker_api, ai_engine=None):
@@ -126,21 +127,39 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"Error starting pair recovery: {e}")
     
-    def _calculate_hedge_lot_size(self, original_lot: float, correlation: float, loss_percent: float) -> float:
-        """คำนวณขนาด lot สำหรับ hedge position - ใช้ขนาดเดียวกับไม้เดิม"""
+    def _calculate_hedge_lot_size(self, original_lot: float, correlation: float, loss_percent: float, original_symbol: str = None) -> float:
+        """คำนวณขนาด lot สำหรับ hedge position - ใช้ balance-based sizing"""
         try:
-            # ใช้ lot size เดียวกันกับไม้เดิม (0.1 lot)
-            hedge_lot = original_lot
+            # ดึง balance จาก broker
+            balance = self.broker.get_account_balance()
+            if not balance:
+                self.logger.warning("Cannot get account balance - using original lot size")
+                return original_lot
             
-            # จำกัดขนาด lot
-            hedge_lot = min(hedge_lot, 1.0)  # สูงสุด 1 lot
-            hedge_lot = max(hedge_lot, 0.01)  # ต่ำสุด 0.01 lot
-            
-            return float(hedge_lot)
+            # คำนวณ pip value สำหรับคู่เงินที่จะ hedge
+            if original_symbol:
+                pip_value = TradingCalculations.calculate_pip_value(original_symbol, 0.01)
+                
+                # คำนวณ lot size ตาม balance และ risk
+                hedge_lot = TradingCalculations.calculate_lot_from_balance(
+                    balance=balance,
+                    pip_value=pip_value,
+                    risk_percent=1.0,  # 1% risk
+                    max_loss_pips=100
+                )
+                
+                # จำกัดขนาด lot
+                hedge_lot = min(hedge_lot, 1.0)  # สูงสุด 1 lot
+                hedge_lot = max(hedge_lot, 0.01)  # ต่ำสุด 0.01 lot
+                
+                return float(hedge_lot)
+            else:
+                # Fallback: ใช้ lot size เดียวกันกับไม้เดิม
+                return original_lot
             
         except Exception as e:
             self.logger.error(f"Error calculating hedge lot size: {e}")
-            return 0.1
+            return original_lot
     
     def _send_hedge_order(self, symbol: str, lot_size: float, group_id: str, recovery_level: int = 1) -> bool:
         """ส่งออเดอร์ hedge"""
@@ -171,14 +190,27 @@ class CorrelationManager:
     def check_recovery_chain(self):
         """ตรวจสอบ recovery chain และดำเนินการต่อเนื่อง"""
         try:
+            active_chains = 0
             for group_id, chain_data in self.recovery_chains.items():
                 if chain_data['status'] != 'active':
                     continue
                 
+                active_chains += 1
+                self.logger.info(f"🔗 Checking recovery chain for group {group_id}")
+                
                 # ตรวจสอบ recovery pairs
                 for recovery_pair in chain_data['recovery_pairs']:
+                    self.logger.info(f"🔍 Checking recovery pair: {recovery_pair['symbol']}")
                     if self._should_continue_recovery(recovery_pair):
+                        self.logger.info(f"🔄 Continuing recovery chain for {recovery_pair['symbol']}")
                         self._continue_recovery_chain(group_id, recovery_pair)
+                    else:
+                        self.logger.info(f"⏳ {recovery_pair['symbol']} not ready for chain recovery")
+            
+            if active_chains > 0:
+                self.logger.info(f"📊 Total active recovery chains: {active_chains}")
+            else:
+                self.logger.debug("📊 No active recovery chains to check")
                         
         except Exception as e:
             self.logger.error(f"Error checking recovery chain: {e}")
@@ -190,6 +222,7 @@ class CorrelationManager:
             order_id = recovery_pair.get('order_id')
             
             if not order_id:
+                self.logger.debug(f"🔍 {symbol}: No order_id found")
                 return False
             
             # ตรวจสอบ PnL จาก broker API
@@ -204,12 +237,15 @@ class CorrelationManager:
                     break
             
             if lot_size <= 0:
+                self.logger.debug(f"🔍 {symbol}: Invalid lot size ({lot_size})")
                 return False
             
             # เงื่อนไข 1: Risk 5% ต่อ lot
             risk_per_lot = abs(position_pnl) / lot_size
+            self.logger.info(f"🔍 Recovery check for {symbol}: PnL={position_pnl:.2f}, Lot size={lot_size:.1f}, Risk per lot={risk_per_lot:.2%}")
+            
             if risk_per_lot < 0.05:  # risk น้อยกว่า 5%
-                self.logger.debug(f"⏳ {symbol} risk too low ({risk_per_lot:.2%}) - Waiting for 5%")
+                self.logger.info(f"⏳ {symbol} risk too low ({risk_per_lot:.2%}) - Waiting for 5%")
                 return False
             
             # เงื่อนไข 2: ระยะห่าง 10 pips
@@ -224,12 +260,17 @@ class CorrelationManager:
                         else:
                             price_distance = abs(current_price - entry_price) * 10000
                         
+                        self.logger.info(f"🔍 {symbol}: Entry {entry_price:.5f}, Current {current_price:.5f}, Distance {price_distance:.1f} pips")
+                        
                         if price_distance < 10:  # ระยะห่างน้อยกว่า 10 จุด
-                            self.logger.debug(f"⏳ {symbol} price distance too small ({price_distance:.1f} pips) - Waiting for 10 pips")
+                            self.logger.info(f"⏳ {symbol} price distance too small ({price_distance:.1f} pips) - Waiting for 10 pips")
                             return False
                 except Exception as e:
                     self.logger.warning(f"Could not get price for {symbol}: {e}")
                     return False
+            else:
+                self.logger.warning(f"🔍 {symbol}: No entry price found")
+                return False
             
             # ผ่านเงื่อนไขทั้งหมด - แก้ไม้ทันที
             self.logger.info(f"✅ {symbol} meets recovery conditions - Risk: {risk_per_lot:.2%}, Distance: {price_distance:.1f} pips")
@@ -243,26 +284,30 @@ class CorrelationManager:
         """ดำเนินการ recovery chain ต่อเนื่อง"""
         try:
             symbol = recovery_pair['symbol']
-            self.logger.info(f"🔄 Continuing recovery chain for {symbol}")
+            self.logger.info(f"🔄 Continuing recovery chain for {symbol} in group {group_id}")
             
             # หาคู่เงินใหม่สำหรับ recovery
+            self.logger.info(f"🔍 Searching for correlation candidates for {symbol}")
             correlation_candidates = self._find_optimal_correlation_pairs(symbol)
             
             if not correlation_candidates:
-                self.logger.warning(f"   No correlation candidates found for {symbol}")
+                self.logger.warning(f"❌ No correlation candidates found for {symbol}")
                 return
+            
+            self.logger.info(f"📊 Found {len(correlation_candidates)} correlation candidates for {symbol}")
             
             # เลือกคู่เงินที่ดีที่สุด
             best_correlation = correlation_candidates[0]
-            self.logger.info(f"   Best correlation: {best_correlation['symbol']} (correlation: {best_correlation['correlation']:.2f})")
+            self.logger.info(f"🎯 Best correlation: {best_correlation['symbol']} (correlation: {best_correlation['correlation']:.2f})")
             
             # ส่งออเดอร์ recovery ใหม่
+            self.logger.info(f"📤 Sending new recovery order for {symbol} -> {best_correlation['symbol']}")
             success = self._execute_correlation_position(recovery_pair, best_correlation, group_id)
             
             if success:
-                self.logger.info(f"✅ Chain recovery continued for {symbol}")
+                self.logger.info(f"✅ Chain recovery continued for {symbol} -> {best_correlation['symbol']}")
             else:
-                self.logger.error(f"❌ Failed to continue chain recovery for {symbol}")
+                self.logger.error(f"❌ Failed to continue chain recovery for {symbol} -> {best_correlation['symbol']}")
                 
         except Exception as e:
             self.logger.error(f"Error continuing recovery chain: {e}")
@@ -351,6 +396,10 @@ class CorrelationManager:
                 ]
             
             # หาคู่เงินที่มี correlation กับ base_symbol
+            self.logger.info(f"🔍 Searching correlation pairs for {base_symbol} from {len(all_pairs)} available pairs")
+            checked_pairs = 0
+            valid_correlations = 0
+            
             for symbol in all_pairs:
                 if symbol == base_symbol:
                     continue
@@ -359,11 +408,14 @@ class CorrelationManager:
                 if symbol in arbitrage_pairs:
                     continue
                 
+                checked_pairs += 1
+                
                 # คำนวณ correlation ตามประเภทคู่เงิน
                 correlation = self._calculate_correlation_for_arbitrage_pair(base_symbol, symbol)
                 
                 # ตรวจสอบว่า correlation อยู่ในเกณฑ์ที่ยอมรับได้
                 if correlation >= self.recovery_thresholds['min_correlation']:
+                    valid_correlations += 1
                     # กำหนดทิศทางตาม correlation
                     direction = self._determine_recovery_direction(base_symbol, symbol, correlation)
                     
@@ -373,12 +425,22 @@ class CorrelationManager:
                         'recovery_strength': correlation,
                         'direction': direction
                     })
+                    
+                    self.logger.info(f"✅ Found correlation: {symbol} = {correlation:.2f} ({direction})")
+                else:
+                    self.logger.debug(f"❌ Low correlation: {symbol} = {correlation:.2f} (min: {self.recovery_thresholds['min_correlation']:.2f})")
+            
+            self.logger.info(f"📊 Correlation search results: {valid_correlations}/{checked_pairs} pairs passed correlation threshold")
             
             # Sort by recovery strength (highest first)
             correlation_candidates.sort(key=lambda x: x['recovery_strength'], reverse=True)
             
             if not correlation_candidates:
                 self.logger.error(f"❌ No correlation candidates created for {base_symbol}")
+            else:
+                self.logger.info(f"🎯 Final correlation candidates for {base_symbol}: {len(correlation_candidates)} pairs")
+                for i, candidate in enumerate(correlation_candidates[:3]):  # แสดง 3 อันดับแรก
+                    self.logger.info(f"   {i+1}. {candidate['symbol']}: {candidate['correlation']:.2f} ({candidate['direction']})")
             
             return correlation_candidates
             
@@ -769,9 +831,16 @@ class CorrelationManager:
             # Calculate correlation volume
             correlation_volume = self._calculate_hedge_volume(original_position, correlation_candidate)
             
-            # ใช้ lot size เดียวกันกับไม้เดิม (0.1 lot)
-            lot_size = original_position.get('lot_size', original_position.get('volume', 0.1))
-            correlation_lot_size = lot_size
+            # คำนวณ lot size ตาม balance-based sizing
+            original_lot = original_position.get('lot_size', original_position.get('volume', 0.1))
+            original_symbol = original_position.get('symbol', '')
+            
+            correlation_lot_size = self._calculate_hedge_lot_size(
+                original_lot=original_lot,
+                correlation=correlation,
+                loss_percent=0.0,  # ไม่ใช้ loss_percent ในระบบใหม่
+                original_symbol=original_symbol
+            )
             
             # Send correlation order
             success = self._send_correlation_order(symbol, correlation_lot_size, group_id)
@@ -811,25 +880,19 @@ class CorrelationManager:
             return False
     
     def _calculate_hedge_volume(self, original_position: Dict, correlation_candidate: Dict) -> float:
-        """คำนวณขนาด volume สำหรับ correlation position"""
+        """คำนวณขนาด volume สำหรับ correlation position - ใช้ balance-based sizing"""
         try:
-            # ใช้ correlation ratio
-            correlation_ratio = min(2.0, max(0.5, correlation_candidate['correlation'] * 1.5))
+            # ดึงข้อมูลจาก original position
+            original_lot = original_position.get('lot_size', original_position.get('volume', 0.1))
+            original_symbol = original_position.get('symbol', '')
             
-            # ดึง lot_size จาก original_position (ใช้ key ที่ถูกต้อง)
-            lot_size = original_position.get('lot_size', original_position.get('volume', 0.1))
-            
-            # คำนวณ volume
-            volume = lot_size * correlation_ratio
-            
-            # จำกัดขนาด volume
-            volume = min(volume, 10.0)  # สูงสุด 10 lot
-            volume = max(volume, 0.01)  # ต่ำสุด 0.01 lot
-            
-            # แปลงเป็นจำนวนเต็ม (lot size ต้องเป็นจำนวนเต็ม)
-            volume = round(volume, 2)
-            if volume != int(volume):
-                volume = int(volume) + 1
+            # ใช้ balance-based lot sizing
+            volume = self._calculate_hedge_lot_size(
+                original_lot=original_lot,
+                correlation=correlation_candidate.get('correlation', 0.5),
+                loss_percent=0.0,
+                original_symbol=original_symbol
+            )
             
             return float(volume)
             
@@ -866,11 +929,23 @@ class CorrelationManager:
     def check_recovery_positions(self):
         """ตรวจสอบ recovery positions"""
         try:
+            active_recovery_count = 0
             for recovery_id, position in self.recovery_positions.items():
                 if position['status'] == 'active':
+                    active_recovery_count += 1
+                    self.logger.info(f"🔍 Checking recovery position: {position['symbol']} (ID: {recovery_id})")
+                    
                     # ตรวจสอบว่าต้องการ recovery เพิ่มหรือไม่
                     if self._should_continue_recovery(position):
+                        self.logger.info(f"🔄 Starting chain recovery for {position['symbol']}")
                         self._continue_recovery_chain(position['group_id'], position)
+                    else:
+                        self.logger.info(f"⏳ {position['symbol']} not ready for chain recovery yet")
+            
+            if active_recovery_count > 0:
+                self.logger.info(f"📊 Total active recovery positions: {active_recovery_count}")
+            else:
+                self.logger.debug("📊 No active recovery positions to check")
                         
         except Exception as e:
             self.logger.error(f"Error checking recovery positions: {e}")

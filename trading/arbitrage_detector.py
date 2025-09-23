@@ -27,6 +27,7 @@ import asyncio
 import threading
 # import talib  # ไม่ใช้ในระบบนี้
 import time
+from utils.calculations import TradingCalculations
 
 class TriangleArbitrageDetector:
     def __init__(self, broker_api, ai_engine=None, correlation_manager=None):
@@ -270,9 +271,25 @@ class TriangleArbitrageDetector:
         self.logger.info("🛑 Simple trading system stopped")
     
     def _send_simple_orders(self):
-        """ส่งออเดอร์ง่ายๆ ตามคู่เงินที่กำหนด"""
+        """ส่งออเดอร์ง่ายๆ ตามคู่เงินที่กำหนด - ใช้ balance-based lot sizing"""
         try:
-            self.logger.info("🚀 Sending simple orders for EURUSD, GBPUSD, EURGBP")
+            # ดึง balance จาก broker
+            balance = self.broker.get_account_balance()
+            if not balance:
+                self.logger.error("❌ Cannot get account balance - using default lot size")
+                balance = 10000  # Fallback balance
+            
+            self.logger.info(f"💰 Account Balance: {balance:.2f} USD")
+            
+            # คำนวณ lot sizes ตาม balance
+            triangle_symbols = ['EURUSD', 'GBPUSD', 'EURGBP']
+            lot_sizes = TradingCalculations.get_triangle_lot_sizes(
+                triangle_symbols=triangle_symbols,
+                balance=balance,
+                risk_percent=1.0  # 1% risk per trade
+            )
+            
+            self.logger.info(f"📊 Calculated lot sizes: {lot_sizes}")
             
             # สร้างกลุ่มใหม่
             self.group_counter += 1
@@ -286,18 +303,19 @@ class TriangleArbitrageDetector:
                 'positions': [],
                 'status': 'active',
                 'total_pnl': 0.0,
-                'recovery_chain': []
+                'recovery_chain': [],
+                'lot_sizes': lot_sizes  # เก็บ lot sizes ไว้ในกลุ่ม
             }
             
             # ส่งออเดอร์ 3 คู่พร้อมกัน
             orders_sent = 0
             order_results = []
             
-            # สร้างข้อมูลออเดอร์ทั้ง 3 คู่
+            # สร้างข้อมูลออเดอร์ทั้ง 3 คู่ พร้อม lot sizes
             orders_to_send = [
-                {'symbol': 'EURUSD', 'direction': 'BUY', 'group_id': group_id, 'index': 0},
-                {'symbol': 'GBPUSD', 'direction': 'SELL', 'group_id': group_id, 'index': 1},
-                {'symbol': 'EURGBP', 'direction': 'BUY', 'group_id': group_id, 'index': 2}
+                {'symbol': 'EURUSD', 'direction': 'BUY', 'group_id': group_id, 'index': 0, 'lot_size': lot_sizes.get('EURUSD', 0.01)},
+                {'symbol': 'GBPUSD', 'direction': 'SELL', 'group_id': group_id, 'index': 1, 'lot_size': lot_sizes.get('GBPUSD', 0.01)},
+                {'symbol': 'EURGBP', 'direction': 'BUY', 'group_id': group_id, 'index': 2, 'lot_size': lot_sizes.get('EURGBP', 0.01)}
             ]
             
             # ส่งออเดอร์พร้อมกันด้วย threading
@@ -311,10 +329,13 @@ class TriangleArbitrageDetector:
                     group_number = group_id.split('_')[-1]
                     comment = f"SIMPLE_G{group_number}_{order_data['symbol']}"
                     
+                    # ใช้ lot size ที่คำนวณแล้ว
+                    lot_size = order_data.get('lot_size', 0.01)
+                    
                     result = self.broker.place_order(
                         symbol=order_data['symbol'],
                         order_type=order_data['direction'],
-                        volume=self.standard_lot_size,
+                        volume=lot_size,
                         comment=comment
                     )
                     
@@ -373,16 +394,19 @@ class TriangleArbitrageDetector:
                     if not entry_price:
                         entry_price = 0.0
                     
+                    # ใช้ lot_size ที่คำนวณแล้ว
+                    lot_size = lot_sizes.get(result['symbol'], 0.01)
+                    
                     group_data['positions'].append({
                         'symbol': result['symbol'],
                         'direction': result['direction'],
-                        'lot_size': self.standard_lot_size,
+                        'lot_size': lot_size,
                         'entry_price': entry_price,
                         'status': 'active',
                         'order_id': result.get('order_id'),
                         'comment': f"SIMPLE_G{group_id.split('_')[-1]}_{result['symbol']}"
                     })
-                    self.logger.info(f"✅ Order sent: {result['symbol']} {result['direction']} {self.standard_lot_size} lot")
+                    self.logger.info(f"✅ Order sent: {result['symbol']} {result['direction']} {lot_size} lot")
                 elif result:
                     self.logger.error(f"❌ Order failed: {result['symbol']} {result['direction']}")
                     if 'error' in result:
@@ -865,8 +889,9 @@ class TriangleArbitrageDetector:
                 self.logger.info(f"   📊 คู่เงินที่ปลดล็อค: {group_pairs}")
             
             # ปิด recovery positions ที่เกี่ยวข้องกับกลุ่มนี้
+            total_recovery_closed = 0
             if self.correlation_manager:
-                self._close_recovery_positions_for_group(group_id)
+                total_recovery_closed = self._close_recovery_positions_for_group(group_id)
             
             # ลบกลุ่มออกจาก active_groups
             self._remove_group_data(group_id)
@@ -883,12 +908,18 @@ class TriangleArbitrageDetector:
             # Reset ข้อมูลกลุ่มให้ถูกต้อง
             self._reset_group_data()
             
+            # Reset comment เพื่อให้สามารถใช้ comment เดิมได้อีกครั้ง
+            self._reset_comments_for_group(group_id)
+            
             # แสดงผล PnL รวมของกลุ่ม
             pnl_status = "💰" if total_pnl > 0 else "💸" if total_pnl < 0 else "⚖️"
             self.logger.info(f"✅ Group {group_id} closed successfully")
-            self.logger.info(f"   🚀 Orders closed simultaneously: {orders_closed}/{len(positions_to_close)}")
+            self.logger.info(f"   🚀 Arbitrage orders closed: {orders_closed}/{len(positions_to_close)}")
+            self.logger.info(f"   🔄 Recovery positions closed: {total_recovery_closed}")
+            self.logger.info(f"   📊 Total positions closed: {orders_closed + total_recovery_closed}")
             self.logger.info(f"   {pnl_status} Total PnL: {total_pnl:.2f} USD")
             self.logger.info(f"   📊 คู่เงินที่ใช้ได้แล้ว: {self.used_currency_pairs}")
+            self.logger.info(f"   🔄 Comments reset for group {group_id}")
             self.logger.info("🔄 เริ่มตรวจสอบ arbitrage ใหม่")
             
         except Exception as e:
@@ -908,22 +939,81 @@ class TriangleArbitrageDetector:
             
             # ตรวจสอบ recovery positions ทั้งหมด
             for recovery_id, recovery_data in self.correlation_manager.recovery_positions.items():
-                original_symbol = recovery_data.get('original_position', {}).get('symbol', '')
+                # ตรวจสอบหลายวิธีเพื่อหา original symbol
+                original_symbol = ''
+                
+                # วิธีที่ 1: จาก original_pair
+                if 'original_pair' in recovery_data:
+                    original_symbol = recovery_data['original_pair']
+                # วิธีที่ 2: จาก original_position
+                elif 'original_position' in recovery_data:
+                    original_symbol = recovery_data['original_position'].get('symbol', '')
+                # วิธีที่ 3: จาก group_id
+                elif recovery_data.get('group_id') == group_id:
+                    original_symbol = 'MATCH'  # ใช้เป็น flag
                 
                 # ถ้า recovery position นี้เกี่ยวข้องกับกลุ่ม arbitrage นี้
-                if original_symbol in group_pairs:
+                if (original_symbol in group_pairs) or (original_symbol == 'MATCH'):
                     recovery_positions_to_close.append(recovery_id)
+                    self.logger.info(f"🔍 Found recovery position {recovery_id} for group {group_id} (original: {original_symbol})")
             
             # ปิด recovery positions ที่เกี่ยวข้อง
             for recovery_id in recovery_positions_to_close:
                 self.logger.info(f"🔄 Closing recovery position {recovery_id} for group {group_id}")
                 self.correlation_manager._close_recovery_position(recovery_id)
             
-            if recovery_positions_to_close:
-                self.logger.info(f"✅ Closed {len(recovery_positions_to_close)} recovery positions for group {group_id}")
+            # ปิด recovery positions ทั้งหมดที่เกี่ยวข้องกับกลุ่มนี้ (เพิ่มเติม)
+            # ตรวจสอบ recovery positions ที่มี group_id ตรงกัน
+            additional_recovery_positions = []
+            for recovery_id, recovery_data in self.correlation_manager.recovery_positions.items():
+                if recovery_data.get('group_id') == group_id and recovery_id not in recovery_positions_to_close:
+                    additional_recovery_positions.append(recovery_id)
+            
+            # ปิด recovery positions เพิ่มเติม
+            for recovery_id in additional_recovery_positions:
+                self.logger.info(f"🔄 Closing additional recovery position {recovery_id} for group {group_id}")
+                self.correlation_manager._close_recovery_position(recovery_id)
+            
+            total_recovery_closed = len(recovery_positions_to_close) + len(additional_recovery_positions)
+            if total_recovery_closed > 0:
+                self.logger.info(f"✅ Closed {total_recovery_closed} recovery positions for group {group_id}")
+            
+            return total_recovery_closed
             
         except Exception as e:
             self.logger.error(f"Error closing recovery positions for group {group_id}: {e}")
+            return 0
+    
+    def _reset_comments_for_group(self, group_id: str):
+        """Reset comment สำหรับกลุ่มที่ปิดแล้ว"""
+        try:
+            # ดึงหมายเลขกลุ่ม
+            group_number = group_id.split('_')[-1]
+            
+            # สร้าง comment patterns ที่ต้อง reset
+            comment_patterns = [
+                f"SIMPLE_G{group_number}_EURUSD",
+                f"SIMPLE_G{group_number}_GBPUSD", 
+                f"SIMPLE_G{group_number}_EURGBP",
+                f"RECOVERY_G{group_number}_",
+                f"ARB_G{group_number}_"
+            ]
+            
+            # ตรวจสอบว่ามี comment ที่ใช้อยู่หรือไม่
+            used_comments = set()
+            for pattern in comment_patterns:
+                if pattern in self.used_currency_pairs:
+                    used_comments.add(pattern)
+            
+            # ลบ comment ที่ใช้แล้วออกจาก used_currency_pairs
+            for comment in used_comments:
+                self.used_currency_pairs.discard(comment)
+            
+            if used_comments:
+                self.logger.info(f"🔄 Reset comments for group {group_id}: {used_comments}")
+            
+        except Exception as e:
+            self.logger.error(f"Error resetting comments for group {group_id}: {e}")
     
     def _reset_group_data(self):
         """Reset ข้อมูลกลุ่มให้ถูกต้อง"""
@@ -934,7 +1024,7 @@ class TriangleArbitrageDetector:
                 self.used_currency_pairs.clear()
                 self.group_currency_mapping.clear()
                 self.recovery_in_progress.clear()
-                self.logger.info("🔄 Reset ข้อมูลกลุ่ม - คู่เงินทั้งหมดปลดล็อคแล้ว")
+                self.logger.info("🔄 Reset ข้อมูลกลุ่ม - คู่เงินและ comment ทั้งหมดปลดล็อคแล้ว")
             else:
                 # ถ้ายังมีกลุ่มที่เปิดอยู่ ให้ตรวจสอบข้อมูลให้ถูกต้อง
                 current_used_pairs = set()

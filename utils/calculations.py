@@ -384,28 +384,141 @@ class TradingCalculations:
             return 0.0
     
     @staticmethod
-    def calculate_pip_value(symbol: str, lot_size: float, account_currency: str = "USD") -> float:
+    def calculate_pip_value(symbol: str, lot_size: float = 0.01, account_currency: str = "USD") -> float:
         """Calculate pip value for a given symbol and lot size"""
         try:
-            # This is a simplified calculation
-            # In practice, you'd need to consider the actual currency pairs and exchange rates
-            
-            # Major pairs pip values (simplified)
-            pip_values = {
-                'EURUSD': 10.0,
-                'GBPUSD': 10.0,
-                'USDJPY': 9.09,
-                'AUDUSD': 10.0,
-                'USDCAD': 7.5,
-                'NZDUSD': 10.0,
-                'USDCHF': 9.09
+            # กำหนด pip value ต่อ 0.01 lot สำหรับแต่ละคู่เงิน
+            # คำนวณจาก contract size และ exchange rate
+            pip_values_per_001_lot = {
+                # Major pairs (USD base)
+                'EURUSD': 1.0,    # $1 per 0.01 lot per pip
+                'GBPUSD': 1.0,    # $1 per 0.01 lot per pip
+                'AUDUSD': 1.0,    # $1 per 0.01 lot per pip
+                'NZDUSD': 1.0,    # $1 per 0.01 lot per pip
+                'USDCAD': 0.75,   # $0.75 per 0.01 lot per pip
+                'USDCHF': 0.91,   # $0.91 per 0.01 lot per pip
+                
+                # JPY pairs
+                'USDJPY': 0.91,   # $0.91 per 0.01 lot per pip
+                'EURJPY': 0.91,   # $0.91 per 0.01 lot per pip
+                'GBPJPY': 0.91,   # $0.91 per 0.01 lot per pip
+                'AUDJPY': 0.91,   # $0.91 per 0.01 lot per pip
+                'NZDJPY': 0.91,   # $0.91 per 0.01 lot per pip
+                'CADJPY': 0.91,   # $0.91 per 0.01 lot per pip
+                'CHFJPY': 0.91,   # $0.91 per 0.01 lot per pip
+                
+                # Cross pairs
+                'EURGBP': 1.0,    # $1 per 0.01 lot per pip
+                'EURCHF': 1.0,    # $1 per 0.01 lot per pip
+                'EURCAD': 1.0,    # $1 per 0.01 lot per pip
+                'EURAUD': 1.0,    # $1 per 0.01 lot per pip
+                'EURNZD': 1.0,    # $1 per 0.01 lot per pip
+                'GBPCHF': 1.0,    # $1 per 0.01 lot per pip
+                'GBPCAD': 1.0,    # $1 per 0.01 lot per pip
+                'GBPAUD': 1.0,    # $1 per 0.01 lot per pip
+                'GBPNZD': 1.0,    # $1 per 0.01 lot per pip
+                'AUDCHF': 1.0,    # $1 per 0.01 lot per pip
+                'AUDCAD': 1.0,    # $1 per 0.01 lot per pip
+                'AUDNZD': 1.0,    # $1 per 0.01 lot per pip
+                'NZDCAD': 1.0,    # $1 per 0.01 lot per pip
+                'NZDCHF': 1.0,    # $1 per 0.01 lot per pip
+                'CADCHF': 1.0,    # $1 per 0.01 lot per pip
             }
             
-            base_pip_value = pip_values.get(symbol, 10.0)
-            return base_pip_value * lot_size
+            # ดึง pip value ต่อ 0.01 lot
+            base_pip_value = pip_values_per_001_lot.get(symbol.upper(), 1.0)
             
-        except Exception:
-            return 0.0
+            # คำนวณ pip value สำหรับ lot size ที่กำหนด
+            pip_value = base_pip_value * (lot_size / 0.01)
+            
+            return pip_value
+            
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Error calculating pip value for {symbol}: {e}")
+            return 1.0  # Default fallback
+    
+    @staticmethod
+    def calculate_lot_from_balance(balance: float, pip_value: float, risk_percent: float = 1.0, max_loss_pips: float = 100) -> float:
+        """Calculate lot size based on account balance and risk management"""
+        try:
+            if balance <= 0 or pip_value <= 0 or risk_percent <= 0 or max_loss_pips <= 0:
+                return 0.01  # Minimum lot size
+            
+            # คำนวณจำนวนเงินที่เสี่ยงได้
+            risk_amount = balance * (risk_percent / 100)
+            
+            # คำนวณ lot size ที่เหมาะสม
+            # risk_amount = lot_size * pip_value * max_loss_pips
+            # lot_size = risk_amount / (pip_value * max_loss_pips)
+            theoretical_lot = risk_amount / (pip_value * max_loss_pips)
+            
+            # Round to valid lot size
+            return TradingCalculations.round_to_valid_lot_size(theoretical_lot)
+            
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Error calculating lot from balance: {e}")
+            return 0.01  # Minimum lot size
+    
+    @staticmethod
+    def round_to_valid_lot_size(calculated_lot: float, min_lot: float = 0.01, lot_step: float = 0.01) -> float:
+        """Round calculated lot size to valid broker lot size"""
+        try:
+            if calculated_lot <= 0:
+                return min_lot
+            
+            # Round to nearest lot step
+            rounded_lot = round(calculated_lot / lot_step) * lot_step
+            
+            # Ensure minimum lot size
+            if rounded_lot < min_lot:
+                rounded_lot = min_lot
+            
+            # Ensure maximum lot size (safety limit)
+            max_lot = 10.0
+            if rounded_lot > max_lot:
+                rounded_lot = max_lot
+            
+            return rounded_lot
+            
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Error rounding lot size: {e}")
+            return min_lot
+    
+    @staticmethod
+    def get_triangle_lot_sizes(triangle_symbols: List[str], balance: float, risk_percent: float = 1.0) -> Dict[str, float]:
+        """Calculate lot sizes for triangle arbitrage based on balance"""
+        try:
+            if not triangle_symbols or len(triangle_symbols) != 3:
+                return {}
+            
+            if balance <= 0:
+                return {}
+            
+            # คำนวณ risk amount ต่อ leg
+            total_risk = balance * (risk_percent / 100)
+            risk_per_leg = total_risk / 3  # แบ่งความเสี่ยงเท่าๆ กันทั้ง 3 legs
+            
+            lot_sizes = {}
+            
+            for symbol in triangle_symbols:
+                # คำนวณ pip value ต่อ 0.01 lot
+                pip_value = TradingCalculations.calculate_pip_value(symbol, 0.01)
+                
+                # คำนวณ lot size สำหรับ leg นี้
+                lot_size = TradingCalculations.calculate_lot_from_balance(
+                    balance=risk_per_leg * 3,  # ใช้ balance เต็มสำหรับคำนวณ
+                    pip_value=pip_value,
+                    risk_percent=risk_percent,
+                    max_loss_pips=100
+                )
+                
+                lot_sizes[symbol] = lot_size
+            
+            return lot_sizes
+            
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Error calculating triangle lot sizes: {e}")
+            return {}
     
     @staticmethod
     def calculate_drawdown(equity_curve: List[float]) -> Tuple[float, float, float]:
