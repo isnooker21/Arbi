@@ -462,45 +462,9 @@ class BrokerAPI:
                         return None
                     price = tick.ask if order_type.upper() == 'BUY' else tick.bid
                 
-                # Validate symbol first
-                symbol_info = mt5.symbol_info(symbol)
-                if symbol_info is None:
-                    self.logger.error(f"❌ Symbol {symbol} not found in MT5")
-                    return None
-                
-                # Check if symbol is selectable (compatible with different MT5 versions)
-                try:
-                    if hasattr(symbol_info, 'selectable') and not symbol_info.selectable:
-                        self.logger.warning(f"⚠️ Symbol {symbol} is not selectable, trying to select...")
-                        if not mt5.symbol_select(symbol, True):
-                            self.logger.error(f"❌ Failed to select symbol {symbol}")
-                            return None
-                    else:
-                        # Try to select symbol anyway to ensure it's available
-                        if not mt5.symbol_select(symbol, True):
-                            self.logger.warning(f"⚠️ Could not select symbol {symbol}, but continuing...")
-                except AttributeError:
-                    # Fallback for older MT5 versions
-                    self.logger.debug(f"🔍 Symbol {symbol} validation skipped (older MT5 version)")
-                    if not mt5.symbol_select(symbol, True):
-                        self.logger.warning(f"⚠️ Could not select symbol {symbol}, but continuing...")
-                
-                # Final symbol validation
+                # Simple symbol validation - just try to select
                 if not mt5.symbol_select(symbol, True):
-                    self.logger.error(f"❌ Symbol {symbol} cannot be selected for trading")
-                    return None
-                
-                # Check if symbol trading is allowed
-                if not symbol_info.trade_mode:
-                    self.logger.error(f"❌ Trading not allowed for symbol {symbol}")
-                    return None
-                
-                # Check if symbol is visible
-                if not symbol_info.visible:
-                    self.logger.warning(f"⚠️ Symbol {symbol} is not visible, trying to make visible...")
-                    if not mt5.symbol_select(symbol, True):
-                        self.logger.error(f"❌ Cannot make symbol {symbol} visible")
-                        return None
+                    self.logger.warning(f"⚠️ Could not select symbol {symbol}, but continuing...")
                 
                 # Prepare request for REAL TRADING
                 # Let broker choose the filling type automatically
@@ -528,19 +492,9 @@ class BrokerAPI:
                 self.logger.debug(f"📋 Order request: {request}")
                 self.logger.info(f"🔄 Letting broker choose filling type automatically")
                 
-                # Check MT5 connection before sending
-                if not mt5.terminal_info():
-                    self.logger.error(f"❌ MT5 terminal not connected")
-                    return None
-                
-                # Check if trading is allowed
-                account_info = mt5.account_info()
-                if not account_info:
-                    self.logger.error(f"❌ Cannot get account info from MT5")
-                    return None
-                
-                if not account_info.trade_allowed:
-                    self.logger.error(f"❌ Trading not allowed on this account")
+                # Simple validation - just check if connected
+                if not self._connected:
+                    self.logger.error(f"❌ Not connected to MT5")
                     return None
                 
                 # Send order - let broker choose filling type
