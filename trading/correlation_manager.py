@@ -52,6 +52,9 @@ class CorrelationManager:
             'base_lot_size': 0.1         # ขนาด lot เริ่มต้น
         }
         
+        # Portfolio balance threshold
+        self.portfolio_balance_threshold = 0.1  # 10% imbalance threshold
+        
         # Never-Cut-Loss flag
         self.never_cut_loss = True
         
@@ -294,7 +297,6 @@ class CorrelationManager:
         }
         
         # Portfolio rebalancing parameters
-        self.portfolio_balance_threshold = 0.1  # 10% imbalance threshold
         self.rebalancing_frequency_hours = 6    # Rebalance every 6 hours
     
     def update_recovery_parameters(self, params: Dict):
