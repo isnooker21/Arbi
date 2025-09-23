@@ -99,6 +99,9 @@ class TriangleArbitrageDetector:
         # ระบบ Save/Load ข้อมูล
         self.persistence_file = "data/active_groups.json"
         
+        # การตั้งค่าการปิดกลุ่ม
+        self.profit_threshold_per_lot = 10.0  # 10 USD ต่อ lot
+        
         # If no triangles generated, create fallback triangles
         if len(self.triangle_combinations) == 0 and len(self.available_pairs) > 0:
             self.logger.warning("No triangles generated, creating fallback triangles...")
@@ -473,8 +476,11 @@ class TriangleArbitrageDetector:
     def check_group_status(self):
         """ตรวจสอบสถานะของกลุ่มที่เปิดอยู่"""
         try:
+            self.logger.debug(f"🔍 Checking group status - Active groups: {len(self.active_groups)}")
+            
             if not self.active_groups:
                 # ถ้าไม่มีกลุ่มที่เปิดอยู่ ให้ reset ข้อมูล
+                self.logger.debug("No active groups found - resetting group data")
                 self._reset_group_data()
                 return
             
@@ -519,19 +525,29 @@ class TriangleArbitrageDetector:
                 pnl_status = "💰" if total_group_pnl > 0 else "💸" if total_group_pnl < 0 else "⚖️"
                 self.logger.info(f"📊 Group {group_id} PnL: {pnl_status} {total_group_pnl:.2f} USD")
                 
-                # คำนวณ % ของทุนจาก broker API
+                # คำนวณ % ของทุนจาก broker API (ใช้ Balance ไม่ใช่ Equity)
                 account_balance = self.broker.get_account_balance()
                 if account_balance is None:
                     account_balance = 1000.0  # fallback ถ้าไม่สามารถดึงได้
                     self.logger.warning("⚠️ Cannot get account balance, using fallback: 1000 USD")
                 
                 profit_percentage = (total_group_pnl / account_balance) * 100
+                self.logger.info(f"   💰 Account Balance: {account_balance:.2f} USD")
+                self.logger.info(f"   📊 Profit Percentage: {profit_percentage:.3f}%")
                 
-                # ปิดกลุ่มเฉพาะเมื่อผลรวมเป็นบวก (ไม่ปิดขาดทุน)
-                if total_group_pnl > 0:
-                    self.logger.info(f"✅ Group {group_id} profitable - Total PnL: {total_group_pnl:.2f} USD ({profit_percentage:.2f}%)")
+                # คำนวณกำไรต่อ lot
+                total_lot_size = sum(position.get('lot_size', 0.1) for position in group_data['positions'])
+                profit_per_lot = total_group_pnl / total_lot_size if total_lot_size > 0 else 0
+                
+                # ปิดกลุ่มเมื่อกำไรต่อ lot ถึงเป้าหมาย
+                if profit_per_lot >= self.profit_threshold_per_lot:
+                    self.logger.info(f"✅ Group {group_id} reached profit target - Total PnL: {total_group_pnl:.2f} USD")
                     self.logger.info(f"✅ Closing group {group_id} - All positions will be closed together")
+                    self.logger.info(f"   🎯 Profit per lot: {profit_per_lot:.2f} USD (Target: {self.profit_threshold_per_lot} USD)")
                     groups_to_close.append(group_id)
+                elif total_group_pnl > 0:
+                    self.logger.info(f"💰 Group {group_id} profitable but below threshold - Total PnL: {total_group_pnl:.2f} USD")
+                    self.logger.info(f"   🎯 Profit per lot: {profit_per_lot:.2f} USD (Target: {self.profit_threshold_per_lot} USD)")
                 elif self._should_start_recovery(group_id, group_data, total_group_pnl, profit_percentage):
                     # เริ่ม correlation recovery ตามเงื่อนไขที่กำหนด
                     self.logger.info(f"🔄 Group {group_id} losing - Total PnL: {total_group_pnl:.2f} USD ({profit_percentage:.2f}%)")
@@ -539,8 +555,13 @@ class TriangleArbitrageDetector:
                     self._start_correlation_recovery(group_id, group_data, total_group_pnl)
             
             # ปิดกลุ่มที่ครบเงื่อนไข
-            for group_id in groups_to_close:
-                self._close_group(group_id)
+            if groups_to_close:
+                self.logger.info(f"🎯 Found {len(groups_to_close)} groups to close: {groups_to_close}")
+                for group_id in groups_to_close:
+                    self.logger.info(f"🔄 Closing group {group_id}")
+                    self._close_group(group_id)
+            else:
+                self.logger.debug("No groups meet closing criteria")
                 
         except Exception as e:
             self.logger.error(f"Error checking group status: {e}")
@@ -1408,3 +1429,15 @@ class TriangleArbitrageDetector:
             self._save_active_groups()
         except Exception as e:
             self.logger.error(f"Error removing group data: {e}")
+    
+    def set_profit_threshold_per_lot(self, threshold_per_lot: float):
+        """ตั้งค่าเป้าหมายกำไรต่อ lot สำหรับการปิดกลุ่ม"""
+        try:
+            self.profit_threshold_per_lot = threshold_per_lot
+            self.logger.info(f"🎯 Profit threshold per lot set to {threshold_per_lot} USD")
+        except Exception as e:
+            self.logger.error(f"Error setting profit threshold per lot: {e}")
+    
+    def get_profit_threshold_per_lot(self) -> float:
+        """ดึงค่าเป้าหมายกำไรต่อ lot ปัจจุบัน"""
+        return self.profit_threshold_per_lot
