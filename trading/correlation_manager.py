@@ -383,6 +383,8 @@ class CorrelationManager:
             
             # Get all available pairs from broker
             all_pairs = self.broker.get_available_pairs()
+            self.logger.info(f"🔍 Debug: Broker returned {len(all_pairs) if all_pairs else 0} pairs")
+            
             if not all_pairs:
                 self.logger.warning("No available pairs from broker, using fallback pairs")
                 # ใช้ fallback pairs สำหรับ correlation recovery
@@ -394,6 +396,7 @@ class CorrelationManager:
                     'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD', 'CHFJPY',
                     'EURCAD', 'GBPCAD', 'USDCAD', 'AUDCAD', 'CADCHF'
                 ]
+                self.logger.info(f"🔍 Debug: Using {len(all_pairs)} fallback pairs")
             
             # Get correlation data for the base symbol
             correlations = self.correlation_matrix.get(base_symbol, {})
@@ -401,6 +404,8 @@ class CorrelationManager:
             # If no correlation data, use all available pairs
             if not correlations:
                 self.logger.warning(f"⚠️ No correlation data for {base_symbol}, using all available pairs")
+                self.logger.info(f"🔍 Debug: Processing {len(all_pairs)} pairs for {base_symbol}")
+                
                 for symbol in all_pairs:
                     if symbol != base_symbol:
                         # ใช้ correlation values ที่แตกต่างกันตามประเภทคู่เงิน
@@ -421,6 +426,8 @@ class CorrelationManager:
                             'hedge_strength': correlation,
                             'direction': 'opposite' if correlation > 0 else 'same'
                         })
+                
+                self.logger.info(f"🔍 Debug: Created {len(hedge_candidates)} hedge candidates for {base_symbol}")
             else:
                 # Use correlation data
                 for symbol, correlation in correlations.items():
@@ -447,6 +454,12 @@ class CorrelationManager:
                 top_candidates = hedge_candidates[:5]
                 for i, candidate in enumerate(top_candidates, 1):
                     self.logger.info(f"   {i}. {candidate['symbol']} (correlation: {candidate['correlation']:.2f}, strength: {candidate['hedge_strength']:.2f})")
+            else:
+                self.logger.error(f"❌ No hedge candidates created for {base_symbol}")
+                self.logger.error(f"   All pairs: {all_pairs}")
+                self.logger.error(f"   Base symbol: {base_symbol}")
+                self.logger.error(f"   Correlations: {correlations}")
+            
             return hedge_candidates
             
         except Exception as e:

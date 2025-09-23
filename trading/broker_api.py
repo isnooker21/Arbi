@@ -339,7 +339,7 @@ class BrokerAPI:
     
     def _get_fallback_pairs(self) -> List[str]:
         """Get fallback pairs when broker data is unavailable"""
-        return [
+        fallback_pairs = [
             'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
             'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY',
             'EURCHF', 'GBPCHF', 'USDCHF', 'AUDCHF', 'CADCHF',
@@ -347,6 +347,8 @@ class BrokerAPI:
             'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD', 'CHFJPY',
             'EURCAD', 'GBPCAD', 'USDCAD', 'AUDCAD', 'CADCHF'
         ]
+        self.logger.info(f"🔍 Debug: Returning {len(fallback_pairs)} fallback pairs")
+        return fallback_pairs
     
     def get_current_price(self, symbol: str) -> Optional[float]:
         """Get current price for a symbol"""
