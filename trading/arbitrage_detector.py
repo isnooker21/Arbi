@@ -251,10 +251,36 @@ class TriangleArbitrageDetector:
                 loop_count += 1
                 self.logger.debug(f"🔄 Trading loop #{loop_count}")
                 
-                # ตรวจสอบว่ามีกลุ่มที่เปิดอยู่หรือไม่
+                # ตรวจสอบว่ามีกลุ่มที่เปิดอยู่จริงหรือไม่
                 if len(self.active_groups) > 0:
-                    time.sleep(10.0)  # รอ 10 วินาที
-                    continue
+                    # ตรวจสอบว่า Group ยังเปิดอยู่จริงใน broker หรือไม่
+                    has_valid_groups = False
+                    for group_id, group_data in list(self.active_groups.items()):
+                        valid_positions = 0
+                        for position in group_data['positions']:
+                            order_id = position.get('order_id')
+                            if order_id:
+                                all_positions = self.broker.get_all_positions()
+                                for pos in all_positions:
+                                    if pos['ticket'] == order_id:
+                                        valid_positions += 1
+                                        break
+                        
+                        if valid_positions > 0:
+                            has_valid_groups = True
+                            break
+                        else:
+                            # ลบ Group ที่ไม่มี valid positions
+                            self.logger.info(f"🗑️ Group {group_id} has no valid positions - removing from active groups")
+                            del self.active_groups[group_id]
+                    
+                    if has_valid_groups:
+                        time.sleep(10.0)  # รอ 10 วินาที
+                        continue
+                    else:
+                        # ถ้าไม่มี Group ที่เปิดอยู่จริง ให้ reset ข้อมูล
+                        self.logger.info("🔄 No valid groups found - resetting group data")
+                        self._reset_group_data()
                 
                 # ออกไม้ทันทีตามคู่เงินที่กำหนด
                 self._send_simple_orders()
@@ -566,10 +592,18 @@ class TriangleArbitrageDetector:
                         self.logger.warning(f"   No order_id found for position {position['symbol']}")
                         all_positions_profitable = False
                 
-                # ถ้าไม่มีตำแหน่งที่เปิดอยู่จริง ให้ลบกลุ่มนี้
+                # ถ้าไม่มีตำแหน่งที่เปิดอยู่จริง ให้ลบกลุ่มนี้ทันที
                 if valid_positions == 0:
                     self.logger.info(f"🗑️ Group {group_id} has no valid positions - removing from active groups")
-                    groups_to_close.append(group_id)
+                    # ลบ Group ออกจาก active_groups ทันที
+                    if group_id in self.active_groups:
+                        del self.active_groups[group_id]
+                    # ลบ Group ออกจาก group_currency_mapping
+                    if group_id in self.group_currency_mapping:
+                        del self.group_currency_mapping[group_id]
+                    # ลบ Group ออกจาก recovery_in_progress
+                    if group_id in self.recovery_in_progress:
+                        self.recovery_in_progress.remove(group_id)
                     continue
                 
                 # แสดงผล PnL รวมของกลุ่ม
@@ -1060,12 +1094,40 @@ class TriangleArbitrageDetector:
             else:
                 # ถ้ายังมีกลุ่มที่เปิดอยู่ ให้ตรวจสอบข้อมูลให้ถูกต้อง
                 current_used_pairs = set()
+                groups_to_remove = []
+                
                 for group_id, group_data in self.active_groups.items():
-                    triangle = group_data.get('triangle', [])
-                    if triangle:
-                        group_pairs = set(triangle)
-                        current_used_pairs.update(group_pairs)
-                        self.group_currency_mapping[group_id] = group_pairs
+                    # ตรวจสอบว่า Group ยังเปิดอยู่จริงใน broker หรือไม่
+                    valid_positions = 0
+                    for position in group_data['positions']:
+                        order_id = position.get('order_id')
+                        if order_id:
+                            all_positions = self.broker.get_all_positions()
+                            for pos in all_positions:
+                                if pos['ticket'] == order_id:
+                                    valid_positions += 1
+                                    break
+                    
+                    if valid_positions > 0:
+                        # Group ยังเปิดอยู่จริง
+                        triangle = group_data.get('triangle', [])
+                        if triangle:
+                            group_pairs = set(triangle)
+                            current_used_pairs.update(group_pairs)
+                            self.group_currency_mapping[group_id] = group_pairs
+                    else:
+                        # Group ไม่มี valid positions ให้ลบ
+                        groups_to_remove.append(group_id)
+                        self.logger.info(f"🗑️ Group {group_id} has no valid positions - removing from active groups")
+                
+                # ลบ Groups ที่ไม่มี valid positions
+                for group_id in groups_to_remove:
+                    if group_id in self.active_groups:
+                        del self.active_groups[group_id]
+                    if group_id in self.group_currency_mapping:
+                        del self.group_currency_mapping[group_id]
+                    if group_id in self.recovery_in_progress:
+                        self.recovery_in_progress.remove(group_id)
                 
                 # อัพเดท used_currency_pairs ให้ตรงกับข้อมูลจริง
                 self.used_currency_pairs = current_used_pairs
