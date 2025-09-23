@@ -137,14 +137,21 @@ class TriangleArbitrageDetector:
     def _detection_loop(self):
         """Main detection loop"""
         self.logger.info("🔍 Arbitrage detection started")
+        loop_count = 0
         
         while self.is_running:
             try:
+                loop_count += 1
+                self.logger.info(f"🔍 Detection loop #{loop_count} - Checking {len(self.triangle_combinations)} triangles")
+                
                 self.detect_opportunities()
-                # Sleep for 50ms between detection cycles (faster scanning)
-                threading.Event().wait(0.05)
+                
+                # Sleep for 5 seconds between detection cycles (slower for better logging)
+                threading.Event().wait(5.0)
             except Exception as e:
                 self.logger.error(f"Detection error: {e}")
+                import traceback
+                self.logger.error(traceback.format_exc())
                 threading.Event().wait(1)
         
         self.logger.info("🔍 Arbitrage detection stopped")
@@ -154,6 +161,9 @@ class TriangleArbitrageDetector:
         try:
             triangles_checked = 0
             opportunities_found = 0
+            valid_arbitrages = 0
+            
+            self.logger.info(f"🔍 Starting to check {len(self.triangle_combinations)} triangles...")
             
             for triangle in self.triangle_combinations:
                 if not self.is_running:
@@ -167,14 +177,22 @@ class TriangleArbitrageDetector:
                 if arbitrage_percent is None:
                     continue
                 
-                opportunities_found += 1
+                valid_arbitrages += 1
                 
-                # Log every 50 triangles checked
-                if triangles_checked % 50 == 0:
-                    self.logger.info(f"Checked {triangles_checked} triangles, found {opportunities_found} opportunities")
+                # Log every triangle for debugging
+                self.logger.info(f"Triangle {triangles_checked}: {triangle} = {arbitrage_percent:.4f}%")
                 
-                # Only do full analysis for opportunities > 0.01%
-                if arbitrage_percent < 0.01:
+                # Only count as opportunity if > 0.001% (much lower threshold)
+                if arbitrage_percent > 0.001:
+                    opportunities_found += 1
+                
+                # Log every 10 triangles checked
+                if triangles_checked % 10 == 0:
+                    self.logger.info(f"Progress: {triangles_checked}/{len(self.triangle_combinations)} triangles, "
+                                   f"{valid_arbitrages} valid arbitrages, {opportunities_found} opportunities")
+                
+                # Only do full analysis for opportunities > 0.001%
+                if arbitrage_percent < 0.001:
                     continue
                 
                 # Multi-timeframe analysis (only for promising opportunities)
@@ -201,16 +219,20 @@ class TriangleArbitrageDetector:
                 # AI evaluation
                 ai_decision = self.ai.evaluate_arbitrage_opportunity(opportunity)
                 
-                if ai_decision.should_act and ai_decision.confidence > 0.5:
+                if ai_decision.should_act and ai_decision.confidence > 0.3:
                     self.logger.info(f"🎯 ARBITRAGE OPPORTUNITY: {triangle}, "
                                    f"Percent: {arbitrage_percent:.4f}%, "
                                    f"Confidence: {ai_decision.confidence:.2f}")
                     self.execute_triangle_entry(triangle, ai_decision)
-                elif arbitrage_percent and arbitrage_percent > 0.02:
+                elif arbitrage_percent and arbitrage_percent > 0.005:
                     # Log opportunities that are close but don't meet criteria
                     self.logger.info(f"🔍 Near opportunity: {triangle}, "
                                    f"Percent: {arbitrage_percent:.4f}%, "
                                    f"Confidence: {ai_decision.confidence:.2f}")
+            
+            # Summary logging
+            self.logger.info(f"🔍 Detection summary: {triangles_checked} triangles checked, "
+                           f"{valid_arbitrages} valid arbitrages, {opportunities_found} opportunities found")
                     
         except Exception as e:
             self.logger.error(f"Error in detect_opportunities: {e}")
