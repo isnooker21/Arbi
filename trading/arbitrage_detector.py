@@ -603,12 +603,16 @@ class TriangleArbitrageDetector:
                 return False
                 
             risk_per_lot = abs(total_pnl) / total_lot_size
+            self.logger.info(f"🔍 Recovery check for {group_id}: PnL={total_pnl:.2f}, Lot size={total_lot_size:.1f}, Risk per lot={risk_per_lot:.2%}")
+            
             if risk_per_lot < 0.05:  # risk น้อยกว่า 5%
                 self.logger.info(f"⏳ Group {group_id} risk too low ({risk_per_lot:.2%}) - Waiting for 5%")
                 return False
             
             # เงื่อนไข 3: ตรวจสอบระยะห่างราคา (ชั้นที่ 2)
             max_price_distance = 0
+            self.logger.info(f"🔍 Checking price distance for {group_id}...")
+            
             for position in group_data['positions']:
                 symbol = position['symbol']
                 entry_price = position.get('entry_price', 0)
@@ -632,6 +636,8 @@ class TriangleArbitrageDetector:
                 except Exception as e:
                     self.logger.warning(f"Could not get price for {symbol}: {e}")
                     continue
+            
+            self.logger.info(f"🔍 Max price distance: {max_price_distance:.1f} pips (required: 10 pips)")
             
             if max_price_distance < 10:  # ระยะห่างน้อยกว่า 10 จุด
                 self.logger.info(f"⏳ Group {group_id} price distance too small ({max_price_distance:.1f} pips) - Waiting for 10 pips")
@@ -869,6 +875,11 @@ class TriangleArbitrageDetector:
             self.arbitrage_sent = False
             self.arbitrage_send_time = None
             
+            # Reset recovery_in_progress สำหรับกลุ่มนี้
+            if group_id in self.recovery_in_progress:
+                self.recovery_in_progress.remove(group_id)
+                self.logger.info(f"🔄 Reset recovery status for group {group_id}")
+            
             # Reset ข้อมูลกลุ่มให้ถูกต้อง
             self._reset_group_data()
             
@@ -922,6 +933,7 @@ class TriangleArbitrageDetector:
                 # ถ้าไม่มีกลุ่มที่เปิดอยู่ ให้ reset ข้อมูลทั้งหมด
                 self.used_currency_pairs.clear()
                 self.group_currency_mapping.clear()
+                self.recovery_in_progress.clear()
                 self.logger.info("🔄 Reset ข้อมูลกลุ่ม - คู่เงินทั้งหมดปลดล็อคแล้ว")
             else:
                 # ถ้ายังมีกลุ่มที่เปิดอยู่ ให้ตรวจสอบข้อมูลให้ถูกต้อง
