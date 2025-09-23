@@ -467,6 +467,9 @@ class BrokerAPI:
                     self.logger.warning(f"⚠️ Could not select symbol {symbol}, but continuing...")
                 
                 # Prepare request for REAL TRADING (แบบง่ายเหมือน Huakuy_)
+                # ใช้ comment ง่ายๆ เพื่อหลีกเลี่ยงปัญหา encoding
+                simple_comment = "Trade"
+                
                 request = {
                     "action": mt5.TRADE_ACTION_DEAL,
                     "symbol": symbol,
@@ -474,7 +477,7 @@ class BrokerAPI:
                     "type": order_type_mt5,
                     "price": price,
                     "magic": 234000,  # Use unique magic number
-                    "comment": comment or "Arbitrage Trade",
+                    "comment": simple_comment,
                 }
                 
                 # Add stop loss and take profit
@@ -550,6 +553,9 @@ class BrokerAPI:
                 close_type = mt5.ORDER_TYPE_SELL if position.type == mt5.POSITION_TYPE_BUY else mt5.ORDER_TYPE_BUY
                 
                 # Prepare close request (แบบง่ายเหมือน Huakuy_)
+                # ใช้ comment ง่ายๆ เพื่อหลีกเลี่ยงปัญหา encoding
+                close_comment = "Close"
+                
                 request = {
                     "action": mt5.TRADE_ACTION_DEAL,
                     "symbol": position.symbol,
@@ -557,7 +563,7 @@ class BrokerAPI:
                     "type": close_type,
                     "position": order_id,
                     "magic": 234000,
-                    "comment": "Close Position",
+                    "comment": close_comment,
                 }
                 
                 # Send close order
