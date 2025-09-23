@@ -519,31 +519,65 @@ class BrokerAPI:
                 # Send order - let broker choose filling type
                 result = mt5.order_send(request)
                 
+                # Debug: Check what we got
                 if result is None:
-                    self.logger.error(f"❌ Order send failed: No result from MT5 for {symbol}")
+                    self.logger.debug(f"🔍 MT5 returned None for {symbol}")
+                else:
+                    self.logger.debug(f"🔍 MT5 returned result: {result}")
+                
+                if result is None:
+                    self.logger.warning(f"⚠️ No result from MT5 for {symbol} - checking for success...")
                     # Try to get last error
                     error = mt5.last_error()
                     if error:
                         error_code, error_desc = error
                         if error_code == 1:  # Success code
                             self.logger.info(f"✅ MT5 Success: {error_desc}")
-                            # Try to get the result again
-                            result = mt5.last_result()
-                            if result:
+                            # Check if position was actually created
+                            positions = mt5.positions_get(symbol=symbol)
+                            if positions:
+                                # Find the most recent position
+                                latest_position = max(positions, key=lambda p: p.time)
                                 self.logger.info(f"✅ Order executed successfully: {symbol} {order_type} {volume} @ {price}")
                                 return {
-                                    'order_id': result.order,
+                                    'order_id': latest_position.ticket,
                                     'symbol': symbol,
                                     'type': order_type,
                                     'volume': volume,
                                     'price': price,
                                     'sl': sl,
                                     'tp': tp,
-                                    'retcode': result.retcode,
-                                    'comment': result.comment
+                                    'retcode': 10009,  # TRADE_RETCODE_DONE
+                                    'comment': 'Order executed successfully'
                                 }
+                            else:
+                                # No position found, but MT5 says success
+                                self.logger.warning(f"⚠️ MT5 reports success but no position found for {symbol}")
+                                return None
                         else:
                             self.logger.error(f"MT5 Error: {error}")
+                    else:
+                        # No error but no result - check if position was created
+                        self.logger.info(f"🔍 No error reported - checking for position: {symbol}")
+                        positions = mt5.positions_get(symbol=symbol)
+                        if positions:
+                            # Find the most recent position
+                            latest_position = max(positions, key=lambda p: p.time)
+                            self.logger.info(f"✅ Order executed successfully: {symbol} {order_type} {volume} @ {price}")
+                            return {
+                                'order_id': latest_position.ticket,
+                                'symbol': symbol,
+                                'type': order_type,
+                                'volume': volume,
+                                'price': price,
+                                'sl': sl,
+                                'tp': tp,
+                                'retcode': 10009,  # TRADE_RETCODE_DONE
+                                'comment': 'Order executed successfully (no error)'
+                            }
+                        else:
+                            self.logger.warning(f"⚠️ No error but no position found for {symbol}")
+                            return None
                     return None
                 
                 if result.retcode != mt5.TRADE_RETCODE_DONE:
