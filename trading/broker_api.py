@@ -468,12 +468,27 @@ class BrokerAPI:
                     self.logger.error(f"❌ Symbol {symbol} not found in MT5")
                     return None
                 
-                # Check if symbol is selectable
-                if not symbol_info.selectable:
-                    self.logger.warning(f"⚠️ Symbol {symbol} is not selectable, trying to select...")
+                # Check if symbol is selectable (compatible with different MT5 versions)
+                try:
+                    if hasattr(symbol_info, 'selectable') and not symbol_info.selectable:
+                        self.logger.warning(f"⚠️ Symbol {symbol} is not selectable, trying to select...")
+                        if not mt5.symbol_select(symbol, True):
+                            self.logger.error(f"❌ Failed to select symbol {symbol}")
+                            return None
+                    else:
+                        # Try to select symbol anyway to ensure it's available
+                        if not mt5.symbol_select(symbol, True):
+                            self.logger.warning(f"⚠️ Could not select symbol {symbol}, but continuing...")
+                except AttributeError:
+                    # Fallback for older MT5 versions
+                    self.logger.debug(f"🔍 Symbol {symbol} validation skipped (older MT5 version)")
                     if not mt5.symbol_select(symbol, True):
-                        self.logger.error(f"❌ Failed to select symbol {symbol}")
-                        return None
+                        self.logger.warning(f"⚠️ Could not select symbol {symbol}, but continuing...")
+                
+                # Final symbol validation
+                if not mt5.symbol_select(symbol, True):
+                    self.logger.error(f"❌ Symbol {symbol} cannot be selected for trading")
+                    return None
                 
                 # Prepare request for REAL TRADING
                 request = {
@@ -507,6 +522,12 @@ class BrokerAPI:
                     self.logger.info(f"🔄 Retrying order with different filling type...")
                     request["type_filling"] = mt5.ORDER_FILLING_IOC
                     result = mt5.order_send(request)
+                    
+                    # If still fails, try with market execution
+                    if result is None:
+                        self.logger.info(f"🔄 Retrying with market execution...")
+                        request["type_filling"] = mt5.ORDER_FILLING_MARKET
+                        result = mt5.order_send(request)
                 
                 if result is None:
                     self.logger.error(f"❌ Order send failed: No result from MT5 for {symbol}")
