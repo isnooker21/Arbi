@@ -262,19 +262,44 @@ class TriangleArbitrageDetector:
     
     def _get_priority_triangles(self) -> List[Tuple]:
         """Get triangles prioritized by market regime"""
+        
+        # เพิ่ม debug logging
+        self.logger.info(f"🔍 Getting priority triangles for regime: {self.current_regime}")
+        self.logger.info(f"🔍 Total triangle combinations available: {len(self.triangle_combinations)}")
+        
         if self.current_regime == 'volatile':
             # In volatile markets, focus on major pairs only
-            return [
+            priority_triangles = [
                 ('EURUSD', 'GBPUSD', 'EURGBP'),
                 ('EURUSD', 'USDJPY', 'EURJPY'),
                 ('GBPUSD', 'USDJPY', 'GBPJPY')
             ]
         elif self.current_regime == 'trending':
             # In trending markets, include more triangles
-            return self.triangle_combinations[:6]  # First 6 triangles
+            priority_triangles = self.triangle_combinations[:6]  # First 6 triangles
         else:
             # Normal/ranging markets, use all available
-            return self.triangle_combinations
+            priority_triangles = self.triangle_combinations
+        
+        # Filter triangles by available pairs
+        available_pairs_set = set(self.available_pairs)
+        filtered_triangles = []
+        
+        for triangle in priority_triangles:
+            pair1, pair2, pair3 = triangle
+            if (pair1 in available_pairs_set and 
+                pair2 in available_pairs_set and 
+                pair3 in available_pairs_set):
+                filtered_triangles.append(triangle)
+            else:
+                self.logger.debug(f"🔍 Triangle filtered out (missing pairs): {triangle}")
+        
+        self.logger.info(f"🔍 Filtered triangles for {self.current_regime}: {len(filtered_triangles)}")
+        if len(filtered_triangles) == 0:
+            self.logger.warning(f"⚠️ No valid triangles for regime {self.current_regime}")
+            self.logger.info(f"Available pairs: {self.available_pairs[:10]}...")  # Show first 10 pairs
+        
+        return filtered_triangles
 
     def _calculate_triangle_opportunity(self, triangle: Tuple[str, str, str]) -> Optional[Dict]:
         """
@@ -867,9 +892,7 @@ class TriangleArbitrageDetector:
         self.logger.info("🔍 Arbitrage detection stopped")
     
     def detect_opportunities(self):
-        """
-        ⚡ CRITICAL: Main detection method called by AdaptiveEngine
-        """
+        """Main detection method called by AdaptiveEngine"""
         try:
             if not self.is_running:
                 return
@@ -880,8 +903,22 @@ class TriangleArbitrageDetector:
             triangles_to_check = self._get_priority_triangles()
             
             if not triangles_to_check:
-                self.logger.warning("No triangles available for checking")
-                return
+                self.logger.warning("⚠️ No triangles available for checking - investigating...")
+                
+                # Debug info
+                self.logger.info(f"🔍 Debug Info:")
+                self.logger.info(f"   Available pairs: {len(self.available_pairs)}")
+                self.logger.info(f"   Triangle combinations: {len(self.triangle_combinations)}")
+                self.logger.info(f"   Current regime: {self.current_regime}")
+                
+                # Try to use fallback triangles
+                if len(self.available_pairs) >= 3:
+                    # Create simple fallback triangle from first 3 pairs
+                    fallback_triangle = tuple(self.available_pairs[:3])
+                    triangles_to_check = [fallback_triangle]
+                    self.logger.info(f"🔄 Using fallback triangle: {fallback_triangle}")
+                else:
+                    return
             
             opportunities_found = 0
             
@@ -913,6 +950,8 @@ class TriangleArbitrageDetector:
             
             if opportunities_found > 0:
                 self.logger.info(f"📊 Found {opportunities_found} arbitrage opportunities")
+            else:
+                self.logger.debug(f"📊 No arbitrage opportunities found in this cycle")
                     
         except Exception as e:
             self.logger.error(f"Error in detect_opportunities: {e}")
