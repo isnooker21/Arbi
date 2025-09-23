@@ -188,11 +188,56 @@ class CorrelationManager:
             self.logger.error(f"Error checking recovery chain: {e}")
     
     def _should_continue_recovery(self, recovery_pair: Dict) -> bool:
-        """ตรวจสอบว่าควรดำเนินการ recovery ต่อหรือไม่"""
+        """ตรวจสอบว่าควรดำเนินการ recovery ต่อหรือไม่ - ใช้เงื่อนไขเดียวกับ arbitrage"""
         try:
-            # ตรวจสอบว่า recovery pair ยังติดลบอยู่หรือไม่
-            # และยังไม่เกินเวลาที่กำหนด
-            return True  # Simplified for now
+            symbol = recovery_pair['symbol']
+            order_id = recovery_pair.get('order_id')
+            
+            if not order_id:
+                return False
+            
+            # ตรวจสอบ PnL จาก broker API
+            all_positions = self.broker.get_all_positions()
+            position_pnl = 0.0
+            lot_size = 0.0
+            
+            for pos in all_positions:
+                if pos['ticket'] == order_id:
+                    position_pnl = pos['profit']
+                    lot_size = pos['volume']
+                    break
+            
+            if lot_size <= 0:
+                return False
+            
+            # เงื่อนไข 1: Risk 5% ต่อ lot
+            risk_per_lot = abs(position_pnl) / lot_size
+            if risk_per_lot < 0.05:  # risk น้อยกว่า 5%
+                self.logger.debug(f"⏳ {symbol} risk too low ({risk_per_lot:.2%}) - Waiting for 5%")
+                return False
+            
+            # เงื่อนไข 2: ระยะห่าง 10 pips
+            entry_price = recovery_pair.get('entry_price', 0)
+            if entry_price > 0:
+                try:
+                    current_price = self.broker.get_current_price(symbol)
+                    if current_price > 0:
+                        # คำนวณ price distance ตามประเภทคู่เงิน
+                        if 'JPY' in symbol:
+                            price_distance = abs(current_price - entry_price) * 100
+                        else:
+                            price_distance = abs(current_price - entry_price) * 10000
+                        
+                        if price_distance < 10:  # ระยะห่างน้อยกว่า 10 จุด
+                            self.logger.debug(f"⏳ {symbol} price distance too small ({price_distance:.1f} pips) - Waiting for 10 pips")
+                            return False
+                except Exception as e:
+                    self.logger.warning(f"Could not get price for {symbol}: {e}")
+                    return False
+            
+            # ผ่านเงื่อนไขทั้งหมด - แก้ไม้ทันที
+            self.logger.info(f"✅ {symbol} meets recovery conditions - Risk: {risk_per_lot:.2%}, Distance: {price_distance:.1f} pips")
+            return True
             
         except Exception as e:
             self.logger.error(f"Error checking recovery continuation: {e}")
@@ -296,7 +341,6 @@ class CorrelationManager:
             
             # Get all available pairs from broker
             all_pairs = self.broker.get_available_pairs()
-            self.logger.info(f"🔍 Debug: Broker returned {len(all_pairs) if all_pairs else 0} pairs")
             
             if not all_pairs:
                 self.logger.warning("No available pairs from broker, using fallback pairs")
@@ -309,9 +353,6 @@ class CorrelationManager:
                     'EURNZD', 'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD',
                     'EURCAD', 'GBPCAD', 'USDCAD', 'AUDCAD', 'CADCHF'
                 ]
-                self.logger.info(f"🔍 Debug: Using {len(all_pairs)} fallback pairs")
-            
-            self.logger.info(f"🔍 Finding correlation pairs for {base_symbol} from {len(all_pairs)} available pairs")
             
             # หาคู่เงินที่มี correlation กับ base_symbol
             for symbol in all_pairs:
@@ -340,16 +381,8 @@ class CorrelationManager:
             # Sort by recovery strength (highest first)
             correlation_candidates.sort(key=lambda x: x['recovery_strength'], reverse=True)
             
-            self.logger.info(f"✅ Found {len(correlation_candidates)} correlation candidates for {base_symbol}")
-            if correlation_candidates:
-                # แสดง top 5 correlation candidates
-                top_candidates = correlation_candidates[:5]
-                for i, candidate in enumerate(top_candidates, 1):
-                    self.logger.info(f"   {i}. {candidate['symbol']} (correlation: {candidate['correlation']:.2f}, direction: {candidate['direction']})")
-            else:
+            if not correlation_candidates:
                 self.logger.error(f"❌ No correlation candidates created for {base_symbol}")
-                self.logger.error(f"   All pairs: {all_pairs}")
-                self.logger.error(f"   Base symbol: {base_symbol}")
             
             return correlation_candidates
             
@@ -757,11 +790,17 @@ class CorrelationManager:
             success = self._send_correlation_order(symbol, correlation_lot_size, group_id)
             
             if success:
+                # ดึงราคาปัจจุบันเป็น entry price
+                entry_price = self.broker.get_current_price(symbol)
+                if not entry_price:
+                    entry_price = 0.0
+                
                 # Store correlation position
                 correlation_position = {
                     'symbol': symbol,
                     'direction': direction,
                     'lot_size': correlation_lot_size,
+                    'entry_price': entry_price,
                     'correlation': correlation,
                     'correlation_ratio': correlation_ratio,
                     'original_pair': original_position['symbol'],

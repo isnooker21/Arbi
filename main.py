@@ -65,7 +65,6 @@ class TradingSystem:
     
     def __init__(self, auto_setup=True):
         self.logger = self._setup_logging()
-        self.logger.info("Initializing Adaptive Forex Arbitrage + Correlation Recovery System...")
         
         # Initialize components
         self.broker_api = None
@@ -94,12 +93,10 @@ class TradingSystem:
         # Setup signal handlers
         self._setup_signal_handlers()
         
-        self.logger.info("Adaptive trading system initialized successfully")
     
     def _auto_setup(self):
         """Auto Setup ระบบโดยอัตโนมัติ"""
         try:
-            self.logger.info("Starting Auto Setup...")
             print("กำลังทำ Auto Setup...")
             
             # Import BrokerAPI
@@ -146,7 +143,6 @@ class TradingSystem:
                     
                 else:
                     print("ไม่สามารถดึงข้อมูลบัญชีได้")
-                    self.logger.warning("Could not get account info during auto setup")
                     
             else:
                 print("ไม่สามารถเชื่อมต่อ MT5 ได้")
@@ -154,16 +150,13 @@ class TradingSystem:
                 print("   1. ตรวจสอบว่า MT5 เปิดอยู่และ login แล้ว")
                 print("   2. ตรวจสอบว่า MT5 อนุญาตให้ Expert Advisors ทำงาน")
                 print("   3. ตรวจสอบการตั้งค่าใน Tools → Options → Expert Advisors")
-                self.logger.warning("Could not connect to MT5 during auto setup")
                 
         except ImportError as e:
             print(f"ไม่สามารถ import modules ได้: {e}")
             print("   ลองติดตั้ง dependencies: pip install -r requirements.txt")
-            self.logger.error(f"Import error during auto setup: {e}")
             
         except Exception as e:
             print(f"เกิดข้อผิดพลาดใน Auto Setup: {e}")
-            self.logger.error(f"Error during auto setup: {e}")
     
     def _setup_logging(self) -> logging.Logger:
         """Setup logging configuration"""

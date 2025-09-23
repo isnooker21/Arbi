@@ -347,7 +347,6 @@ class BrokerAPI:
             'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD', 'CHFJPY',
             'EURCAD', 'GBPCAD', 'USDCAD', 'AUDCAD', 'CADCHF'
         ]
-        self.logger.info(f"🔍 Debug: Returning {len(fallback_pairs)} fallback pairs")
         return fallback_pairs
     
     def get_current_price(self, symbol: str) -> Optional[float]:

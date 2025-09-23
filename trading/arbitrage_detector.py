@@ -93,21 +93,13 @@ class TriangleArbitrageDetector:
         # ใช้ lot size ปกติ 0.1 สำหรับทุกคู่เงิน
         self.standard_lot_size = 0.1
         
-        # Log triangle combinations count
-        self.logger.info(f"Available pairs: {len(self.available_pairs)}")
-        self.logger.info(f"Generated {len(self.triangle_combinations)} triangle combinations (Major & Minor pairs only)")
-        
-        # Debug: Show first few pairs
-        if self.available_pairs:
-            self.logger.info(f"First 5 pairs: {self.available_pairs[:5]}")
-        else:
-            self.logger.warning("⚠️ No available pairs found!")
+        # ระบบป้องกันการส่ง recovery ซ้ำ
+        self.recovery_in_progress = set()  # เก็บ group_id ที่กำลัง recovery
         
         # If no triangles generated, create fallback triangles
         if len(self.triangle_combinations) == 0 and len(self.available_pairs) > 0:
             self.logger.warning("No triangles generated, creating fallback triangles...")
             self.triangle_combinations = [('EURUSD', 'GBPUSD', 'EURGBP')]  # Fixed fallback
-            self.logger.info(f"Created {len(self.triangle_combinations)} fallback triangle combinations")
         elif len(self.triangle_combinations) == 0:
             self.logger.error("❌ No triangles generated and no available pairs!")
     
@@ -243,11 +235,10 @@ class TriangleArbitrageDetector:
         while self.is_running:
             try:
                 loop_count += 1
-                self.logger.info(f"🔄 Trading loop #{loop_count}")
+                self.logger.debug(f"🔄 Trading loop #{loop_count}")
                 
                 # ตรวจสอบว่ามีกลุ่มที่เปิดอยู่หรือไม่
                 if len(self.active_groups) > 0:
-                    self.logger.debug(f"⏸️ มีกลุ่มเปิดอยู่ - รอให้ปิดก่อน")
                     time.sleep(10.0)  # รอ 10 วินาที
                     continue
                 
@@ -549,6 +540,11 @@ class TriangleArbitrageDetector:
     def _should_start_recovery(self, group_id: str, group_data: Dict, total_pnl: float, profit_percentage: float) -> bool:
         """ตรวจสอบว่าควรเริ่ม recovery หรือไม่ - เงื่อนไข 2 ชั้น"""
         try:
+            # เงื่อนไข 0: ตรวจสอบว่าไม่มีการ recovery อยู่แล้ว
+            if group_id in self.recovery_in_progress:
+                self.logger.debug(f"⏳ Group {group_id} already in recovery - skipping")
+                return False
+            
             # เงื่อนไข 1: ตรวจสอบ correlation manager
             if not self.correlation_manager:
                 return False
@@ -632,7 +628,15 @@ class TriangleArbitrageDetector:
                         })
             
             if losing_pairs:
+                # แก้ทุกคู่ที่ติดลบพร้อมกัน
                 self.logger.info(f"🔄 Starting correlation recovery for {len(losing_pairs)} losing pairs")
+                for pair in losing_pairs:
+                    self.logger.info(f"   📉 {pair['symbol']}: {pair['loss_percent']:.2f}% loss")
+                
+                # ตั้งค่าว่ากำลัง recovery
+                self.recovery_in_progress.add(group_id)
+                
+                # ส่ง recovery สำหรับทุกคู่ที่ติดลบพร้อมกัน
                 self.correlation_manager.start_chain_recovery(group_id, losing_pairs)
             else:
                 self.logger.info("No losing pairs found for correlation recovery")
@@ -812,6 +816,9 @@ class TriangleArbitrageDetector:
             
             # ลบกลุ่มออกจาก active_groups
             del self.active_groups[group_id]
+            
+            # ลบ recovery_in_progress
+            self.recovery_in_progress.discard(group_id)
             
             # Reset arbitrage_sent เพื่อให้สามารถส่งออเดอร์ใหม่ได้
             self.arbitrage_sent = False
