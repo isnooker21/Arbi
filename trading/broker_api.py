@@ -490,6 +490,18 @@ class BrokerAPI:
                     self.logger.error(f"❌ Symbol {symbol} cannot be selected for trading")
                     return None
                 
+                # Check if symbol trading is allowed
+                if not symbol_info.trade_mode:
+                    self.logger.error(f"❌ Trading not allowed for symbol {symbol}")
+                    return None
+                
+                # Check if symbol is visible
+                if not symbol_info.visible:
+                    self.logger.warning(f"⚠️ Symbol {symbol} is not visible, trying to make visible...")
+                    if not mt5.symbol_select(symbol, True):
+                        self.logger.error(f"❌ Cannot make symbol {symbol} visible")
+                        return None
+                
                 # Prepare request for REAL TRADING
                 # Let broker choose the filling type automatically
                 request = {
@@ -516,14 +528,33 @@ class BrokerAPI:
                 self.logger.debug(f"📋 Order request: {request}")
                 self.logger.info(f"🔄 Letting broker choose filling type automatically")
                 
+                # Check MT5 connection before sending
+                if not mt5.terminal_info():
+                    self.logger.error(f"❌ MT5 terminal not connected")
+                    return None
+                
+                # Check if trading is allowed
+                account_info = mt5.account_info()
+                if not account_info:
+                    self.logger.error(f"❌ Cannot get account info from MT5")
+                    return None
+                
+                if not account_info.trade_allowed:
+                    self.logger.error(f"❌ Trading not allowed on this account")
+                    return None
+                
                 # Send order - let broker choose filling type
+                self.logger.info(f"🔍 Sending order to MT5: {request}")
                 result = mt5.order_send(request)
                 
                 # Debug: Check what we got
                 if result is None:
-                    self.logger.debug(f"🔍 MT5 returned None for {symbol}")
+                    self.logger.warning(f"⚠️ MT5 returned None for {symbol}")
+                    self.logger.info(f"🔍 This means order was not sent to MT5")
                 else:
-                    self.logger.debug(f"🔍 MT5 returned result: {result}")
+                    self.logger.info(f"✅ MT5 returned result: {result}")
+                    self.logger.info(f"🔍 Result retcode: {result.retcode}")
+                    self.logger.info(f"🔍 Result comment: {result.comment}")
                 
                 if result is None:
                     self.logger.warning(f"⚠️ No result from MT5 for {symbol} - checking for success...")
