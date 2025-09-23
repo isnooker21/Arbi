@@ -558,9 +558,9 @@ class TradingSystem:
             # Try to restart adaptive engine
             if self.adaptive_engine:
                 try:
-                    self.adaptive_engine.stop()
+                    self.adaptive_engine.stop_adaptive_trading()
                     threading.Event().wait(2)  # Wait 2 seconds
-                    self.adaptive_engine.start()
+                    self.adaptive_engine.start_adaptive_trading()
                     self.logger.info("✅ Adaptive engine restarted")
                 except Exception as e:
                     self.logger.error(f"Failed to restart adaptive engine: {e}")
