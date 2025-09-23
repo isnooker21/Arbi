@@ -122,8 +122,8 @@ class CorrelationManager:
                 loss_percent
             )
             
-            # ส่งออเดอร์ hedge
-            success = self._send_hedge_order(hedge_symbol, hedge_lot_size, group_id)
+            # ส่งออเดอร์ hedge (ระดับ 1)
+            success = self._send_hedge_order(hedge_symbol, hedge_lot_size, group_id, recovery_level=1)
             
             if success:
                 # บันทึกข้อมูล recovery
@@ -133,7 +133,8 @@ class CorrelationManager:
                     'correlation': correlation,
                     'lot_size': hedge_lot_size,
                     'created_at': datetime.now(),
-                    'status': 'active'
+                    'status': 'active',
+                    'recovery_level': 1
                 }
                 
                 if group_id in self.recovery_chains:
@@ -168,7 +169,7 @@ class CorrelationManager:
             self.logger.error(f"Error calculating hedge lot size: {e}")
             return original_lot
     
-    def _send_hedge_order(self, symbol: str, lot_size: float, group_id: str) -> bool:
+    def _send_hedge_order(self, symbol: str, lot_size: float, group_id: str, recovery_level: int = 1) -> bool:
         """ส่งออเดอร์ hedge"""
         try:
             # กำหนดทิศทางตาม correlation
@@ -176,11 +177,15 @@ class CorrelationManager:
             # ถ้า correlation เป็นลบ → ทิศทางตรงข้าม
             direction = "BUY"  # ใช้ BUY เป็นค่าเริ่มต้น
             
+            # สร้าง comment ที่แสดงกลุ่มและระดับการแก้ไม้
+            group_number = group_id.split('_')[-1]  # เอาเฉพาะหมายเลขกลุ่ม
+            comment = f"REC_G{group_number}_L{recovery_level}_{symbol}"
+            
             result = self.broker.place_order(
                 symbol=symbol,
                 order_type=direction,
                 volume=lot_size,
-                comment=f"Hedge_{group_id}"
+                comment=comment
             )
             
             if result and result.get('retcode') == 10009:
@@ -193,6 +198,95 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"Error sending hedge order: {e}")
             return False
+    
+    def check_recovery_chain(self):
+        """ตรวจสอบและแก้ไม้แบบ chain สำหรับทุกกลุ่ม"""
+        try:
+            for group_id, recovery_chain in self.recovery_chains.items():
+                if recovery_chain['status'] != 'active':
+                    continue
+                
+                # ตรวจสอบคู่ที่แก้ไม้แล้วว่ายังขาดทุนอยู่ไหม
+                for recovery_pair in recovery_chain['recovery_pairs']:
+                    if recovery_pair['status'] != 'active':
+                        continue
+                    
+                    # ตรวจสอบ PnL ของคู่ที่แก้ไม้
+                    # TODO: ใช้ broker API ตรวจสอบ PnL จริง
+                    # current_pnl = self.broker.get_position_pnl(recovery_pair['hedge_pair'])
+                    
+                    # Mock data - ถ้าคู่ที่แก้ไม้ยังขาดทุน ให้แก้ไม้ต่อ
+                    if self._should_continue_recovery(recovery_pair):
+                        self._continue_recovery_chain(group_id, recovery_pair)
+                        
+        except Exception as e:
+            self.logger.error(f"Error checking recovery chain: {e}")
+    
+    def _should_continue_recovery(self, recovery_pair: Dict) -> bool:
+        """ตรวจสอบว่าควรแก้ไม้ต่อหรือไม่"""
+        try:
+            # Mock logic - ในระบบจริงจะใช้ PnL จริง
+            # ถ้าคู่ที่แก้ไม้ยังขาดทุน ให้แก้ไม้ต่อ
+            return True  # ใช้ mock data ชั่วคราว
+        except Exception as e:
+            self.logger.error(f"Error checking recovery continuation: {e}")
+            return False
+    
+    def _continue_recovery_chain(self, group_id: str, recovery_pair: Dict):
+        """แก้ไม้ต่อในระดับถัดไป"""
+        try:
+            hedge_symbol = recovery_pair['hedge_pair']
+            current_level = recovery_pair.get('recovery_level', 1)
+            next_level = current_level + 1
+            
+            self.logger.info(f"🔗 Continuing recovery chain for {hedge_symbol} - Level {next_level}")
+            
+            # หา correlation pair สำหรับคู่ที่แก้ไม้
+            hedge_candidates = self.find_optimal_hedge_pairs(hedge_symbol, 0)
+            
+            if not hedge_candidates:
+                self.logger.warning(f"   No hedge candidates found for {hedge_symbol}")
+                return
+            
+            # เลือกคู่ที่ดีที่สุด
+            best_hedge = hedge_candidates[0]
+            new_hedge_symbol = best_hedge['symbol']
+            correlation = best_hedge['correlation']
+            
+            # คำนวณ lot size
+            hedge_lot_size = self._calculate_hedge_lot_size(
+                recovery_pair['lot_size'], 
+                correlation, 
+                0
+            )
+            
+            # ส่งออเดอร์ hedge ระดับถัดไป
+            success = self._send_hedge_order(new_hedge_symbol, hedge_lot_size, group_id, next_level)
+            
+            if success:
+                # บันทึกข้อมูล recovery ใหม่
+                new_recovery_data = {
+                    'original_pair': hedge_symbol,
+                    'hedge_pair': new_hedge_symbol,
+                    'correlation': correlation,
+                    'lot_size': hedge_lot_size,
+                    'created_at': datetime.now(),
+                    'status': 'active',
+                    'recovery_level': next_level
+                }
+                
+                if group_id in self.recovery_chains:
+                    self.recovery_chains[group_id]['recovery_pairs'].append(new_recovery_data)
+                    self.recovery_chains[group_id]['current_chain'].append(new_hedge_symbol)
+                
+                self.logger.info(f"✅ Chain recovery Level {next_level}: {new_hedge_symbol} {hedge_lot_size} lot")
+                self.logger.info(f"   Correlation: {correlation:.3f}")
+                self.logger.info(f"   Previous pair: {hedge_symbol}")
+            else:
+                self.logger.error(f"❌ Failed to continue recovery chain: {new_hedge_symbol}")
+                
+        except Exception as e:
+            self.logger.error(f"Error continuing recovery chain: {e}")
         self.correlation_cache = {
             'h1': {},
             'h4': {},

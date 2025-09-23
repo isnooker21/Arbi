@@ -36,21 +36,35 @@ class TriangleArbitrageDetector:
         self.is_running = False
         self.logger = logging.getLogger(__name__)
         
-        # Adaptive parameters - More flexible for all market conditions
+        # Adaptive parameters - More strict and accurate
         self.current_regime = 'normal'  # volatile, trending, ranging, normal
-        self.arbitrage_threshold = 0.005  # Lower default threshold (0.5 pips)
+        self.arbitrage_threshold = 0.008  # Higher threshold (0.8 pips) for better accuracy
         self.execution_timeout = 150  # Target execution speed
         self.position_size = 0.1  # Default position size
+        
+        # Enhanced validation parameters
+        self.min_confidence_score = 0.75  # Minimum confidence score (75%)
+        self.max_spread_ratio = 0.3  # Maximum spread ratio (30%)
+        self.min_volume_threshold = 0.5  # Minimum volume threshold
+        self.price_stability_checks = 3  # Number of price stability checks
+        self.confirmation_delay = 2  # Seconds to wait for confirmation
         
         # Group management for single arbitrage entry
         self.active_groups = {}  # เก็บข้อมูลกลุ่มที่เปิดอยู่
         self.group_counter = 0   # ตัวนับกลุ่ม
         self.is_arbitrage_paused = False  # หยุดตรวจสอบ arbitrage ใหม่
+        
+        # Rate limiting for order placement
+        self.last_order_time = 0  # เวลาที่ส่งออเดอร์ล่าสุด
+        self.min_order_interval = 10  # ระยะห่างขั้นต่ำระหว่างออเดอร์ (วินาที)
+        self.daily_order_limit = 50  # จำกัดออเดอร์ต่อวัน
+        self.daily_order_count = 0  # จำนวนออเดอร์ที่ส่งวันนี้
+        self.last_reset_date = datetime.now().date()  # วันที่รีเซ็ตตัวนับ
         self.regime_parameters = {
-            'volatile': {'threshold': 0.01, 'timeout': 200},    # 1 pip
-            'trending': {'threshold': 0.008, 'timeout': 150},   # 0.8 pips
-            'ranging': {'threshold': 0.005, 'timeout': 100},    # 0.5 pips
-            'normal': {'threshold': 0.005, 'timeout': 150}      # 0.5 pips
+            'volatile': {'threshold': 0.012, 'timeout': 200},    # 1.2 pips (เข้มขึ้น)
+            'trending': {'threshold': 0.010, 'timeout': 150},   # 1.0 pips (เข้มขึ้น)
+            'ranging': {'threshold': 0.008, 'timeout': 100},    # 0.8 pips (เข้มขึ้น)
+            'normal': {'threshold': 0.008, 'timeout': 150}      # 0.8 pips (เข้มขึ้น)
         }
         
         # Performance tracking
@@ -313,43 +327,56 @@ class TriangleArbitrageDetector:
 
     def _calculate_triangle_opportunity(self, triangle: Tuple[str, str, str]) -> Optional[Dict]:
         """
-        ⚡ CRITICAL: Calculate arbitrage opportunity for a triangle
+        ⚡ ENHANCED: Calculate arbitrage opportunity with strict validation
         """
         try:
             pair1, pair2, pair3 = triangle
             
-            # Get current prices (returns float bid prices)
-            price1 = self.broker.get_current_price(pair1)
-            price2 = self.broker.get_current_price(pair2)
-            price3 = self.broker.get_current_price(pair3)
-            
-            if not all([price1, price2, price3]):
+            # Step 1: Get validated prices with multiple checks
+            prices = self._get_validated_prices(triangle)
+            if not prices:
                 return None
             
-            # Calculate arbitrage potential using bid prices
-            # For triangle: A/B * B/C * C/A = 1 (should be 1 for no arbitrage)
-            # Simplified calculation using bid prices only
+            price1, price2, price3 = prices['pair1'], prices['pair2'], prices['pair3']
+            
+            # Step 2: Calculate arbitrage potential
             cross_rate = (price1 * price2) / price3
-            profit_potential = abs(cross_rate - 1) * 100  # Convert to percentage
+            profit_potential = abs(cross_rate - 1) * 100
             
-            # More aggressive trading - lower threshold for all conditions
-            effective_threshold = self.arbitrage_threshold * 0.5  # 50% of normal threshold
+            # Step 3: Enhanced validation
+            validation_result = self._validate_arbitrage_opportunity(
+                triangle, prices, cross_rate, profit_potential
+            )
             
-            # Debug logging for opportunities
-            if profit_potential > 0.001:  # Log any potential > 0.1 pips
+            if not validation_result['is_valid']:
+                self.logger.debug(f"❌ Validation failed: {validation_result['reason']}")
+                return None
+            
+            # Step 4: Use higher threshold for better accuracy
+            effective_threshold = self.arbitrage_threshold  # Use full threshold, not reduced
+            
+            # Debug logging
+            if profit_potential > 0.001:
                 self.logger.debug(f"🔍 Triangle {triangle}: profit={profit_potential:.4f}%, threshold={effective_threshold:.4f}%")
             
             if profit_potential > effective_threshold:
-                # Determine trade direction
+                # Step 5: Calculate confidence score
+                confidence_score = self._calculate_confidence_score(
+                    profit_potential, validation_result, prices
+                )
+                
+                if confidence_score < self.min_confidence_score:
+                    self.logger.debug(f"❌ Confidence too low: {confidence_score:.2f}")
+                    return None
+                
+                # Step 6: Determine trade direction
                 if cross_rate > 1:
-                    # Buy A/B, Buy B/C, Sell C/A
                     legs = [
                         {'symbol': pair1, 'type': 'BUY', 'volume': self.position_size},
                         {'symbol': pair2, 'type': 'BUY', 'volume': self.position_size},
                         {'symbol': pair3, 'type': 'SELL', 'volume': self.position_size}
                     ]
                 else:
-                    # Sell A/B, Sell B/C, Buy C/A
                     legs = [
                         {'symbol': pair1, 'type': 'SELL', 'volume': self.position_size},
                         {'symbol': pair2, 'type': 'SELL', 'volume': self.position_size},
@@ -371,6 +398,203 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error calculating triangle opportunity for {triangle}: {e}")
             return None
+    
+    def _get_validated_prices(self, triangle: Tuple[str, str, str]) -> Optional[Dict]:
+        """Get prices with multiple validation checks"""
+        try:
+            pair1, pair2, pair3 = triangle
+            prices = {}
+            
+            # Get prices multiple times for stability check
+            for pair in [pair1, pair2, pair3]:
+                price_checks = []
+                for _ in range(self.price_stability_checks):
+                    price = self.broker.get_current_price(pair)
+                    if price:
+                        price_checks.append(price)
+                    time.sleep(0.1)  # Small delay between checks
+                
+                if not price_checks:
+                    self.logger.debug(f"❌ No valid prices for {pair}")
+                    return None
+                
+                # Check price stability
+                if len(price_checks) > 1:
+                    price_variance = max(price_checks) - min(price_checks)
+                    if price_variance > 0.0001:  # Too much variance
+                        self.logger.debug(f"❌ Price too volatile for {pair}: {price_variance}")
+                        return None
+                
+                prices[pair] = sum(price_checks) / len(price_checks)
+            
+            # Calculate spread ratio
+            spread_ratio = self._calculate_spread_ratio(triangle, prices)
+            if spread_ratio > self.max_spread_ratio:
+                self.logger.debug(f"❌ Spread too wide: {spread_ratio:.2f}")
+                return None
+            
+            # Calculate volume score
+            volume_score = self._calculate_volume_score(triangle)
+            if volume_score < self.min_volume_threshold:
+                self.logger.debug(f"❌ Volume too low: {volume_score:.2f}")
+                return None
+            
+            prices['spread_ratio'] = spread_ratio
+            prices['volume_score'] = volume_score
+            
+            return prices
+            
+        except Exception as e:
+            self.logger.error(f"Error getting validated prices: {e}")
+            return None
+    
+    def _validate_arbitrage_opportunity(self, triangle: Tuple[str, str, str], prices: Dict, 
+                                      cross_rate: float, profit_potential: float) -> Dict:
+        """Enhanced validation for arbitrage opportunities"""
+        try:
+            validation_result = {
+                'is_valid': True,
+                'reason': '',
+                'checks_passed': 0,
+                'total_checks': 5
+            }
+            
+            # Check 1: Profit potential is significant
+            if profit_potential < self.arbitrage_threshold:
+                validation_result['is_valid'] = False
+                validation_result['reason'] = f"Profit too low: {profit_potential:.4f}%"
+                return validation_result
+            validation_result['checks_passed'] += 1
+            
+            # Check 2: Cross rate is reasonable
+            if cross_rate < 0.5 or cross_rate > 2.0:
+                validation_result['is_valid'] = False
+                validation_result['reason'] = f"Cross rate unreasonable: {cross_rate:.4f}"
+                return validation_result
+            validation_result['checks_passed'] += 1
+            
+            # Check 3: Spread ratio is acceptable
+            if prices['spread_ratio'] > self.max_spread_ratio:
+                validation_result['is_valid'] = False
+                validation_result['reason'] = f"Spread too wide: {prices['spread_ratio']:.2f}"
+                return validation_result
+            validation_result['checks_passed'] += 1
+            
+            # Check 4: Volume is sufficient
+            if prices['volume_score'] < self.min_volume_threshold:
+                validation_result['is_valid'] = False
+                validation_result['reason'] = f"Volume too low: {prices['volume_score']:.2f}"
+                return validation_result
+            validation_result['checks_passed'] += 1
+            
+            # Check 5: Market conditions are suitable
+            if self.current_regime in ['volatile', 'trending'] and profit_potential < self.arbitrage_threshold * 1.5:
+                validation_result['is_valid'] = False
+                validation_result['reason'] = f"Market too volatile for low profit: {profit_potential:.4f}%"
+                return validation_result
+            validation_result['checks_passed'] += 1
+            
+            return validation_result
+            
+        except Exception as e:
+            self.logger.error(f"Error validating arbitrage opportunity: {e}")
+            return {'is_valid': False, 'reason': f'Validation error: {e}', 'checks_passed': 0, 'total_checks': 5}
+    
+    def _calculate_confidence_score(self, profit_potential: float, validation_result: Dict, prices: Dict) -> float:
+        """Calculate confidence score for arbitrage opportunity"""
+        try:
+            confidence = 0.0
+            
+            # Base confidence from profit potential
+            if profit_potential > self.arbitrage_threshold * 2:
+                confidence += 0.4
+            elif profit_potential > self.arbitrage_threshold * 1.5:
+                confidence += 0.3
+            else:
+                confidence += 0.2
+            
+            # Validation checks bonus
+            checks_ratio = validation_result['checks_passed'] / validation_result['total_checks']
+            confidence += checks_ratio * 0.3
+            
+            # Spread ratio bonus
+            if prices['spread_ratio'] < 0.1:
+                confidence += 0.2
+            elif prices['spread_ratio'] < 0.2:
+                confidence += 0.1
+            
+            # Volume bonus
+            if prices['volume_score'] > 0.8:
+                confidence += 0.1
+            
+            return min(confidence, 1.0)
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating confidence score: {e}")
+            return 0.0
+    
+    def _calculate_spread_ratio(self, triangle: Tuple[str, str, str], prices: Dict) -> float:
+        """Calculate average spread ratio for triangle"""
+        try:
+            total_spread = 0
+            for pair in triangle:
+                # Mock spread calculation - in real system, get bid/ask spread
+                spread = 0.0001  # 1 pip spread
+                total_spread += spread
+            
+            return total_spread / len(triangle)
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating spread ratio: {e}")
+            return 1.0
+    
+    def _calculate_volume_score(self, triangle: Tuple[str, str, str]) -> float:
+        """Calculate volume score for triangle"""
+        try:
+            # Mock volume calculation - in real system, get actual volume data
+            return 0.8  # High volume score
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating volume score: {e}")
+            return 0.5
+    
+    def _check_rate_limits(self) -> bool:
+        """ตรวจสอบ rate limits ก่อนส่งออเดอร์"""
+        try:
+            current_time = time.time()
+            current_date = datetime.now().date()
+            
+            # รีเซ็ตตัวนับรายวัน
+            if current_date != self.last_reset_date:
+                self.daily_order_count = 0
+                self.last_reset_date = current_date
+                self.logger.info(f"📅 Daily order count reset for {current_date}")
+            
+            # ตรวจสอบจำนวนออเดอร์ต่อวัน
+            if self.daily_order_count >= self.daily_order_limit:
+                self.logger.warning(f"⚠️ Daily order limit reached: {self.daily_order_count}/{self.daily_order_limit}")
+                return False
+            
+            # ตรวจสอบระยะห่างระหว่างออเดอร์
+            if current_time - self.last_order_time < self.min_order_interval:
+                remaining_time = self.min_order_interval - (current_time - self.last_order_time)
+                self.logger.debug(f"⏳ Order rate limited: {remaining_time:.1f}s remaining")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error checking rate limits: {e}")
+            return False
+    
+    def _update_order_tracking(self):
+        """อัพเดทการติดตามออเดอร์"""
+        try:
+            self.last_order_time = time.time()
+            self.daily_order_count += 1
+            self.logger.debug(f"📊 Order tracking updated: {self.daily_order_count}/{self.daily_order_limit} today")
+        except Exception as e:
+            self.logger.error(f"Error updating order tracking: {e}")
     
     
     def _execute_triangle_arbitrage(self, opportunity: Dict) -> bool:
@@ -982,6 +1206,11 @@ class TriangleArbitrageDetector:
     def _create_arbitrage_group(self, triangle: Tuple[str, str, str], opportunity: Dict) -> bool:
         """สร้างกลุ่ม arbitrage และส่งออเดอร์ 3 คู่พร้อมกัน"""
         try:
+            # ตรวจสอบ rate limits ก่อน
+            if not self._check_rate_limits():
+                self.logger.warning("⏳ Rate limit reached - skipping arbitrage group creation")
+                return False
+            
             self.group_counter += 1
             group_id = f"arbitrage_group_{self.group_counter}"
             
@@ -1040,6 +1269,9 @@ class TriangleArbitrageDetector:
                 self.active_groups[group_id] = group_data
                 self.is_arbitrage_paused = True  # หยุดตรวจสอบ arbitrage ใหม่
                 
+                # อัพเดท order tracking
+                self._update_order_tracking()
+                
                 self.logger.info(f"✅ Arbitrage group {group_id} created successfully")
                 self.logger.info(f"   Orders sent: {orders_sent}/3")
                 self.logger.info(f"   Pausing arbitrage detection until group closes")
@@ -1057,11 +1289,15 @@ class TriangleArbitrageDetector:
     def _send_arbitrage_order(self, symbol: str, direction: str, group_id: str) -> bool:
         """ส่งออเดอร์ arbitrage"""
         try:
+            # สร้าง comment ที่แสดงกลุ่มและลำดับ
+            group_number = group_id.split('_')[-1]  # เอาเฉพาะหมายเลขกลุ่ม
+            comment = f"ARB_G{group_number}_{symbol}"
+            
             result = self.broker.place_order(
                 symbol=symbol,
                 order_type=direction,
                 volume=self.position_size,
-                comment=f"Arbitrage_{group_id}"
+                comment=comment
             )
             
             if result and result.get('retcode') == 10009:

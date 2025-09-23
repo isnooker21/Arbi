@@ -164,6 +164,10 @@ class AdaptiveEngine:
                     if hasattr(self.arbitrage_detector, 'check_group_status'):
                         self.arbitrage_detector.check_group_status()
                     
+                    # Check recovery chain for correlation manager
+                    if hasattr(self.correlation_manager, 'check_recovery_chain'):
+                        self.correlation_manager.check_recovery_chain()
+                    
                     # Update performance metrics
                     self._update_performance_metrics()
                     
