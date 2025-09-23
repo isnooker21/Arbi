@@ -467,8 +467,8 @@ class BrokerAPI:
                     self.logger.warning(f"⚠️ Could not select symbol {symbol}, but continuing...")
                 
                 # Prepare request for REAL TRADING (แบบง่ายเหมือน Huakuy_)
-                # ใช้ comment ง่ายๆ เพื่อหลีกเลี่ยงปัญหา encoding
-                simple_comment = "Trade"
+                # ใช้ comment ตามกลุ่มและลำดับ
+                simple_comment = comment if comment else "Trade"
                 
                 request = {
                     "action": mt5.TRADE_ACTION_DEAL,
