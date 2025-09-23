@@ -489,7 +489,11 @@ class TriangleArbitrageDetector:
             
             for group_id, group_data in self.active_groups.items():
                 # ตรวจสอบว่ากลุ่มหมดเวลา 24 ชั่วโมง
-                if (datetime.now() - group_data['created_at']).total_seconds() > 86400:  # 24 hours
+                created_at = group_data['created_at']
+                if isinstance(created_at, str):
+                    created_at = datetime.fromisoformat(created_at)
+                
+                if (datetime.now() - created_at).total_seconds() > 86400:  # 24 hours
                     self.logger.warning(f"⏰ Group {group_id} expired after 24 hours")
                     groups_to_close.append(group_id)
                     continue
@@ -1214,7 +1218,7 @@ class TriangleArbitrageDetector:
             'total_triangles': total_triangles,
             'active_triangles': active_triangles,
             'closed_triangles': closed_triangles,
-            'market_regime': self.market_regime,
+            # 'market_regime': self.market_regime,  # DISABLED - not used in simple trading
             'adaptive_threshold': self.volatility_threshold,
             'avg_execution_time_ms': self.performance_metrics['avg_execution_time'],
             'total_opportunities': self.performance_metrics['total_opportunities'],
@@ -1228,7 +1232,7 @@ class TriangleArbitrageDetector:
     def get_adaptive_parameters(self) -> Dict:
         """Get current adaptive parameters"""
         return {
-            'market_regime': self.market_regime,
+            # 'market_regime': self.market_regime,  # DISABLED - not used in simple trading
             'volatility_threshold': self.volatility_threshold,
             'adaptive_thresholds': self.adaptive_thresholds,
             'execution_speed_ms': self.execution_speed_ms,
