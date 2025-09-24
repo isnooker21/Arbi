@@ -278,6 +278,14 @@ class TriangleArbitrageDetector:
                     
                     if has_valid_groups:
                         self.logger.info(f"📊 Found {len(self.active_groups)} active groups - monitoring positions...")
+                        
+                        # แสดงสถานะไม้ทุกครั้งที่ตรวจสอบ
+                        for group_id, group_data in self.active_groups.items():
+                            self.logger.info(f"🔍 Checking group {group_id} for recovery conditions...")
+                            # เรียก correlation manager เพื่อตรวจสอบ
+                            if self.correlation_manager:
+                                self.correlation_manager.check_recovery_positions()
+                        
                         time.sleep(30.0)  # รอ 30 วินาที (ลด log ที่ไม่จำเป็น)
                         continue
                     else:

@@ -1118,9 +1118,9 @@ class CorrelationManager:
             )
             
             # Send correlation order
-            success = self._send_correlation_order(symbol, correlation_lot_size, group_id)
+            order_result = self._send_correlation_order(symbol, correlation_lot_size, group_id)
             
-            if success:
+            if order_result and order_result.get('success'):
                 # ดึงราคาปัจจุบันเป็น entry price
                 entry_price = self.broker.get_current_price(symbol)
                 if not entry_price:
@@ -1132,6 +1132,7 @@ class CorrelationManager:
                     'direction': direction,
                     'lot_size': correlation_lot_size,
                     'entry_price': entry_price,
+                    'order_id': order_result.get('order_id'),  # เพิ่ม order_id
                     'correlation': correlation,
                     'correlation_ratio': 1.0,  # ใช้ lot size เดียวกัน
                     'original_pair': original_position['symbol'],
@@ -1207,7 +1208,7 @@ class CorrelationManager:
             self.logger.error(f"Error calculating hedge volume: {e}")
             return 0.1
     
-    def _send_correlation_order(self, symbol: str, lot_size: float, group_id: str) -> bool:
+    def _send_correlation_order(self, symbol: str, lot_size: float, group_id: str) -> Dict:
         """ส่งออเดอร์ correlation recovery"""
         try:
             # สร้าง comment
@@ -1224,14 +1225,29 @@ class CorrelationManager:
             
             if result and result.get('retcode') == 10009:
                 self.logger.info(f"✅ Correlation recovery order sent: {symbol} {lot_size} lot")
-                return True
+                return {
+                    'success': True,
+                    'order_id': result.get('order_id'),
+                    'symbol': symbol,
+                    'lot_size': lot_size
+                }
             else:
                 self.logger.error(f"❌ Failed to send correlation recovery order: {symbol}")
-                return False
+                return {
+                    'success': False,
+                    'order_id': None,
+                    'symbol': symbol,
+                    'lot_size': lot_size
+                }
                 
         except Exception as e:
             self.logger.error(f"Error sending correlation recovery order: {e}")
-            return False
+            return {
+                'success': False,
+                'order_id': None,
+                'symbol': symbol,
+                'lot_size': lot_size
+            }
     
     def check_recovery_positions(self):
         """ตรวจสอบ recovery positions - เฉพาะกลุ่มที่ยังเปิดอยู่"""
