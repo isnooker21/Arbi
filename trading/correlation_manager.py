@@ -1315,6 +1315,19 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"Error checking recovery positions: {e}")
     
+    def check_recovery_positions_with_status(self, group_id: str = None, losing_pairs: list = None):
+        """ตรวจสอบ recovery positions พร้อมแสดงสถานะการแก้ไม้"""
+        try:
+            # แสดงสถานะการแก้ไม้ทุกครั้งที่ถูกเรียก
+            if group_id and losing_pairs:
+                self._log_group_hedging_status(group_id, losing_pairs)
+            
+            # ตรวจสอบ recovery positions ปกติ
+            self.check_recovery_positions()
+                        
+        except Exception as e:
+            self.logger.error(f"Error checking recovery positions with status: {e}")
+    
     def _close_recovery_position(self, recovery_id: str):
         """ปิด recovery position"""
         try:

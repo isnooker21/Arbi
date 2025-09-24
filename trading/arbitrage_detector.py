@@ -282,9 +282,21 @@ class TriangleArbitrageDetector:
                         # แสดงสถานะไม้ทุกครั้งที่ตรวจสอบ
                         for group_id, group_data in self.active_groups.items():
                             self.logger.info(f"🔍 Checking group {group_id} for recovery conditions...")
-                            # เรียก correlation manager เพื่อตรวจสอบ
+                            # เรียก correlation manager เพื่อตรวจสอบพร้อมแสดงสถานะ
                             if self.correlation_manager:
-                                self.correlation_manager.check_recovery_positions()
+                                # ดึงข้อมูล losing pairs จาก group_data
+                                losing_pairs = []
+                                for symbol, position_data in group_data.get('positions', {}).items():
+                                    if position_data.get('order_id'):
+                                        losing_pairs.append({
+                                            'symbol': symbol,
+                                            'order_id': position_data.get('order_id'),
+                                            'lot_size': position_data.get('lot_size', 0.1),
+                                            'entry_price': position_data.get('entry_price', 0.0)
+                                        })
+                                
+                                # เรียกฟังก์ชันที่แสดงสถานะการแก้ไม้
+                                self.correlation_manager.check_recovery_positions_with_status(group_id, losing_pairs)
                         
                         time.sleep(30.0)  # รอ 30 วินาที (ลด log ที่ไม่จำเป็น)
                         continue
