@@ -1195,6 +1195,9 @@ class CorrelationManager:
             if not self.recovery_positions:
                 return
             
+            # ทำความสะอาด positions เก่าที่ปิดไปแล้ว
+            self.cleanup_closed_recovery_positions()
+            
             active_recovery_count = 0
             positions_to_remove = []
             
@@ -1231,19 +1234,43 @@ class CorrelationManager:
     def _close_recovery_position(self, recovery_id: str):
         """ปิด recovery position"""
         try:
-            if recovery_id in self.recovery_positions:
-                position = self.recovery_positions[recovery_id]
-                
-                # ปิดออเดอร์
-                success = self.broker.close_position(position['symbol'])
-                
-                if success:
-                    position['status'] = 'closed'
-                    position['closed_at'] = datetime.now()
-                    self._update_recovery_data()
-                    self.logger.info(f"✅ Recovery position closed: {position['symbol']}")
-                else:
-                    self.logger.error(f"❌ Failed to close recovery position: {position['symbol']}")
+            if recovery_id not in self.recovery_positions:
+                self.logger.debug(f"Recovery position {recovery_id} not found in tracking data")
+                return
+            
+            position = self.recovery_positions[recovery_id]
+            symbol = position['symbol']
+            order_id = position.get('order_id')
+            
+            # ตรวจสอบว่าตำแหน่งยังเปิดอยู่จริงหรือไม่
+            position_exists = False
+            if order_id:
+                all_positions = self.broker.get_all_positions()
+                for pos in all_positions:
+                    if pos['ticket'] == order_id:
+                        position_exists = True
+                        break
+            
+            if not position_exists:
+                # ตำแหน่งถูกปิดไปแล้ว ให้อัพเดทสถานะ
+                position['status'] = 'closed'
+                position['closed_at'] = datetime.now()
+                position['close_reason'] = 'already_closed'
+                self._update_recovery_data()
+                self.logger.info(f"✅ Recovery position {symbol} was already closed - updated status")
+                return
+            
+            # ปิดออเดอร์
+            success = self.broker.close_position(symbol)
+            
+            if success:
+                position['status'] = 'closed'
+                position['closed_at'] = datetime.now()
+                position['close_reason'] = 'manual_close'
+                self._update_recovery_data()
+                self.logger.info(f"✅ Recovery position closed: {symbol}")
+            else:
+                self.logger.error(f"❌ Failed to close recovery position: {symbol}")
                     
         except Exception as e:
             self.logger.error(f"Error closing recovery position: {e}")
@@ -1416,9 +1443,40 @@ class CorrelationManager:
             if positions_to_remove:
                 self.logger.info(f"🗑️ Cleared {len(positions_to_remove)} hedged positions for group {group_id}")
                 self._update_recovery_data()
+                
+            # แสดงสรุปสถานะ recovery positions หลังจากล้างข้อมูล
+            self.log_recovery_positions_summary()
             
         except Exception as e:
             self.logger.error(f"Error clearing hedged data for group {group_id}: {e}")
+    
+    def cleanup_closed_recovery_positions(self):
+        """ทำความสะอาด recovery positions ที่ปิดไปแล้ว"""
+        try:
+            positions_to_remove = []
+            
+            for recovery_id, position in self.recovery_positions.items():
+                if position.get('status') == 'closed':
+                    # ตรวจสอบว่าเป็น positions เก่าที่ปิดไปนานแล้วหรือไม่
+                    closed_at = position.get('closed_at')
+                    if closed_at:
+                        if isinstance(closed_at, str):
+                            closed_at = datetime.fromisoformat(closed_at)
+                        
+                        # ลบ positions ที่ปิดไปแล้วมากกว่า 1 ชั่วโมง
+                        if (datetime.now() - closed_at).total_seconds() > 3600:
+                            positions_to_remove.append(recovery_id)
+            
+            # ลบ positions เก่า
+            for recovery_id in positions_to_remove:
+                del self.recovery_positions[recovery_id]
+            
+            if positions_to_remove:
+                self.logger.info(f"🗑️ Cleaned up {len(positions_to_remove)} old closed recovery positions")
+                self._update_recovery_data()
+            
+        except Exception as e:
+            self.logger.error(f"Error cleaning up closed recovery positions: {e}")
     
     def get_hedging_status(self) -> Dict:
         """ดึงสถานะการแก้ไม้ทั้งหมด"""
@@ -1433,6 +1491,34 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"Error getting hedging status: {e}")
             return {}
+    
+    def log_recovery_positions_summary(self):
+        """แสดงสรุปสถานะ recovery positions"""
+        try:
+            if not self.recovery_positions:
+                self.logger.info("📊 No recovery positions found")
+                return
+            
+            active_count = 0
+            closed_count = 0
+            
+            for position in self.recovery_positions.values():
+                if position.get('status') == 'active':
+                    active_count += 1
+                elif position.get('status') == 'closed':
+                    closed_count += 1
+            
+            self.logger.info("=" * 60)
+            self.logger.info("📊 RECOVERY POSITIONS SUMMARY")
+            self.logger.info("=" * 60)
+            self.logger.info(f"Total Recovery Positions: {len(self.recovery_positions)}")
+            self.logger.info(f"Active Positions: {active_count}")
+            self.logger.info(f"Closed Positions: {closed_count}")
+            self.logger.info(f"Hedged Pairs: {len(self.hedged_pairs)}")
+            self.logger.info("=" * 60)
+            
+        except Exception as e:
+            self.logger.error(f"Error logging recovery positions summary: {e}")
     
     def stop(self):
         """หยุดการทำงานของ Correlation Manager"""

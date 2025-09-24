@@ -1054,9 +1054,11 @@ class TriangleArbitrageDetector:
                     self.logger.info(f"🔍 Found recovery position {recovery_id} for group {group_id} (original: {original_symbol})")
             
             # ปิด recovery positions ที่เกี่ยวข้อง
-            for recovery_id in recovery_positions_to_close:
-                self.logger.info(f"🔄 Closing recovery position {recovery_id} for group {group_id}")
-                self.correlation_manager._close_recovery_position(recovery_id)
+            if recovery_positions_to_close:
+                self.logger.info(f"🔄 Closing {len(recovery_positions_to_close)} recovery positions for group {group_id}")
+                for recovery_id in recovery_positions_to_close:
+                    self.logger.info(f"   🔄 Closing recovery position {recovery_id}")
+                    self.correlation_manager._close_recovery_position(recovery_id)
             
             # ปิด recovery positions ทั้งหมดที่เกี่ยวข้องกับกลุ่มนี้ (เพิ่มเติม)
             # ตรวจสอบ recovery positions ที่มี group_id ตรงกัน
@@ -1066,9 +1068,11 @@ class TriangleArbitrageDetector:
                     additional_recovery_positions.append(recovery_id)
             
             # ปิด recovery positions เพิ่มเติม
-            for recovery_id in additional_recovery_positions:
-                self.logger.info(f"🔄 Closing additional recovery position {recovery_id} for group {group_id}")
-                self.correlation_manager._close_recovery_position(recovery_id)
+            if additional_recovery_positions:
+                self.logger.info(f"🔄 Closing {len(additional_recovery_positions)} additional recovery positions for group {group_id}")
+                for recovery_id in additional_recovery_positions:
+                    self.logger.info(f"   🔄 Closing additional recovery position {recovery_id}")
+                    self.correlation_manager._close_recovery_position(recovery_id)
             
             total_recovery_closed = len(recovery_positions_to_close) + len(additional_recovery_positions)
             if total_recovery_closed > 0:
