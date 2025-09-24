@@ -198,7 +198,7 @@ class CorrelationManager:
             return False
     
     def _calculate_risk_per_lot(self, position: Dict) -> float:
-        """คำนวณ risk ต่อ lot"""
+        """คำนวณ risk ต่อ lot เป็นเปอร์เซ็นต์ของ account balance"""
         try:
             order_id = position.get('order_id')
             symbol = position.get('symbol')
@@ -221,8 +221,14 @@ class CorrelationManager:
                 self.logger.warning(f"Invalid lot size for {symbol} (Order: {order_id})")
                 return 0.0
             
-            risk_per_lot = abs(position_pnl) / lot_size
-            self.logger.debug(f"Risk calculation for {symbol}: PnL={position_pnl:.2f}, Lot={lot_size:.2f}, Risk={risk_per_lot:.2%}")
+            # ดึง account balance เพื่อคำนวณเปอร์เซ็นต์
+            account_balance = self.broker.get_account_balance()
+            if not account_balance or account_balance <= 0:
+                account_balance = 1000.0  # fallback
+            
+            # คำนวณ risk เป็นเปอร์เซ็นต์ของ account balance
+            risk_per_lot = abs(position_pnl) / account_balance
+            self.logger.debug(f"Risk calculation for {symbol}: PnL={position_pnl:.2f}, Lot={lot_size:.2f}, Balance={account_balance:.2f}, Risk={risk_per_lot:.2%}")
             
             return risk_per_lot
             
@@ -244,7 +250,8 @@ class CorrelationManager:
             all_positions = self.broker.get_all_positions()
             for pos in all_positions:
                 if pos['ticket'] == order_id:
-                    entry_price = pos['price_open']
+                    # ใช้ 'price' แทน 'price_open' ตาม broker API structure
+                    entry_price = pos.get('price', 0.0)
                     break
             
             if entry_price <= 0:
@@ -297,7 +304,7 @@ class CorrelationManager:
                 all_positions = self.broker.get_all_positions()
                 for pos in all_positions:
                     if pos['ticket'] == order_id:
-                        entry_price = pos['price_open']
+                        entry_price = pos.get('price', 0.0)  # ใช้ 'price' แทน 'price_open'
                         current_price = self.broker.get_current_price(symbol)
                         if current_price and entry_price:
                             if 'JPY' in symbol:
