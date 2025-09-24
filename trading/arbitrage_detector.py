@@ -560,11 +560,12 @@ class TriangleArbitrageDetector:
                     groups_to_close.append(group_id)
                     continue
                 
-                # ตรวจสอบ PnL จริงของแต่ละตำแหน่ง
+                # ตรวจสอบ PnL จริงของแต่ละตำแหน่ง (รวม recovery positions)
                 total_group_pnl = 0.0
                 all_positions_profitable = True
                 valid_positions = 0
                 
+                # คำนวณ PnL ของ arbitrage positions
                 for position in group_data['positions']:
                     # หา order_id จาก broker API
                     order_id = position.get('order_id')
@@ -588,12 +589,32 @@ class TriangleArbitrageDetector:
                             if position_pnl < 0:
                                 all_positions_profitable = False
                             
-                            self.logger.debug(f"   Position {position['symbol']}: PnL = {position_pnl:.2f} USD")
+                            self.logger.debug(f"   Arbitrage {position['symbol']}: PnL = {position_pnl:.2f} USD")
                         else:
                             self.logger.warning(f"   Position {position['symbol']} not found in broker - may be closed")
                     else:
                         self.logger.warning(f"   No order_id found for position {position['symbol']}")
                         all_positions_profitable = False
+                
+                # คำนวณ PnL ของ recovery positions ที่เกี่ยวข้องกับกลุ่มนี้
+                recovery_pnl = 0.0
+                if self.correlation_manager:
+                    for recovery_id, recovery_data in self.correlation_manager.recovery_positions.items():
+                        if recovery_data.get('group_id') == group_id and recovery_data.get('status') == 'active':
+                            recovery_order_id = recovery_data.get('order_id')
+                            if recovery_order_id:
+                                # ตรวจสอบ PnL ของ recovery position
+                                all_positions = self.broker.get_all_positions()
+                                for pos in all_positions:
+                                    if pos['ticket'] == recovery_order_id:
+                                        recovery_pnl += pos['profit']
+                                        self.logger.debug(f"   Recovery {recovery_data['symbol']}: PnL = {pos['profit']:.2f} USD")
+                                        break
+                
+                # รวม PnL ทั้งหมด (arbitrage + recovery)
+                total_group_pnl += recovery_pnl
+                if recovery_pnl != 0:
+                    self.logger.info(f"   🔄 Recovery PnL: {recovery_pnl:.2f} USD")
                 
                 # ถ้าไม่มีตำแหน่งที่เปิดอยู่จริง ให้ลบกลุ่มนี้ทันที
                 if valid_positions == 0:
@@ -625,9 +646,21 @@ class TriangleArbitrageDetector:
                 self.logger.info(f"   💰 Account Balance: {account_balance:.2f} USD")
                 self.logger.info(f"   📊 Profit Percentage: {profit_percentage:.3f}%")
                 
-                # คำนวณกำไรต่อ lot เดี่ยว (0.1 lot)
-                single_lot_size = 0.1  # lot size เดี่ยว
-                profit_per_single_lot = total_group_pnl / 3  # หารด้วย 3 คู่
+                # คำนวณกำไรต่อ lot เดี่ยว (รวม recovery positions)
+                # นับจำนวน positions ทั้งหมด (arbitrage + recovery)
+                total_positions_count = len(group_data['positions'])
+                if self.correlation_manager:
+                    recovery_count = sum(1 for recovery_data in self.correlation_manager.recovery_positions.values() 
+                                       if recovery_data.get('group_id') == group_id and recovery_data.get('status') == 'active')
+                    total_positions_count += recovery_count
+                
+                # ใช้จำนวน positions จริงในการคำนวณ
+                if total_positions_count > 0:
+                    profit_per_single_lot = total_group_pnl / total_positions_count
+                else:
+                    profit_per_single_lot = 0.0
+                
+                self.logger.info(f"   📊 Total Positions: {total_positions_count} (Arbitrage: {len(group_data['positions'])}, Recovery: {total_positions_count - len(group_data['positions'])})")
                 
                 # ปิดกลุ่มเมื่อกำไรต่อ lot เดี่ยว ถึงเป้าหมาย
                 if profit_per_single_lot >= self.profit_threshold_per_lot:
