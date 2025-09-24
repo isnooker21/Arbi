@@ -1,0 +1,43 @@
+{
+  "recovery_positions": {
+    "recovery_2": {
+      "symbol": "EURAUD",
+      "order_id": "TEST_000001",
+      "status": "active"
+    }
+  },
+  "recovery_chains": {
+    "simple_group_1": {
+      "group_id": "simple_group_1",
+      "started_at": "2025-09-24 16:53:34.872126",
+      "original_pairs": [
+        {
+          "symbol": "EURUSD",
+          "order_id": "TEST_000001",
+          "lot_size": 0.1,
+          "entry_price": 1.18
+        },
+        {
+          "symbol": "GBPUSD",
+          "order_id": "TEST_000002",
+          "lot_size": 0.1,
+          "entry_price": 1.35
+        }
+      ],
+      "recovery_pairs": [],
+      "status": "active",
+      "current_chain": []
+    }
+  },
+  "recovery_metrics": {
+    "total_recoveries": 0,
+    "successful_recoveries": 0,
+    "failed_recoveries": 0,
+    "avg_recovery_time_hours": 0,
+    "total_recovered_amount": 0.0
+  },
+  "hedged_pairs": [],
+  "hedged_positions": {},
+  "hedged_groups": {},
+  "saved_at": "2025-09-24T16:53:34.872138"
+}

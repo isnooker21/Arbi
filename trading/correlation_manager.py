@@ -203,6 +203,13 @@ class CorrelationManager:
             if symbol and symbol in self.hedged_pairs:
                 return True
             
+            # ตรวจสอบจาก recovery_positions ว่ามีไม้แก้สำหรับไม้นี้หรือไม่
+            if symbol:
+                for recovery_id, recovery_pos in self.recovery_positions.items():
+                    if (recovery_pos.get('original_pair') == symbol and 
+                        recovery_pos.get('status') == 'active'):
+                        return True
+            
             return False
             
         except Exception as e:
@@ -215,7 +222,7 @@ class CorrelationManager:
             order_id = position.get('order_id')
             symbol = position.get('symbol')
             
-            if not order_id:
+            if not order_id or order_id == 'N/A':
                 return 0.0
             
             # ดึงข้อมูล PnL จาก broker
@@ -254,7 +261,7 @@ class CorrelationManager:
             symbol = position.get('symbol')
             order_id = position.get('order_id')
             
-            if not symbol or not order_id:
+            if not symbol or not order_id or order_id == 'N/A':
                 return 0.0
             
             # ดึง entry_price จาก broker API แทนที่จะใช้จาก position data
@@ -1528,11 +1535,16 @@ class CorrelationManager:
             self.logger.error(f"Error clearing hedged data for group {group_id}: {e}")
     
     def cleanup_closed_recovery_positions(self):
-        """ทำความสะอาด recovery positions ที่ปิดไปแล้ว"""
+        """ทำความสะอาด recovery positions ที่ปิดไปแล้วและไม้ซ้ำ"""
         try:
             positions_to_remove = []
+            seen_positions = {}  # เก็บข้อมูลไม้ที่เห็นแล้ว
             
             for recovery_id, position in self.recovery_positions.items():
+                symbol = position.get('symbol')
+                order_id = position.get('order_id')
+                
+                # ลบไม้ที่ปิดไปแล้ว
                 if position.get('status') == 'closed':
                     # ตรวจสอบว่าเป็น positions เก่าที่ปิดไปนานแล้วหรือไม่
                     closed_at = position.get('closed_at')
@@ -1543,13 +1555,26 @@ class CorrelationManager:
                         # ลบ positions ที่ปิดไปแล้วมากกว่า 1 ชั่วโมง
                         if (datetime.now() - closed_at).total_seconds() > 3600:
                             positions_to_remove.append(recovery_id)
+                
+                # ลบไม้ซ้ำ (ไม้เดียวกันที่มี order_id เดียวกัน)
+                if symbol and order_id and order_id != 'N/A':
+                    key = f"{symbol}_{order_id}"
+                    if key in seen_positions:
+                        # ไม้ซ้ำ - ลบไม้เก่า
+                        old_recovery_id = seen_positions[key]
+                        if old_recovery_id not in positions_to_remove:
+                            positions_to_remove.append(old_recovery_id)
+                        self.logger.info(f"🗑️ Removing duplicate position: {symbol} (Order: {order_id})")
+                    else:
+                        seen_positions[key] = recovery_id
             
-            # ลบ positions เก่า
+            # ลบ positions เก่าและไม้ซ้ำ
             for recovery_id in positions_to_remove:
-                del self.recovery_positions[recovery_id]
+                if recovery_id in self.recovery_positions:
+                    del self.recovery_positions[recovery_id]
             
             if positions_to_remove:
-                self.logger.info(f"🗑️ Cleaned up {len(positions_to_remove)} old closed recovery positions")
+                self.logger.info(f"🗑️ Cleaned up {len(positions_to_remove)} old/duplicate recovery positions")
                 self._update_recovery_data()
             
         except Exception as e:
