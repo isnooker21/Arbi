@@ -1130,7 +1130,8 @@ class CorrelationManager:
             )
             
             # Send correlation order
-            order_result = self._send_correlation_order(symbol, correlation_lot_size, group_id)
+            original_symbol = original_position.get('symbol', '')
+            order_result = self._send_correlation_order(symbol, correlation_lot_size, group_id, original_symbol)
             
             if order_result and order_result.get('success'):
                 # ดึงราคาปัจจุบันเป็น entry price
@@ -1223,10 +1224,10 @@ class CorrelationManager:
             self.logger.error(f"Error calculating hedge volume: {e}")
             return 0.1
     
-    def _send_correlation_order(self, symbol: str, lot_size: float, group_id: str) -> Dict:
+    def _send_correlation_order(self, symbol: str, lot_size: float, group_id: str, original_symbol: str = None) -> Dict:
         """ส่งออเดอร์ correlation recovery"""
         try:
-            # สร้าง comment
+            # สร้าง comment - ใส่คู่เงินที่แก้
             group_number = group_id.split('_')[-1]
             comment = f"RECOVERY_G{group_number}_{symbol}"
             
