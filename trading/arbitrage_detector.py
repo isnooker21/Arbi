@@ -286,10 +286,13 @@ class TriangleArbitrageDetector:
                             if self.correlation_manager:
                                 # ดึงข้อมูล losing pairs จาก group_data
                                 losing_pairs = []
-                                for symbol, position_data in group_data.get('positions', {}).items():
+                                positions_list = group_data.get('positions', [])
+                                
+                                # positions เป็น list ของ position data
+                                for position_data in positions_list:
                                     if position_data.get('order_id'):
                                         losing_pairs.append({
-                                            'symbol': symbol,
+                                            'symbol': position_data.get('symbol', ''),
                                             'order_id': position_data.get('order_id'),
                                             'lot_size': position_data.get('lot_size', 0.1),
                                             'entry_price': position_data.get('entry_price', 0.0)
