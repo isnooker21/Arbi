@@ -114,26 +114,55 @@ class CorrelationManager:
             self.logger.info("📊 GROUP HEDGING STATUS:")
             self.logger.info("-" * 50)
             
-            # แสดงไม้ arbitrage ที่ขาดทุน
-            self.logger.info("🔴 LOSING ARBITRAGE POSITIONS:")
-            for i, pair in enumerate(losing_pairs, 1):
+            # แสดงไม้ arbitrage ทั้งหมด (แยกเป็นกำไรและขาดทุน)
+            losing_positions = []
+            profit_positions = []
+            
+            for pair in losing_pairs:
                 symbol = pair['symbol']
                 order_id = pair.get('order_id', 'N/A')
-                is_hedged = self._is_position_hedged(pair)
-                status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
                 
-                self.logger.info(f"   {i}. {symbol} (Order: {order_id}) - {status}")
+                # ตรวจสอบ PnL ก่อน
+                pnl = self._get_position_pnl(pair)
                 
-                if not is_hedged:
-                    # แสดงเงื่อนไขการแก้ไม้
-                    risk_per_lot = self._calculate_risk_per_lot(pair)
-                    price_distance = self._calculate_price_distance(pair)
+                if pnl < 0:  # ขาดทุน
+                    losing_positions.append(pair)
+                else:  # กำไร
+                    profit_positions.append(pair)
+            
+            # แสดงไม้ที่กำไร
+            if profit_positions:
+                self.logger.info("🟢 PROFIT ARBITRAGE POSITIONS:")
+                for i, pair in enumerate(profit_positions, 1):
+                    symbol = pair['symbol']
+                    order_id = pair.get('order_id', 'N/A')
+                    pnl = self._get_position_pnl(pair)
+                    self.logger.info(f"   {i}. {symbol} (Order: {order_id}) - 💰 PROFIT: ${pnl:.2f}")
+            
+            # แสดงไม้ที่ขาดทุน
+            if losing_positions:
+                self.logger.info("🔴 LOSING ARBITRAGE POSITIONS:")
+                for i, pair in enumerate(losing_positions, 1):
+                    symbol = pair['symbol']
+                    order_id = pair.get('order_id', 'N/A')
+                    pnl = self._get_position_pnl(pair)
+                    is_hedged = self._is_position_hedged(pair)
+                    status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
                     
-                    risk_status = "✅" if risk_per_lot >= 0.015 else "❌"
-                    distance_status = "✅" if price_distance >= 10 else "❌"
+                    self.logger.info(f"   {i}. {symbol} (Order: {order_id}) - {status} | PnL: ${pnl:.2f}")
                     
-                    self.logger.info(f"      Risk: {risk_per_lot:.2%} (≥1.5%) {risk_status}")
-                    self.logger.info(f"      Distance: {price_distance:.1f} pips (≥10) {distance_status}")
+                    if not is_hedged:
+                        # แสดงเงื่อนไขการแก้ไม้
+                        risk_per_lot = self._calculate_risk_per_lot(pair)
+                        price_distance = self._calculate_price_distance(pair)
+                        
+                        risk_status = "✅" if risk_per_lot >= 0.015 else "❌"
+                        distance_status = "✅" if price_distance >= 10 else "❌"
+                        
+                        self.logger.info(f"      Risk: {risk_per_lot:.2%} (≥1.5%) {risk_status}")
+                        self.logger.info(f"      Distance: {price_distance:.1f} pips (≥10) {distance_status}")
+            else:
+                self.logger.info("🔴 LOSING ARBITRAGE POSITIONS: None")
             
             # แสดงไม้ correlation ที่เกี่ยวข้องกับกลุ่มนี้
             self.logger.info("🔄 EXISTING CORRELATION POSITIONS:")
@@ -188,6 +217,27 @@ class CorrelationManager:
             
         except Exception as e:
             self.logger.error(f"Error logging group hedging status: {e}")
+    
+    def _get_position_pnl(self, position: Dict) -> float:
+        """ดึงค่า PnL ของ position จาก broker"""
+        try:
+            order_id = position.get('order_id')
+            symbol = position.get('symbol')
+            
+            if not order_id or order_id == 'N/A':
+                return 0.0
+            
+            # ดึงข้อมูล PnL จาก broker
+            all_positions = self.broker.get_all_positions()
+            for pos in all_positions:
+                if pos['ticket'] == order_id:
+                    return pos.get('profit', 0.0)
+            
+            return 0.0
+            
+        except Exception as e:
+            self.logger.error(f"Error getting position PnL: {e}")
+            return 0.0
     
     def _is_position_hedged(self, position: Dict) -> bool:
         """ตรวจสอบว่าตำแหน่งนี้แก้ไม้แล้วหรือยัง"""
@@ -303,6 +353,12 @@ class CorrelationManager:
             symbol = losing_pair['symbol']
             order_id = losing_pair.get('order_id')
             
+            # ตรวจสอบ PnL ก่อน - ถ้าไม้เป็นบวกไม่ต้องแก้ไม้
+            pnl = self._get_position_pnl(losing_pair)
+            if pnl >= 0:
+                self.logger.info(f"💰 {symbol} (Order: {order_id}): PROFIT ${pnl:.2f} - No hedging needed")
+                return
+            
             # ตรวจสอบว่าไม้นี้แก้แล้วหรือยัง
             if self._is_position_hedged(losing_pair):
                 self.logger.info(f"⏭️ {symbol} (Order: {order_id}): Already hedged - skipping")
@@ -313,6 +369,7 @@ class CorrelationManager:
             price_distance = self._calculate_price_distance(losing_pair)
             
             self.logger.info(f"🔍 Checking hedging conditions for {symbol} (Order: {order_id}):")
+            self.logger.info(f"   PnL: ${pnl:.2f} (LOSS)")
             self.logger.info(f"   Risk: {risk_per_lot:.2%} (need ≥1.5%) {'✅' if risk_per_lot >= 0.015 else '❌'}")
             self.logger.info(f"   Distance: {price_distance:.1f} pips (need ≥10) {'✅' if price_distance >= 10 else '❌'}")
             
