@@ -143,6 +143,18 @@ class CorrelationManager:
                     correlation_count += 1
                     symbol = position['symbol']
                     order_id = position.get('order_id', 'N/A')
+                    
+                    # ถ้า order_id เป็น N/A ให้ลองหาจาก broker
+                    if order_id == 'N/A':
+                        # หา order_id จาก broker โดยใช้ symbol และ comment
+                        all_positions = self.broker.get_all_positions()
+                        for pos in all_positions:
+                            if pos['symbol'] == symbol and 'RECOVERY_G' in pos.get('comment', ''):
+                                order_id = pos['ticket']
+                                # อัพเดท order_id ใน recovery_positions
+                                position['order_id'] = order_id
+                                break
+                    
                     is_hedged = self._is_position_hedged(position)
                     status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
                     
@@ -1147,6 +1159,9 @@ class CorrelationManager:
                 
                 # บันทึกข้อมูลการแก้ไม้
                 self._log_hedging_action(original_position, correlation_position, correlation_candidate)
+                
+                # บันทึกว่าไม้นี้แก้แล้ว (ป้องกันการแก้ซ้ำ)
+                self._mark_position_as_hedged(original_position)
                 
                 self.logger.info(f"✅ Correlation recovery position opened: {symbol}")
                 return True
