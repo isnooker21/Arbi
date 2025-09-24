@@ -164,12 +164,12 @@ class CorrelationManager:
             else:
                 self.logger.info("🔴 LOSING ARBITRAGE POSITIONS: None")
             
-            # แสดงไม้ correlation ที่เกี่ยวข้องกับกลุ่มนี้
-            self.logger.info("🔄 EXISTING CORRELATION POSITIONS:")
-            correlation_count = 0
+            # แสดงไม้ correlation ที่เกี่ยวข้องกับกลุ่มนี้ (แยกเป็นกำไรและขาดทุน)
+            profit_correlations = []
+            losing_correlations = []
+            
             for recovery_id, position in self.recovery_positions.items():
                 if position.get('group_id') == group_id and position.get('status') == 'active':
-                    correlation_count += 1
                     symbol = position['symbol']
                     order_id = position.get('order_id', 'N/A')
                     
@@ -184,10 +184,33 @@ class CorrelationManager:
                                 position['order_id'] = order_id
                                 break
                     
+                    # ตรวจสอบ PnL และแยกเป็นกำไร/ขาดทุน
+                    pnl = self._get_position_pnl(position)
+                    if pnl >= 0:  # กำไร
+                        profit_correlations.append(position)
+                    else:  # ขาดทุน
+                        losing_correlations.append(position)
+            
+            # แสดงไม้ correlation ที่กำไร
+            if profit_correlations:
+                self.logger.info("🟢 PROFIT CORRELATION POSITIONS:")
+                for i, position in enumerate(profit_correlations, 1):
+                    symbol = position['symbol']
+                    order_id = position.get('order_id', 'N/A')
+                    pnl = self._get_position_pnl(position)
+                    self.logger.info(f"   {i}. {symbol} (Order: {order_id}) - 💰 PROFIT: ${pnl:.2f}")
+            
+            # แสดงไม้ correlation ที่ขาดทุน
+            if losing_correlations:
+                self.logger.info("🔴 LOSING CORRELATION POSITIONS:")
+                for i, position in enumerate(losing_correlations, 1):
+                    symbol = position['symbol']
+                    order_id = position.get('order_id', 'N/A')
+                    pnl = self._get_position_pnl(position)
                     is_hedged = self._is_position_hedged(position)
                     status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
                     
-                    self.logger.info(f"   {correlation_count}. {symbol} (Order: {order_id}) - {status}")
+                    self.logger.info(f"   {i}. {symbol} (Order: {order_id}) - {status} | PnL: ${pnl:.2f}")
                     
                     if not is_hedged:
                         # แสดงเงื่อนไขการแก้ไม้
@@ -200,19 +223,17 @@ class CorrelationManager:
                         self.logger.info(f"      Risk: {risk_per_lot:.2%} (≥1.5%) {risk_status}")
                         self.logger.info(f"      Distance: {price_distance:.1f} pips (≥10) {distance_status}")
             
-            if correlation_count == 0:
-                self.logger.info("   No existing correlation positions")
+            # ถ้าไม่มีไม้ correlation
+            if not profit_correlations and not losing_correlations:
+                self.logger.info("🔄 EXISTING CORRELATION POSITIONS: None")
             
             # สรุปสถานะ
-            total_positions = len(losing_pairs) + correlation_count
-            hedged_count = sum(1 for pair in losing_pairs if self._is_position_hedged(pair))
-            hedged_count += sum(1 for position in self.recovery_positions.values() 
-                              if position.get('group_id') == group_id and 
-                              position.get('status') == 'active' and 
-                              self._is_position_hedged(position))
+            total_losing_positions = len(losing_positions) + len(losing_correlations)
+            hedged_count = sum(1 for pair in losing_positions if self._is_position_hedged(pair))
+            hedged_count += sum(1 for position in losing_correlations if self._is_position_hedged(position))
             
             self.logger.info("-" * 50)
-            self.logger.info(f"📈 SUMMARY: {hedged_count}/{total_positions} positions hedged")
+            self.logger.info(f"📈 SUMMARY: {hedged_count}/{total_losing_positions} losing positions hedged")
             self.logger.info("=" * 80)
             
         except Exception as e:
