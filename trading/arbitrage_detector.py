@@ -249,7 +249,7 @@ class TriangleArbitrageDetector:
         while self.is_running:
             try:
                 loop_count += 1
-                self.logger.debug(f"🔄 Trading loop #{loop_count}")
+                self.logger.info(f"🔄 Trading loop #{loop_count} - Checking system status...")
                 
                 # ตรวจสอบว่ามีกลุ่มที่เปิดอยู่จริงหรือไม่
                 if len(self.active_groups) > 0:
@@ -277,6 +277,7 @@ class TriangleArbitrageDetector:
                             self._save_active_groups()
                     
                     if has_valid_groups:
+                        self.logger.info(f"📊 Found {len(self.active_groups)} active groups - monitoring positions...")
                         time.sleep(30.0)  # รอ 30 วินาที (ลด log ที่ไม่จำเป็น)
                         continue
                     else:
@@ -285,9 +286,11 @@ class TriangleArbitrageDetector:
                         self._reset_group_data()
                 
                 # ออกไม้ทันทีตามคู่เงินที่กำหนด
+                self.logger.info("🎯 No active groups - attempting to send new orders...")
                 self._send_simple_orders()
                 
                 # รอ 30 วินาทีก่อนตรวจสอบอีกครั้ง (ลด log ที่ไม่จำเป็น)
+                self.logger.info("⏰ Waiting 30 seconds before next check...")
                 time.sleep(30.0)
                     
             except Exception as e:
@@ -301,7 +304,10 @@ class TriangleArbitrageDetector:
     def _send_simple_orders(self):
         """ส่งออเดอร์ง่ายๆ ตามคู่เงินที่กำหนด - ใช้ balance-based lot sizing"""
         try:
+            self.logger.info("🔍 Starting _send_simple_orders...")
+            
             # ดึง balance จาก broker
+            self.logger.info("🔍 Getting account balance...")
             balance = self.broker.get_account_balance()
             if not balance:
                 self.logger.error("❌ Cannot get account balance - using default lot size")
@@ -310,6 +316,7 @@ class TriangleArbitrageDetector:
             self.logger.info(f"💰 Account Balance: {balance:.2f} USD")
             
             # คำนวณ lot sizes ให้ pip value เท่ากัน + scale ตาม balance
+            self.logger.info("🔍 Calculating lot sizes...")
             triangle_symbols = ['EURUSD', 'GBPUSD', 'EURGBP']
             lot_sizes = TradingCalculations.get_uniform_triangle_lots(
                 triangle_symbols=triangle_symbols,
@@ -321,11 +328,13 @@ class TriangleArbitrageDetector:
             self.logger.info(f"📊 Calculated lot sizes: {lot_sizes}")
             
             # สร้างกลุ่มใหม่
+            self.logger.info("🔍 Creating new group...")
             self.group_counter += 1
             group_id = f"simple_group_{self.group_counter}"
             self.logger.info(f"🆕 Creating new group: {group_id} (Counter: {self.group_counter})")
             
             # สร้างข้อมูลกลุ่ม
+            self.logger.info("🔍 Setting up group data...")
             group_data = {
                 'group_id': group_id,
                 'triangle': ('EURUSD', 'GBPUSD', 'EURGBP'),
@@ -338,6 +347,7 @@ class TriangleArbitrageDetector:
             }
             
             # ส่งออเดอร์ 3 คู่พร้อมกัน
+            self.logger.info("🔍 Preparing to send orders...")
             orders_sent = 0
             order_results = []
             
@@ -349,12 +359,15 @@ class TriangleArbitrageDetector:
             ]
             
             # ส่งออเดอร์พร้อมกันด้วย threading
+            self.logger.info("🔍 Setting up threading for order execution...")
             threads = []
             results = [None] * 3
             
             def send_single_order(order_data, result_index):
                 """ส่งออเดอร์เดี่ยวใน thread แยก"""
                 try:
+                    self.logger.info(f"🔍 Thread {result_index}: Starting order for {order_data['symbol']}")
+                    
                     # สร้าง comment
                     group_number = group_id.split('_')[-1]
                     comment = f"SIMPLE_G{group_number}_{order_data['symbol']}"
@@ -362,6 +375,7 @@ class TriangleArbitrageDetector:
                     # ใช้ lot size ที่คำนวณแล้ว
                     lot_size = order_data.get('lot_size', 0.01)
                     
+                    self.logger.info(f"🔍 Thread {result_index}: Sending {order_data['symbol']} {order_data['direction']} {lot_size} lot")
                     result = self.broker.place_order(
                         symbol=order_data['symbol'],
                         order_type=order_data['direction'],
@@ -399,6 +413,7 @@ class TriangleArbitrageDetector:
             
             # เริ่มส่งออเดอร์พร้อมกัน
             start_time = datetime.now()
+            self.logger.info("🔍 Starting order threads...")
             for i, order_data in enumerate(orders_to_send):
                 thread = threading.Thread(
                     target=send_single_order, 
@@ -409,8 +424,11 @@ class TriangleArbitrageDetector:
                 thread.start()
             
             # รอให้ออเดอร์ทั้งหมดเสร็จสิ้น
+            self.logger.info("🔍 Waiting for all threads to complete...")
             for thread in threads:
                 thread.join(timeout=5.0)
+            
+            self.logger.info("🔍 All threads completed, processing results...")
             
             end_time = datetime.now()
             total_execution_time = (end_time - start_time).total_seconds() * 1000
