@@ -277,7 +277,7 @@ class TriangleArbitrageDetector:
                             self._save_active_groups()
                     
                     if has_valid_groups:
-                        time.sleep(10.0)  # รอ 10 วินาที
+                        time.sleep(30.0)  # รอ 30 วินาที (ลด log ที่ไม่จำเป็น)
                         continue
                     else:
                         # ถ้าไม่มี Group ที่เปิดอยู่จริง ให้ reset ข้อมูล
@@ -287,8 +287,8 @@ class TriangleArbitrageDetector:
                 # ออกไม้ทันทีตามคู่เงินที่กำหนด
                 self._send_simple_orders()
                 
-                # รอ 5 วินาทีก่อนตรวจสอบอีกครั้ง
-                time.sleep(5.0)
+                # รอ 30 วินาทีก่อนตรวจสอบอีกครั้ง (ลด log ที่ไม่จำเป็น)
+                time.sleep(30.0)
                     
             except Exception as e:
                 self.logger.error(f"Trading error: {e}")

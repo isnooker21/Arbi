@@ -129,10 +129,10 @@ class CorrelationManager:
                     risk_per_lot = self._calculate_risk_per_lot(pair)
                     price_distance = self._calculate_price_distance(pair)
                     
-                    risk_status = "✅" if risk_per_lot >= 0.05 else "❌"
+                    risk_status = "✅" if risk_per_lot >= 0.015 else "❌"
                     distance_status = "✅" if price_distance >= 10 else "❌"
                     
-                    self.logger.info(f"      Risk: {risk_per_lot:.2%} (≥5%) {risk_status}")
+                    self.logger.info(f"      Risk: {risk_per_lot:.2%} (≥1.5%) {risk_status}")
                     self.logger.info(f"      Distance: {price_distance:.1f} pips (≥10) {distance_status}")
             
             # แสดงไม้ correlation ที่เกี่ยวข้องกับกลุ่มนี้
@@ -153,10 +153,10 @@ class CorrelationManager:
                         risk_per_lot = self._calculate_risk_per_lot(position)
                         price_distance = self._calculate_price_distance(position)
                         
-                        risk_status = "✅" if risk_per_lot >= 0.05 else "❌"
+                        risk_status = "✅" if risk_per_lot >= 0.015 else "❌"
                         distance_status = "✅" if price_distance >= 10 else "❌"
                         
-                        self.logger.info(f"      Risk: {risk_per_lot:.2%} (≥5%) {risk_status}")
+                        self.logger.info(f"      Risk: {risk_per_lot:.2%} (≥1.5%) {risk_status}")
                         self.logger.info(f"      Distance: {price_distance:.1f} pips (≥10) {distance_status}")
             
             if correlation_count == 0:
@@ -294,7 +294,7 @@ class CorrelationManager:
             price_distance = self._calculate_price_distance(losing_pair)
             
             self.logger.info(f"🔍 Checking hedging conditions for {symbol} (Order: {order_id}):")
-            self.logger.info(f"   Risk: {risk_per_lot:.2%} (need ≥5%) {'✅' if risk_per_lot >= 0.05 else '❌'}")
+            self.logger.info(f"   Risk: {risk_per_lot:.2%} (need ≥1.5%) {'✅' if risk_per_lot >= 0.015 else '❌'}")
             self.logger.info(f"   Distance: {price_distance:.1f} pips (need ≥10) {'✅' if price_distance >= 10 else '❌'}")
             
             # แสดงข้อมูลการคำนวณให้ชัดเจน
@@ -314,7 +314,7 @@ class CorrelationManager:
                             self.logger.info(f"   🔍 Debug: Entry={entry_price:.5f}, Current={current_price:.5f}, Calc={calc_distance:.1f} pips")
                         break
             
-            if risk_per_lot < 0.05 or price_distance < 10:
+            if risk_per_lot < 0.015 or price_distance < 10:  # ลดจาก 5% เป็น 1.5%
                 self.logger.info(f"⏳ {symbol}: Conditions not met - waiting")
                 return
             
@@ -501,8 +501,8 @@ class CorrelationManager:
             # เงื่อนไข 1: Risk 5% ต่อ lot
             risk_per_lot = abs(position_pnl) / lot_size
             
-            if risk_per_lot < 0.05:  # risk น้อยกว่า 5%
-                self.logger.debug(f"⏳ {symbol} risk too low ({risk_per_lot:.2%}) - Waiting for 5%")
+            if risk_per_lot < 0.015:  # risk น้อยกว่า 1.5%
+                self.logger.debug(f"⏳ {symbol} risk too low ({risk_per_lot:.2%}) - Waiting for 1.5%")
                 return False
             
             # เงื่อนไข 2: ระยะห่าง 10 pips
@@ -552,10 +552,10 @@ class CorrelationManager:
             price_distance = self._calculate_price_distance(recovery_pair)
             
             self.logger.info(f"🔍 Checking hedging conditions for {symbol} (Order: {order_id}):")
-            self.logger.info(f"   Risk: {risk_per_lot:.2%} (need ≥5%) {'✅' if risk_per_lot >= 0.05 else '❌'}")
+            self.logger.info(f"   Risk: {risk_per_lot:.2%} (need ≥1.5%) {'✅' if risk_per_lot >= 0.015 else '❌'}")
             self.logger.info(f"   Distance: {price_distance:.1f} pips (need ≥10) {'✅' if price_distance >= 10 else '❌'}")
             
-            if risk_per_lot < 0.05 or price_distance < 10:
+            if risk_per_lot < 0.015 or price_distance < 10:  # ลดจาก 5% เป็น 1.5%
                 self.logger.info(f"⏳ {symbol}: Conditions not met - waiting")
                 return
             
