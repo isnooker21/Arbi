@@ -248,14 +248,14 @@ class AdaptiveEngine:
             if not free_margin:
                 free_margin = balance * 0.9  # Assume 90% of balance is available
             
-            self.logger.info(f"💰 Account Status - Balance: {balance:.2f}, Equity: {equity:.2f}, Free Margin: {free_margin:.2f}")
+            # self.logger.info(f"💰 Account Status - Balance: {balance:.2f}, Equity: {equity:.2f}, Free Margin: {free_margin:.2f}")  # DISABLED - too verbose
             
             # Calculate balance multiplier for uniform pip value
             base_balance = 10000.0
             balance_multiplier = balance / base_balance
             target_pip_value = 10.0 * balance_multiplier
             
-            self.logger.info(f"📊 Uniform pip value: Base=${10.0:.2f}, Multiplier={balance_multiplier:.2f}x, Target=${target_pip_value:.2f}")
+            # self.logger.info(f"📊 Uniform pip value: Base=${10.0:.2f}, Multiplier={balance_multiplier:.2f}x, Target=${target_pip_value:.2f}")  # DISABLED - too verbose
             
             # Update arbitrage detector with balance information
             if hasattr(self.arbitrage_detector, 'update_adaptive_parameters'):
@@ -277,7 +277,7 @@ class AdaptiveEngine:
                     'balance_multiplier': balance_multiplier
                 })
             
-            self.logger.info(f"📊 Position sizing updated: Balance=${balance:.2f}, Target Pip Value=${target_pip_value:.2f}")
+            # self.logger.info(f"📊 Position sizing updated: Balance=${balance:.2f}, Target Pip Value=${target_pip_value:.2f}")  # DISABLED - too verbose
             
         except Exception as e:
             self.logger.error(f"Error updating position sizing: {e}")

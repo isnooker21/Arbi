@@ -201,6 +201,8 @@ class CorrelationManager:
         """คำนวณ risk ต่อ lot"""
         try:
             order_id = position.get('order_id')
+            symbol = position.get('symbol')
+            
             if not order_id:
                 return 0.0
             
@@ -216,9 +218,13 @@ class CorrelationManager:
                     break
             
             if lot_size <= 0:
+                self.logger.warning(f"Invalid lot size for {symbol} (Order: {order_id})")
                 return 0.0
             
-            return abs(position_pnl) / lot_size
+            risk_per_lot = abs(position_pnl) / lot_size
+            self.logger.debug(f"Risk calculation for {symbol}: PnL={position_pnl:.2f}, Lot={lot_size:.2f}, Risk={risk_per_lot:.2%}")
+            
+            return risk_per_lot
             
         except Exception as e:
             self.logger.error(f"Error calculating risk per lot: {e}")
@@ -228,14 +234,27 @@ class CorrelationManager:
         """คำนวณระยะห่างราคาเป็น pips"""
         try:
             symbol = position.get('symbol')
-            entry_price = position.get('entry_price', 0)
+            order_id = position.get('order_id')
             
-            if not symbol or entry_price <= 0:
+            if not symbol or not order_id:
+                return 0.0
+            
+            # ดึง entry_price จาก broker API แทนที่จะใช้จาก position data
+            entry_price = 0.0
+            all_positions = self.broker.get_all_positions()
+            for pos in all_positions:
+                if pos['ticket'] == order_id:
+                    entry_price = pos['price_open']
+                    break
+            
+            if entry_price <= 0:
+                self.logger.warning(f"Could not get entry price for {symbol} (Order: {order_id})")
                 return 0.0
             
             # ดึงราคาปัจจุบัน
             current_price = self.broker.get_current_price(symbol)
             if not current_price or current_price <= 0:
+                self.logger.warning(f"Could not get current price for {symbol}")
                 return 0.0
             
             # คำนวณ price distance ตามประเภทคู่เงิน
@@ -243,6 +262,8 @@ class CorrelationManager:
                 price_distance = abs(current_price - entry_price) * 100
             else:
                 price_distance = abs(current_price - entry_price) * 10000
+            
+            self.logger.debug(f"Price distance calculation for {symbol}: Entry={entry_price:.5f}, Current={current_price:.5f}, Distance={price_distance:.1f} pips")
             
             return price_distance
             
@@ -268,6 +289,23 @@ class CorrelationManager:
             self.logger.info(f"🔍 Checking hedging conditions for {symbol} (Order: {order_id}):")
             self.logger.info(f"   Risk: {risk_per_lot:.2%} (need ≥5%) {'✅' if risk_per_lot >= 0.05 else '❌'}")
             self.logger.info(f"   Distance: {price_distance:.1f} pips (need ≥10) {'✅' if price_distance >= 10 else '❌'}")
+            
+            # แสดงข้อมูลการคำนวณให้ชัดเจน
+            if price_distance == 0.0:
+                self.logger.warning(f"   ⚠️ Price distance is 0.0 - checking calculation...")
+                # ดึงข้อมูลจาก broker อีกครั้งเพื่อ debug
+                all_positions = self.broker.get_all_positions()
+                for pos in all_positions:
+                    if pos['ticket'] == order_id:
+                        entry_price = pos['price_open']
+                        current_price = self.broker.get_current_price(symbol)
+                        if current_price and entry_price:
+                            if 'JPY' in symbol:
+                                calc_distance = abs(current_price - entry_price) * 100
+                            else:
+                                calc_distance = abs(current_price - entry_price) * 10000
+                            self.logger.info(f"   🔍 Debug: Entry={entry_price:.5f}, Current={current_price:.5f}, Calc={calc_distance:.1f} pips")
+                        break
             
             if risk_per_lot < 0.05 or price_distance < 10:
                 self.logger.info(f"⏳ {symbol}: Conditions not met - waiting")

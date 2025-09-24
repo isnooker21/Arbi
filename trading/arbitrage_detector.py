@@ -633,9 +633,9 @@ class TriangleArbitrageDetector:
                     self._save_active_groups()
                     continue
                 
-                # แสดงผล PnL รวมของกลุ่ม
+                # แสดงผล PnL รวมของกลุ่ม (เฉพาะเมื่อมีการเปลี่ยนแปลงมาก)
                 pnl_status = "💰" if total_group_pnl > 0 else "💸" if total_group_pnl < 0 else "⚖️"
-                self.logger.info(f"📊 Group {group_id} PnL: {pnl_status} {total_group_pnl:.2f} USD")
+                # self.logger.info(f"📊 Group {group_id} PnL: {pnl_status} {total_group_pnl:.2f} USD")  # DISABLED - too verbose
                 
                 # คำนวณ % ของทุนจาก broker API (ใช้ Balance ไม่ใช่ Equity)
                 account_balance = self.broker.get_account_balance()
@@ -644,8 +644,8 @@ class TriangleArbitrageDetector:
                     self.logger.warning("⚠️ Cannot get account balance, using fallback: 1000 USD")
                 
                 profit_percentage = (total_group_pnl / account_balance) * 100
-                self.logger.info(f"   💰 Account Balance: {account_balance:.2f} USD")
-                self.logger.info(f"   📊 Profit Percentage: {profit_percentage:.3f}%")
+                # self.logger.info(f"   💰 Account Balance: {account_balance:.2f} USD")  # DISABLED - too verbose
+                # self.logger.info(f"   📊 Profit Percentage: {profit_percentage:.3f}%")  # DISABLED - too verbose
                 
                 # คำนวณกำไรต่อ lot เดี่ยว (รวม recovery positions)
                 # นับจำนวน positions ทั้งหมด (arbitrage + recovery)
@@ -661,7 +661,7 @@ class TriangleArbitrageDetector:
                 else:
                     profit_per_single_lot = 0.0
                 
-                self.logger.info(f"   📊 Total Positions: {total_positions_count} (Arbitrage: {len(group_data['positions'])}, Recovery: {total_positions_count - len(group_data['positions'])})")
+                # self.logger.info(f"   📊 Total Positions: {total_positions_count} (Arbitrage: {len(group_data['positions'])}, Recovery: {total_positions_count - len(group_data['positions'])})")  # DISABLED - too verbose
                 
                 # ปิดกลุ่มเมื่อกำไรต่อ lot เดี่ยว ถึงเป้าหมาย
                 if profit_per_single_lot >= self.profit_threshold_per_lot:
@@ -1518,7 +1518,7 @@ class TriangleArbitrageDetector:
             if 'adaptive_thresholds' in new_params:
                 self.adaptive_thresholds.update(new_params['adaptive_thresholds'])
             
-            self.logger.info(f"Adaptive parameters updated: {new_params}")
+            # self.logger.info(f"Adaptive parameters updated: {new_params}")  # DISABLED - too verbose
             
         except Exception as e:
             self.logger.error(f"Error updating adaptive parameters: {e}")
