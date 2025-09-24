@@ -986,6 +986,8 @@ class TriangleArbitrageDetector:
             total_recovery_closed = 0
             if self.correlation_manager:
                 total_recovery_closed = self._close_recovery_positions_for_group(group_id)
+                # ล้างข้อมูลการแก้ไม้สำหรับกลุ่มนี้
+                self.correlation_manager.clear_hedged_data_for_group(group_id)
             
             # ลบกลุ่มออกจาก active_groups
             self._remove_group_data(group_id)
