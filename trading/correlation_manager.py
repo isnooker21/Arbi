@@ -114,47 +114,62 @@ class CorrelationManager:
             self.logger.info("📊 GROUP HEDGING STATUS:")
             self.logger.info("-" * 50)
             
+            # ดึงข้อมูลจาก MT5 จริงๆ แทนการใช้ข้อมูลที่ส่งมา
+            all_positions = self.broker.get_all_positions()
+            group_positions = []
+            
+            # หาไม้ที่เกี่ยวข้องกับกลุ่มนี้จาก MT5
+            for pos in all_positions:
+                comment = pos.get('comment', '')
+                if f'SIMPLE_G{group_id.split("_")[-1]}_' in comment:
+                    group_positions.append({
+                        'symbol': pos['symbol'],
+                        'order_id': pos['ticket'],
+                        'lot_size': pos['volume'],
+                        'entry_price': pos['price'],
+                        'pnl': pos['profit'],
+                        'comment': comment
+                    })
+            
             # แสดงไม้ arbitrage ทั้งหมด (แยกเป็นกำไรและขาดทุน)
             losing_positions = []
             profit_positions = []
             
-            for pair in losing_pairs:
-                symbol = pair['symbol']
-                order_id = pair.get('order_id', 'N/A')
-                
-                # ตรวจสอบ PnL ก่อน
-                pnl = self._get_position_pnl(pair)
+            for pos in group_positions:
+                symbol = pos['symbol']
+                order_id = pos['order_id']
+                pnl = pos['pnl']
                 
                 if pnl < 0:  # ขาดทุน
-                    losing_positions.append(pair)
+                    losing_positions.append(pos)
                 else:  # กำไร
-                    profit_positions.append(pair)
+                    profit_positions.append(pos)
             
             # แสดงไม้ที่กำไร
             if profit_positions:
                 self.logger.info("🟢 PROFIT ARBITRAGE POSITIONS:")
-                for i, pair in enumerate(profit_positions, 1):
-                    symbol = pair['symbol']
-                    order_id = pair.get('order_id', 'N/A')
-                    pnl = self._get_position_pnl(pair)
+                for i, pos in enumerate(profit_positions, 1):
+                    symbol = pos['symbol']
+                    order_id = pos['order_id']
+                    pnl = pos['pnl']
                     self.logger.info(f"   {i}. {symbol} (Order: {order_id}) - 💰 PROFIT: ${pnl:.2f}")
             
             # แสดงไม้ที่ขาดทุน
             if losing_positions:
                 self.logger.info("🔴 LOSING ARBITRAGE POSITIONS:")
-                for i, pair in enumerate(losing_positions, 1):
-                    symbol = pair['symbol']
-                    order_id = pair.get('order_id', 'N/A')
-                    pnl = self._get_position_pnl(pair)
-                    is_hedged = self._is_position_hedged(pair)
+                for i, pos in enumerate(losing_positions, 1):
+                    symbol = pos['symbol']
+                    order_id = pos['order_id']
+                    pnl = pos['pnl']
+                    is_hedged = self._is_position_hedged(pos)
                     status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
                     
                     self.logger.info(f"   {i}. {symbol} (Order: {order_id}) - {status} | PnL: ${pnl:.2f}")
                     
                     if not is_hedged:
                         # แสดงเงื่อนไขการแก้ไม้
-                        risk_per_lot = self._calculate_risk_per_lot(pair)
-                        price_distance = self._calculate_price_distance(pair)
+                        risk_per_lot = self._calculate_risk_per_lot(pos)
+                        price_distance = self._calculate_price_distance(pos)
                         
                         risk_status = "✅" if risk_per_lot >= 0.015 else "❌"
                         distance_status = "✅" if price_distance >= 10 else "❌"
@@ -164,58 +179,55 @@ class CorrelationManager:
             else:
                 self.logger.info("🔴 LOSING ARBITRAGE POSITIONS: None")
             
-            # แสดงไม้ correlation ที่เกี่ยวข้องกับกลุ่มนี้ (แยกเป็นกำไรและขาดทุน)
+            # แสดงไม้ correlation ที่เกี่ยวข้องกับกลุ่มนี้ (ดึงจาก MT5 จริงๆ)
             profit_correlations = []
             losing_correlations = []
             
-            for recovery_id, position in self.recovery_positions.items():
-                if position.get('group_id') == group_id and position.get('status') == 'active':
-                    symbol = position['symbol']
-                    order_id = position.get('order_id', 'N/A')
-                    
-                    # ถ้า order_id เป็น N/A ให้ลองหาจาก broker
-                    if order_id == 'N/A':
-                        # หา order_id จาก broker โดยใช้ symbol และ comment
-                        all_positions = self.broker.get_all_positions()
-                        for pos in all_positions:
-                            if pos['symbol'] == symbol and 'RECOVERY_G' in pos.get('comment', ''):
-                                order_id = pos['ticket']
-                                # อัพเดท order_id ใน recovery_positions
-                                position['order_id'] = order_id
-                                break
+            # หาไม้ correlation จาก MT5 โดยใช้ comment
+            for pos in all_positions:
+                comment = pos.get('comment', '')
+                if f'RECOVERY_G{group_id.split("_")[-1]}_' in comment:
+                    correlation_pos = {
+                        'symbol': pos['symbol'],
+                        'order_id': pos['ticket'],
+                        'lot_size': pos['volume'],
+                        'entry_price': pos['price'],
+                        'pnl': pos['profit'],
+                        'comment': comment
+                    }
                     
                     # ตรวจสอบ PnL และแยกเป็นกำไร/ขาดทุน
-                    pnl = self._get_position_pnl(position)
+                    pnl = pos['profit']
                     if pnl >= 0:  # กำไร
-                        profit_correlations.append(position)
+                        profit_correlations.append(correlation_pos)
                     else:  # ขาดทุน
-                        losing_correlations.append(position)
+                        losing_correlations.append(correlation_pos)
             
             # แสดงไม้ correlation ที่กำไร
             if profit_correlations:
                 self.logger.info("🟢 PROFIT CORRELATION POSITIONS:")
-                for i, position in enumerate(profit_correlations, 1):
-                    symbol = position['symbol']
-                    order_id = position.get('order_id', 'N/A')
-                    pnl = self._get_position_pnl(position)
+                for i, pos in enumerate(profit_correlations, 1):
+                    symbol = pos['symbol']
+                    order_id = pos['order_id']
+                    pnl = pos['pnl']
                     self.logger.info(f"   {i}. {symbol} (Order: {order_id}) - 💰 PROFIT: ${pnl:.2f}")
             
             # แสดงไม้ correlation ที่ขาดทุน
             if losing_correlations:
                 self.logger.info("🔴 LOSING CORRELATION POSITIONS:")
-                for i, position in enumerate(losing_correlations, 1):
-                    symbol = position['symbol']
-                    order_id = position.get('order_id', 'N/A')
-                    pnl = self._get_position_pnl(position)
-                    is_hedged = self._is_position_hedged(position)
+                for i, pos in enumerate(losing_correlations, 1):
+                    symbol = pos['symbol']
+                    order_id = pos['order_id']
+                    pnl = pos['pnl']
+                    is_hedged = self._is_position_hedged(pos)
                     status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
                     
                     self.logger.info(f"   {i}. {symbol} (Order: {order_id}) - {status} | PnL: ${pnl:.2f}")
                     
                     if not is_hedged:
                         # แสดงเงื่อนไขการแก้ไม้
-                        risk_per_lot = self._calculate_risk_per_lot(position)
-                        price_distance = self._calculate_price_distance(position)
+                        risk_per_lot = self._calculate_risk_per_lot(pos)
+                        price_distance = self._calculate_price_distance(pos)
                         
                         risk_status = "✅" if risk_per_lot >= 0.015 else "❌"
                         distance_status = "✅" if price_distance >= 10 else "❌"
