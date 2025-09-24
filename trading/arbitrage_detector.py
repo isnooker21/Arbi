@@ -1025,9 +1025,13 @@ class TriangleArbitrageDetector:
                 self.logger.info(f"   🔄 Comments removed: {comments_to_remove}")
             
             # ปิด recovery positions ที่เกี่ยวข้องกับกลุ่มนี้
-            total_recovery_closed = 0
+            correlation_pnl = 0.0
+            recovery_positions_closed = 0
             if self.correlation_manager:
-                total_recovery_closed = self._close_recovery_positions_for_group(group_id)
+                correlation_pnl = self._close_recovery_positions_for_group(group_id)
+                # นับจำนวน recovery positions ที่ปิด (ใช้ข้อมูลจาก log)
+                recovery_positions_closed = len([r for r in self.correlation_manager.recovery_positions.values() 
+                                               if r.get('status') == 'closed' and r.get('group_id') == group_id])
                 # ล้างข้อมูลการแก้ไม้สำหรับกลุ่มนี้
                 self.correlation_manager.clear_hedged_data_for_group(group_id)
             
@@ -1054,13 +1058,18 @@ class TriangleArbitrageDetector:
             # Reset comment เพื่อให้สามารถใช้ comment เดิมได้อีกครั้ง
             self._reset_comments_for_group(group_id)
             
+            # คำนวณ PnL รวม (Arbitrage + Correlation)
+            total_combined_pnl = total_pnl + correlation_pnl
+            
             # แสดงผล PnL รวมของกลุ่ม
-            pnl_status = "💰" if total_pnl > 0 else "💸" if total_pnl < 0 else "⚖️"
+            pnl_status = "💰" if total_combined_pnl > 0 else "💸" if total_combined_pnl < 0 else "⚖️"
             self.logger.info(f"✅ Group {group_id} closed successfully")
             self.logger.info(f"   🚀 Arbitrage orders closed: {orders_closed}/{len(positions_to_close)}")
-            self.logger.info(f"   🔄 Recovery positions closed: {total_recovery_closed}")
-            self.logger.info(f"   📊 Total positions closed: {orders_closed + total_recovery_closed}")
-            self.logger.info(f"   {pnl_status} Total PnL: {total_pnl:.2f} USD")
+            self.logger.info(f"   🔄 Recovery positions closed: {recovery_positions_closed}")
+            self.logger.info(f"   📊 Total positions closed: {orders_closed + recovery_positions_closed}")
+            self.logger.info(f"   💰 Arbitrage PnL: {total_pnl:.2f} USD")
+            self.logger.info(f"   🔄 Correlation PnL: {correlation_pnl:.2f} USD")
+            self.logger.info(f"   {pnl_status} Total Combined PnL: {total_combined_pnl:.2f} USD")
             self.logger.info(f"   📊 คู่เงินที่ใช้ได้แล้ว: {self.used_currency_pairs}")
             self.logger.info(f"   🔄 Comments reset for group {group_id}")
             self.logger.info("🔄 เริ่มตรวจสอบ arbitrage ใหม่")
@@ -1069,16 +1078,17 @@ class TriangleArbitrageDetector:
             self.logger.error(f"Error closing group {group_id}: {e}")
     
     def _close_recovery_positions_for_group(self, group_id: str):
-        """ปิด recovery positions ที่เกี่ยวข้องกับกลุ่ม arbitrage"""
+        """ปิด recovery positions ที่เกี่ยวข้องกับกลุ่ม arbitrage และคืนค่า PnL รวม"""
         try:
             if not self.correlation_manager:
-                return
+                return 0.0
             
             # หา recovery positions ที่เกี่ยวข้องกับกลุ่มนี้
             group_data = self.active_groups.get(group_id, {})
             group_pairs = set(group_data.get('triangle', []))
             
             recovery_positions_to_close = []
+            total_correlation_pnl = 0.0
             
             # ตรวจสอบ recovery positions ทั้งหมด
             for recovery_id, recovery_data in self.correlation_manager.recovery_positions.items():
@@ -1100,12 +1110,14 @@ class TriangleArbitrageDetector:
                     recovery_positions_to_close.append(recovery_id)
                     self.logger.info(f"🔍 Found recovery position {recovery_id} for group {group_id} (original: {original_symbol})")
             
-            # ปิด recovery positions ที่เกี่ยวข้อง
+            # ปิด recovery positions ที่เกี่ยวข้องและเก็บ PnL
             if recovery_positions_to_close:
                 self.logger.info(f"🔄 Closing {len(recovery_positions_to_close)} recovery positions for group {group_id}")
                 for recovery_id in recovery_positions_to_close:
                     self.logger.info(f"   🔄 Closing recovery position {recovery_id}")
-                    self.correlation_manager._close_recovery_position(recovery_id)
+                    pnl = self.correlation_manager._close_recovery_position(recovery_id)
+                    if pnl is not None:
+                        total_correlation_pnl += pnl
             
             # ปิด recovery positions ทั้งหมดที่เกี่ยวข้องกับกลุ่มนี้ (เพิ่มเติม)
             # ตรวจสอบ recovery positions ที่มี group_id ตรงกัน
@@ -1114,22 +1126,25 @@ class TriangleArbitrageDetector:
                 if recovery_data.get('group_id') == group_id and recovery_id not in recovery_positions_to_close:
                     additional_recovery_positions.append(recovery_id)
             
-            # ปิด recovery positions เพิ่มเติม
+            # ปิด recovery positions เพิ่มเติมและเก็บ PnL
             if additional_recovery_positions:
                 self.logger.info(f"🔄 Closing {len(additional_recovery_positions)} additional recovery positions for group {group_id}")
                 for recovery_id in additional_recovery_positions:
                     self.logger.info(f"   🔄 Closing additional recovery position {recovery_id}")
-                    self.correlation_manager._close_recovery_position(recovery_id)
+                    pnl = self.correlation_manager._close_recovery_position(recovery_id)
+                    if pnl is not None:
+                        total_correlation_pnl += pnl
             
             total_recovery_closed = len(recovery_positions_to_close) + len(additional_recovery_positions)
             if total_recovery_closed > 0:
                 self.logger.info(f"✅ Closed {total_recovery_closed} recovery positions for group {group_id}")
+                self.logger.info(f"   💰 Total Correlation PnL: {total_correlation_pnl:.2f} USD")
             
-            return total_recovery_closed
+            return total_correlation_pnl
             
         except Exception as e:
             self.logger.error(f"Error closing recovery positions for group {group_id}: {e}")
-            return 0
+            return 0.0
     
     def _reset_comments_for_group(self, group_id: str):
         """Reset comment สำหรับกลุ่มที่ปิดแล้ว"""

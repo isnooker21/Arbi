@@ -752,20 +752,17 @@ class CorrelationManager:
                 self.logger.warning(f"⚠️ {base_symbol} is not in arbitrage pairs, using all available pairs")
                 return self._find_correlation_pairs_for_any_symbol(base_symbol)
             
-            # Get all available pairs from broker
-            all_pairs = self.broker.get_available_pairs()
+            # ใช้เฉพาะคู่เงินเท่านั้น (ไม่รวม Ukoil, Gold, Silver, etc.)
+            all_pairs = [
+                'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'USDNZD',
+                'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY', 'CHFJPY', 'NZDJPY',
+                'EURCHF', 'GBPCHF', 'AUDCHF', 'CADCHF', 'NZDCHF',
+                'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'AUDNZD',
+                'EURNZD', 'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD',
+                'EURCAD', 'GBPCAD', 'USDCAD', 'AUDCAD', 'CADCHF'
+            ]
             
-            if not all_pairs:
-                self.logger.warning("No available pairs from broker, using fallback pairs")
-                # ใช้ fallback pairs สำหรับ correlation recovery
-                all_pairs = [
-                    'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'USDNZD',
-                    'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY', 'CHFJPY', 'NZDJPY',
-                    'EURCHF', 'GBPCHF', 'AUDCHF', 'CADCHF', 'NZDCHF',
-                    'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'AUDNZD',
-                    'EURNZD', 'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD',
-                    'EURCAD', 'GBPCAD', 'USDCAD', 'AUDCAD', 'CADCHF'
-                ]
+            self.logger.info(f"🔍 Using predefined currency pairs only (excluding commodities like Ukoil)")
             
             # หาคู่เงินที่มี correlation กับ base_symbol
             self.logger.info(f"🔍 Searching correlation pairs for {base_symbol} from {len(all_pairs)} available pairs")
@@ -778,6 +775,10 @@ class CorrelationManager:
                 
                 # ตรวจสอบว่าเป็นคู่ arbitrage หรือไม่ (ไม่ให้ซ้ำ)
                 if symbol in arbitrage_pairs:
+                    continue
+                
+                # ตรวจสอบว่าเป็นคู่เงินจริงๆ (ไม่ใช่ Ukoil, Gold, Silver, etc.)
+                if not self._is_currency_pair(symbol):
                     continue
                 
                 checked_pairs += 1
@@ -819,6 +820,39 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"Error finding optimal correlation pairs for {base_symbol}: {e}")
             return []
+    
+    def _is_currency_pair(self, symbol: str) -> bool:
+        """ตรวจสอบว่าเป็นคู่เงินจริงๆ หรือไม่ (ไม่ใช่ Ukoil, Gold, Silver, etc.)"""
+        try:
+            # รายการคู่เงินที่ยอมรับ
+            valid_currency_pairs = [
+                'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'USDNZD',
+                'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY', 'CHFJPY', 'NZDJPY',
+                'EURCHF', 'GBPCHF', 'AUDCHF', 'CADCHF', 'NZDCHF',
+                'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'AUDNZD',
+                'EURNZD', 'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD',
+                'EURCAD', 'GBPCAD', 'USDCAD', 'AUDCAD', 'CADCHF'
+            ]
+            
+            # ตรวจสอบว่าเป็นคู่เงินที่ยอมรับหรือไม่
+            if symbol in valid_currency_pairs:
+                return True
+            
+            # ตรวจสอบรูปแบบคู่เงิน (3 ตัวอักษร + 3 ตัวอักษร)
+            if len(symbol) == 6:
+                # ตรวจสอบว่าเป็นตัวอักษรทั้งหมด
+                if symbol.isalpha():
+                    # ตรวจสอบว่าไม่ใช่สินค้าโภคภัณฑ์
+                    commodities = ['UKOIL', 'USOIL', 'GOLD', 'SILVER', 'COPPER', 'PLATINUM', 'PALLADIUM']
+                    if symbol.upper() in commodities:
+                        return False
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Error checking if symbol is currency pair: {e}")
+            return False
     
     def _calculate_correlation_for_arbitrage_pair(self, base_symbol: str, target_symbol: str) -> float:
         """คำนวณ correlation ระหว่างคู่เงิน arbitrage กับคู่เงินอื่น"""
@@ -1148,17 +1182,17 @@ class CorrelationManager:
         try:
             correlation_candidates = []
             
-            # Get all available pairs from broker
-            all_pairs = self.broker.get_available_pairs()
-            if not all_pairs:
-                all_pairs = [
-                    'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
-                    'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY',
-                    'EURCHF', 'GBPCHF', 'USDCHF', 'AUDCHF', 'CADCHF',
-                    'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'EURNZD',
-                    'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD', 'CHFJPY',
-                    'EURCAD', 'GBPCAD'
-                ]
+            # ใช้เฉพาะคู่เงินเท่านั้น (ไม่รวม Ukoil, Gold, Silver, etc.)
+            all_pairs = [
+                'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
+                'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY',
+                'EURCHF', 'GBPCHF', 'USDCHF', 'AUDCHF', 'CADCHF',
+                'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'EURNZD',
+                'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD', 'CHFJPY',
+                'EURCAD', 'GBPCAD', 'USDNZD', 'AUDNZD', 'CADNZD'
+            ]
+            
+            self.logger.info(f"🔍 Using predefined currency pairs only (excluding commodities like Ukoil)")
             
             # คู่เงินที่กำหนดสำหรับ arbitrage
             arbitrage_pairs = ['EURUSD', 'GBPUSD', 'EURGBP']
@@ -1169,6 +1203,10 @@ class CorrelationManager:
                 
                 # ตรวจสอบว่าเป็นคู่ arbitrage หรือไม่ (ไม่ให้ซ้ำ)
                 if symbol in arbitrage_pairs:
+                    continue
+                
+                # ตรวจสอบว่าเป็นคู่เงินจริงๆ (ไม่ใช่ Ukoil, Gold, Silver, etc.)
+                if not self._is_currency_pair(symbol):
                     continue
                 
                 # คำนวณ correlation ตามประเภทคู่เงิน
@@ -1407,11 +1445,11 @@ class CorrelationManager:
             self.logger.error(f"Error checking recovery positions with status: {e}")
     
     def _close_recovery_position(self, recovery_id: str):
-        """ปิด recovery position"""
+        """ปิด recovery position และคืนค่า PnL"""
         try:
             if recovery_id not in self.recovery_positions:
                 self.logger.debug(f"Recovery position {recovery_id} not found in tracking data")
-                return
+                return 0.0
             
             position = self.recovery_positions[recovery_id]
             symbol = position['symbol']
@@ -1419,11 +1457,13 @@ class CorrelationManager:
             
             # ตรวจสอบว่าตำแหน่งยังเปิดอยู่จริงหรือไม่
             position_exists = False
+            pnl = 0.0
             if order_id:
                 all_positions = self.broker.get_all_positions()
                 for pos in all_positions:
                     if pos['ticket'] == order_id:
                         position_exists = True
+                        pnl = pos.get('profit', 0.0)
                         break
             
             if not position_exists:
@@ -1433,7 +1473,7 @@ class CorrelationManager:
                 position['close_reason'] = 'already_closed'
                 self._update_recovery_data()
                 self.logger.info(f"✅ Recovery position {symbol} was already closed - updated status")
-                return
+                return 0.0
             
             # ปิดออเดอร์
             success = self.broker.close_position(symbol)
@@ -1443,12 +1483,15 @@ class CorrelationManager:
                 position['closed_at'] = datetime.now()
                 position['close_reason'] = 'manual_close'
                 self._update_recovery_data()
-                self.logger.info(f"✅ Recovery position closed: {symbol}")
+                self.logger.info(f"✅ Recovery position closed: {symbol} - PnL: ${pnl:.2f}")
+                return pnl
             else:
                 self.logger.error(f"❌ Failed to close recovery position: {symbol}")
+                return 0.0
                     
         except Exception as e:
             self.logger.error(f"Error closing recovery position: {e}")
+            return 0.0
     
     def get_correlation_matrix(self) -> Dict:
         """Get correlation matrix"""
