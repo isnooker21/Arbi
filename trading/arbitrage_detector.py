@@ -323,6 +323,7 @@ class TriangleArbitrageDetector:
             # สร้างกลุ่มใหม่
             self.group_counter += 1
             group_id = f"simple_group_{self.group_counter}"
+            self.logger.info(f"🆕 Creating new group: {group_id} (Counter: {self.group_counter})")
             
             # สร้างข้อมูลกลุ่ม
             group_data = {
@@ -1001,6 +1002,11 @@ class TriangleArbitrageDetector:
                 self.recovery_in_progress.remove(group_id)
                 self.logger.info(f"🔄 Reset recovery status for group {group_id}")
             
+            # Reset group counter กลับไปเป็น 0 เมื่อปิดกลุ่มแล้ว
+            old_counter = self.group_counter
+            self.group_counter = 0
+            self.logger.info(f"🔄 Reset group counter from {old_counter} to 0 - next group will be simple_group_1")
+            
             # Reset ข้อมูลกลุ่มให้ถูกต้อง
             self._reset_group_data()
             
@@ -1134,7 +1140,11 @@ class TriangleArbitrageDetector:
                 self.used_currency_pairs.clear()
                 self.group_currency_mapping.clear()
                 self.recovery_in_progress.clear()
+                # Reset group counter เมื่อไม่มีกลุ่มที่เปิดอยู่
+                old_counter = self.group_counter
+                self.group_counter = 0
                 self.logger.info("🔄 Reset ข้อมูลกลุ่ม - คู่เงินและ comment ทั้งหมดปลดล็อคแล้ว")
+                self.logger.info(f"🔄 Reset group counter from {old_counter} to 0 - next group will be simple_group_1")
             else:
                 # ถ้ายังมีกลุ่มที่เปิดอยู่ ให้ตรวจสอบข้อมูลให้ถูกต้อง
                 current_used_pairs = set()
