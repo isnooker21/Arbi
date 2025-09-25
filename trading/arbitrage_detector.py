@@ -1024,11 +1024,9 @@ class TriangleArbitrageDetector:
                             price_distance = abs(current_price - entry_price) * 10000
                         
                         max_price_distance = max(max_price_distance, price_distance)
-                        self.logger.info(f"📊 {symbol}: Entry {entry_price:.5f}, Current {current_price:.5f}, Distance {price_distance:.1f} pips")
                 except Exception as e:
                     continue
             
-            self.logger.info(f"🔍 Max price distance: {max_price_distance:.1f} pips (required: 10 pips)")
             
             if max_price_distance < 10:  # ระยะห่างน้อยกว่า 10 จุด
                 self.logger.info(f"⏳ Group {triangle_type} price distance too small ({max_price_distance:.1f} pips) - Waiting for 10 pips")
@@ -1119,12 +1117,10 @@ class TriangleArbitrageDetector:
                             price_distance = abs(current_price - entry_price) * 10000
                         
                         max_price_distance = max(max_price_distance, price_distance)
-                        self.logger.info(f"📊 {symbol}: Entry {entry_price:.5f}, Current {current_price:.5f}, Distance {price_distance:.1f} pips")
                 except Exception as e:
                     self.logger.warning(f"Could not get price for {symbol}: {e}")
                     continue
             
-            self.logger.info(f"🔍 Max price distance: {max_price_distance:.1f} pips (required: 10 pips)")
             
             # ถ้าระยะห่างมากกว่า 10 pips และมีกำไร ให้ปิด Group
             if max_price_distance >= 10 and total_pnl > 0:
