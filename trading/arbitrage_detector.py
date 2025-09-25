@@ -540,8 +540,11 @@ class TriangleArbitrageDetector:
                 for result in results:
                     if result and result.get('success'):
                         comment = f"G{group_number}_{result['symbol']}"
-                        self.used_currency_pairs.add(comment)
-                        self.logger.debug(f"💾 Added comment to used_currency_pairs: {comment}")
+                        # เก็บคู่เงินใน used_currency_pairs สำหรับสามเหลี่ยมนี้
+                        if triangle_name not in self.used_currency_pairs:
+                            self.used_currency_pairs[triangle_name] = set()
+                        self.used_currency_pairs[triangle_name].add(result['symbol'])
+                        self.logger.debug(f"💾 Added {result['symbol']} to used_currency_pairs[{triangle_name}]")
                 
                 self._update_group_data(group_id, group_data)
                 self.logger.info(f"✅ Group {group_id} created successfully")
@@ -579,16 +582,16 @@ class TriangleArbitrageDetector:
             #         'error': 'Arbitrage already sent'
             #     }
             
-            # ตรวจสอบเพิ่มเติม: ตรวจสอบว่าคู่เงินนี้ถูกใช้แล้วหรือไม่
-            if symbol in self.used_currency_pairs:
-                self.logger.warning(f"🚫 คู่เงิน {symbol} ถูกใช้แล้ว - หยุดส่งออเดอร์")
-                return {
-                    'success': False,
-                    'order_id': None,
-                    'symbol': symbol,
-                    'direction': direction,
-                    'error': 'Currency pair already in use'
-                }
+            # ตรวจสอบเพิ่มเติม: ตรวจสอบว่าคู่เงินนี้ถูกใช้แล้วหรือไม่ (สำหรับระบบเก่า - ไม่ใช้แล้ว)
+            # if symbol in self.used_currency_pairs:
+            #     self.logger.warning(f"🚫 คู่เงิน {symbol} ถูกใช้แล้ว - หยุดส่งออเดอร์")
+            #     return {
+            #         'success': False,
+            #         'order_id': None,
+            #         'symbol': symbol,
+            #         'direction': direction,
+            #         'error': 'Currency pair already in use'
+            #     }
             
             # สร้าง comment ที่แสดงกลุ่มและลำดับ
             group_number = group_id.split('_')[-1]  # เอาเฉพาะหมายเลขกลุ่ม
@@ -1056,23 +1059,27 @@ class TriangleArbitrageDetector:
             # ลบคู่เงินและ comment ออกจากรายการที่ใช้แล้ว
             if group_id in self.group_currency_mapping:
                 group_pairs = self.group_currency_mapping[group_id]
-                self.used_currency_pairs -= group_pairs
+                # ลบคู่เงินจาก used_currency_pairs สำหรับสามเหลี่ยมนี้
+                triangle_type = group_data.get('triangle_type', 'triangle_1')
+                if triangle_type in self.used_currency_pairs:
+                    for pair in group_pairs:
+                        self.used_currency_pairs[triangle_type].discard(pair)
                 del self.group_currency_mapping[group_id]
                 self.logger.info(f"   📊 คู่เงินที่ปลดล็อค: {group_pairs}")
             
-            # ลบ comment ออกจาก used_currency_pairs
-            group_number = group_id.split('_')[-1]
-            comments_to_remove = []
-            for comment in list(self.used_currency_pairs):
-                if comment.startswith(f"G{group_number}_"):
-                    comments_to_remove.append(comment)
-            
-            for comment in comments_to_remove:
-                self.used_currency_pairs.discard(comment)
-                self.logger.debug(f"🗑️ Removed comment from used_currency_pairs: {comment}")
-            
-            if comments_to_remove:
-                self.logger.info(f"   🔄 Comments removed: {comments_to_remove}")
+            # ลบ comment ออกจาก used_currency_pairs (สำหรับระบบเก่า - ไม่ใช้แล้ว)
+            # group_number = group_id.split('_')[-1]
+            # comments_to_remove = []
+            # for comment in list(self.used_currency_pairs):
+            #     if comment.startswith(f"G{group_number}_"):
+            #         comments_to_remove.append(comment)
+            # 
+            # for comment in comments_to_remove:
+            #     self.used_currency_pairs.discard(comment)
+            #     self.logger.debug(f"🗑️ Removed comment from used_currency_pairs: {comment}")
+            # 
+            # if comments_to_remove:
+            #     self.logger.info(f"   🔄 Comments removed: {comments_to_remove}")
             
             # ปิด recovery positions ที่เกี่ยวข้องกับกลุ่มนี้
             correlation_pnl = 0.0
@@ -1213,28 +1220,30 @@ class TriangleArbitrageDetector:
                 f"ARB_G{group_number}_"
             ]
             
-            # Debug: แสดง used_currency_pairs ปัจจุบัน
-            self.logger.info(f"🔍 Current used_currency_pairs: {list(self.used_currency_pairs)}")
-            self.logger.info(f"🔍 Looking for patterns: {comment_patterns}")
+            # Debug: แสดง used_currency_pairs ปัจจุบัน (สำหรับระบบเก่า - ไม่ใช้แล้ว)
+            # self.logger.info(f"🔍 Current used_currency_pairs: {list(self.used_currency_pairs)}")
+            # self.logger.info(f"🔍 Looking for patterns: {comment_patterns}")
+            # 
+            # # ตรวจสอบว่ามี comment ที่ใช้อยู่หรือไม่
+            # used_comments = set()
+            # for pattern in comment_patterns:
+            #     # Check if any used_currency_pairs starts with this pattern
+            #     for used_pair in list(self.used_currency_pairs):  # Iterate over a copy
+            #         if used_pair.startswith(pattern):
+            #             used_comments.add(used_pair)
+            #             self.logger.info(f"✅ Found matching comment: {used_pair}")
+            # 
+            # # ลบ comment ที่ใช้แล้วออกจาก used_currency_pairs
+            # for comment in used_comments:
+            #     self.used_currency_pairs.discard(comment)
+            # 
+            # if used_comments:
+            #     self.logger.info(f"🔄 Reset comments for group {group_id}: {used_comments}")
+            #     self.logger.info(f"🔄 Remaining used_currency_pairs: {list(self.used_currency_pairs)}")
+            # else:
+            #     self.logger.info(f"🔄 No comments to reset for group {group_id}")
             
-            # ตรวจสอบว่ามี comment ที่ใช้อยู่หรือไม่
-            used_comments = set()
-            for pattern in comment_patterns:
-                # Check if any used_currency_pairs starts with this pattern
-                for used_pair in list(self.used_currency_pairs):  # Iterate over a copy
-                    if used_pair.startswith(pattern):
-                        used_comments.add(used_pair)
-                        self.logger.info(f"✅ Found matching comment: {used_pair}")
-            
-            # ลบ comment ที่ใช้แล้วออกจาก used_currency_pairs
-            for comment in used_comments:
-                self.used_currency_pairs.discard(comment)
-            
-            if used_comments:
-                self.logger.info(f"🔄 Reset comments for group {group_id}: {used_comments}")
-                self.logger.info(f"🔄 Remaining used_currency_pairs: {list(self.used_currency_pairs)}")
-            else:
-                self.logger.info(f"🔄 No comments to reset for group {group_id}")
+            self.logger.info(f"🔄 No comments to reset for group {group_id}")
             
         except Exception as e:
             self.logger.error(f"Error resetting comments for group {group_id}: {e}")
@@ -1600,7 +1609,7 @@ class TriangleArbitrageDetector:
             'total_opportunities': self.performance_metrics['total_opportunities'],
             'successful_trades': self.performance_metrics['successful_trades'],
             # 'market_regime_changes': self.performance_metrics['market_regime_changes'],  # DISABLED - not used in simple trading
-            'used_currency_pairs': list(self.used_currency_pairs),
+            'used_currency_pairs': {k: list(v) for k, v in self.used_currency_pairs.items()},
             'active_groups_count': len(self.active_groups),
             'group_currency_mapping': self.group_currency_mapping
         }
@@ -1676,7 +1685,7 @@ class TriangleArbitrageDetector:
                 'adaptive_threshold': self.volatility_threshold,
                 'execution_speed_ms': self.performance_metrics['avg_execution_time'],
                 'duplicate_prevention': {
-                    'used_currency_pairs': list(self.used_currency_pairs),
+                    'used_currency_pairs': {k: list(v) for k, v in self.used_currency_pairs.items()},
                     'active_groups_count': len(self.active_groups),
                     'group_currency_mapping': self.group_currency_mapping
                 }
@@ -1691,7 +1700,7 @@ class TriangleArbitrageDetector:
         try:
             return {
                 'is_prevention_active': True,
-                'used_currency_pairs': list(self.used_currency_pairs),
+                'used_currency_pairs': {k: list(v) for k, v in self.used_currency_pairs.items()},
                 'active_groups_count': len(self.active_groups),
                 'group_currency_mapping': self.group_currency_mapping,
                 'prevention_rules': {
@@ -1707,7 +1716,11 @@ class TriangleArbitrageDetector:
     def check_currency_pair_availability(self, symbol: str) -> bool:
         """ตรวจสอบว่าคู่เงินสามารถใช้ได้หรือไม่"""
         try:
-            return symbol not in self.used_currency_pairs
+            # ตรวจสอบว่าคู่เงินนี้ถูกใช้ในสามเหลี่ยมใดๆ หรือไม่
+            for triangle_name, used_pairs in self.used_currency_pairs.items():
+                if symbol in used_pairs:
+                    return False
+            return True
         except Exception as e:
             self.logger.error(f"Error checking currency pair availability: {e}")
             return False
