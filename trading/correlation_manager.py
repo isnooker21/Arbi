@@ -205,49 +205,76 @@ class CorrelationManager:
     def _select_best_pair_for_recovery(self, losing_pairs: List[Dict], group_id: str = None) -> Dict:
         """เลือกคู่ที่เหมาะสมที่สุดสำหรับ recovery (แค่คู่เดียว)"""
         try:
-            if not losing_pairs:
+            if not group_id:
+                return None
+            
+            # ดึงข้อมูลจาก MT5 จริงๆ แทนการใช้ข้อมูลที่ส่งมา
+            all_positions = self.broker.get_all_positions()
+            magic_number = self._get_magic_number_from_group_id(group_id)
+            
+            # หาไม้ arbitrage ที่ขาดทุนจาก MT5
+            losing_positions = []
+            for pos in all_positions:
+                magic = pos.get('magic', 0)
+                comment = pos.get('comment', '')
+                pnl = pos.get('profit', 0)
+                
+                # ตรวจสอบว่าเป็นไม้ arbitrage ที่ขาดทุน (ไม่ใช่ recovery)
+                if magic == magic_number and not comment.startswith('RECOVERY_') and pnl < 0:
+                    losing_positions.append({
+                        'symbol': pos['symbol'],
+                        'order_id': pos['ticket'],
+                        'lot_size': pos['volume'],
+                        'entry_price': pos['price'],
+                        'pnl': pnl,
+                        'comment': comment,
+                        'magic': magic
+                    })
+            
+            if not losing_positions:
+                self.logger.info("📊 No losing positions found in MT5")
                 return None
             
             # กรองคู่ที่ผ่านเงื่อนไข
             suitable_pairs = []
             
-            for pair in losing_pairs:
-                symbol = pair.get('symbol', '')
-                order_id = pair.get('order_id', '')
-                pnl = pair.get('pnl', 0)
+            for pos in losing_positions:
+                symbol = pos.get('symbol', '')
+                order_id = pos.get('order_id', '')
+                pnl = pos.get('pnl', 0)
                 
                 # ตรวจสอบว่าไม้นี้แก้แล้วหรือยัง - ส่ง group_id ไปด้วย
-                if self._is_position_hedged(pair, group_id):
+                if self._is_position_hedged(pos, group_id):
                     self.logger.info(f"⏭️ Skipping {symbol} - already hedged")
                     continue
                 
                 # ตรวจสอบเงื่อนไขการแก้ไม้
-                risk_per_lot = self._calculate_risk_per_lot(pair)
-                price_distance = self._calculate_price_distance(pair)
+                risk_per_lot = self._calculate_risk_per_lot(pos)
+                price_distance = self._calculate_price_distance(pos)
                 
                 # ผ่านเงื่อนไข Distance ≥ 10 pips เท่านั้น
                 if price_distance >= 10:
                     suitable_pairs.append({
-                        'pair': pair,
+                        'pair': pos,
                         'symbol': symbol,
                         'order_id': order_id,
                         'pnl': pnl,
                         'risk_per_lot': risk_per_lot,
                         'price_distance': price_distance,
-                        'score': abs(pnl) * risk_per_lot * (price_distance / 10)  # คะแนนรวม
+                        'score': abs(pnl) * (price_distance / 10)  # คะแนนรวม (เอา Risk ออก)
                     })
             
             if not suitable_pairs:
                 return None
             
-            # เรียงตามคะแนน (สูงสุดก่อน) - คู่ที่ขาดทุนมาก + risk สูง + distance มาก
+            # เรียงตามคะแนน (สูงสุดก่อน) - คู่ที่ขาดทุนมาก + distance มาก
             suitable_pairs.sort(key=lambda x: x['score'], reverse=True)
             
             best_pair = suitable_pairs[0]['pair']
             best_info = suitable_pairs[0]
             
             self.logger.info(f"📊 Recovery pair selection:")
-            self.logger.info(f"   Total losing pairs: {len(losing_pairs)}")
+            self.logger.info(f"   Total losing positions from MT5: {len(losing_positions)}")
             self.logger.info(f"   Suitable pairs: {len(suitable_pairs)}")
             self.logger.info(f"   Selected: {best_info['symbol']} (Score: {best_info['score']:.2f})")
             self.logger.info(f"   PnL: ${best_info['pnl']:.2f}, Risk: {best_info['risk_per_lot']:.2%}, Distance: {best_info['price_distance']:.1f} pips")
@@ -274,14 +301,17 @@ class CorrelationManager:
             # หาไม้ที่เกี่ยวข้องกับกลุ่มนี้จาก MT5 โดยใช้ magic number
             for pos in all_positions:
                 magic = pos.get('magic', 0)
-                if magic == magic_number:
+                comment = pos.get('comment', '')
+                
+                # ตรวจสอบว่าเป็นไม้ arbitrage (ไม่ใช่ recovery)
+                if magic == magic_number and not comment.startswith('RECOVERY_'):
                     group_positions.append({
                         'symbol': pos['symbol'],
                         'order_id': pos['ticket'],
                         'lot_size': pos['volume'],
                         'entry_price': pos['price'],
                         'pnl': pos['profit'],
-                        'comment': pos.get('comment', ''),
+                        'comment': comment,
                         'magic': magic
                     })
             
@@ -467,16 +497,18 @@ class CorrelationManager:
                     group_number = 'X'
                 
                 # เช็คทั้งรูปแบบ RECOVERY_G{group_number}_{symbol}_TO_ และ RECOVERY_G{group_number}_{symbol}
+                # และรูปแบบเก่า RECOVERY_G{group_number}_EURA (สำหรับ EURAUD)
                 recovery_patterns = [
                     f'RECOVERY_G{group_number}_{symbol}_TO_',
-                    f'RECOVERY_G{group_number}_{symbol}'
+                    f'RECOVERY_G{group_number}_{symbol}',
+                    f'RECOVERY_G{group_number}_EURA'  # สำหรับ EURAUD ที่ใช้ comment แบบเก่า
                 ]
                 
                 for pattern in recovery_patterns:
                     if magic == magic_number and pattern in comment:
                         # เช็คว่า position ยังเปิดอยู่หรือไม่
                         if pos.get('profit') is not None:  # position ยังเปิดอยู่
-                            self.logger.debug(f"✅ Found active recovery position for {symbol}: {comment}")
+                            self.logger.info(f"✅ Found active recovery position for {symbol}: {comment}")
                             return True
             
             return False
