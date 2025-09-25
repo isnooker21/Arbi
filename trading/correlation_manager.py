@@ -441,7 +441,7 @@ class CorrelationManager:
                     symbol = pos['symbol']
                     order_id = pos['order_id']
                     pnl = pos['pnl']
-                    self.logger.info(f"   {i:2d}. {symbol:8s} (Order: {order_id:8s}) - 💰 PROFIT: ${pnl:8.2f}")
+                    self.logger.info(f"   {i:2d}. {symbol:8s} (Order: {order_id:8d}) - 💰 PROFIT: ${pnl:8.2f}")
             else:
                 self.logger.info("🟢 PROFIT ARBITRAGE POSITIONS: None")
             
@@ -455,7 +455,7 @@ class CorrelationManager:
                     is_hedged = self._is_position_hedged(pos, group_id)
                     status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
                     
-                    self.logger.info(f"   {i:2d}. {symbol:8s} (Order: {order_id:8s}) - {status:12s} | PnL: ${pnl:8.2f}")
+                    self.logger.info(f"   {i:2d}. {symbol:8s} (Order: {order_id:8d}) - {status:12s} | PnL: ${pnl:8.2f}")
                     
                     if not is_hedged:
                         # แสดงเงื่อนไขการแก้ไม้
@@ -522,7 +522,7 @@ class CorrelationManager:
                     symbol = pos['symbol']
                     order_id = pos['order_id']
                     pnl = pos['pnl']
-                    self.logger.info(f"   {i:2d}. {symbol:8s} (Order: {order_id:8s}) - 💰 PROFIT: ${pnl:8.2f}")
+                    self.logger.info(f"   {i:2d}. {symbol:8s} (Order: {order_id:8d}) - 💰 PROFIT: ${pnl:8.2f}")
             else:
                 self.logger.info("🟢 PROFIT CORRELATION POSITIONS: None")
             
@@ -536,7 +536,7 @@ class CorrelationManager:
                     is_hedged = self._is_position_hedged(pos, group_id)
                     status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
                     
-                    self.logger.info(f"   {i:2d}. {symbol:8s} (Order: {order_id:8s}) - {status:12s} | PnL: ${pnl:8.2f}")
+                    self.logger.info(f"   {i:2d}. {symbol:8s} (Order: {order_id:8d}) - {status:12s} | PnL: ${pnl:8.2f}")
                     
                     if not is_hedged:
                         # แสดงเงื่อนไขการแก้ไม้
@@ -615,14 +615,18 @@ class CorrelationManager:
                 self.logger.info(f"   Arbitrage: {len(arbitrage_positions):2d} positions (${arbitrage_pnl:8.2f})")
                 self.logger.info(f"   Recovery:  {len(recovery_positions):2d} positions (${recovery_pnl:8.2f})")
                 
-                # แสดงไม้ที่ขาดทุน
+                # แสดงไม้ที่ขาดทุนและสถานะการแก้ไม้
                 losing_arbitrage = [pos for pos in arbitrage_positions if pos.get('profit', 0) < 0]
                 if losing_arbitrage:
                     self.logger.info(f"   Losing Arbitrage: {len(losing_arbitrage)} positions")
                     for pos in losing_arbitrage:
                         symbol = pos.get('symbol', '')
                         pnl = pos.get('profit', 0)
-                        self.logger.info(f"     - {symbol:8s}: ${pnl:8.2f}")
+                        # ตรวจสอบสถานะการแก้ไม้
+                        group_id = f"group_triangle_{group_number.replace('G', '')}_1"
+                        is_hedged = self._is_position_hedged(pos, group_id)
+                        hedge_status = "✅ HG" if is_hedged else "❌ NH"
+                        self.logger.info(f"     - {symbol:8s}: ${pnl:8.2f} [{hedge_status}]")
                 
                 # แสดงไม้ recovery ที่ขาดทุน
                 losing_recovery = [pos for pos in recovery_positions if pos.get('profit', 0) < 0]
@@ -633,12 +637,62 @@ class CorrelationManager:
                         pnl = pos.get('profit', 0)
                         self.logger.info(f"     - {symbol:8s}: ${pnl:8.2f}")
                 
+                # แสดงไม้ที่แก้ไม้แล้ว (HEDGED)
+                hedged_arbitrage = []
+                for pos in arbitrage_positions:
+                    if pos.get('profit', 0) < 0:  # เฉพาะไม้ที่ขาดทุน
+                        group_id = f"group_triangle_{group_number.replace('G', '')}_1"
+                        if self._is_position_hedged(pos, group_id):
+                            hedged_arbitrage.append(pos)
+                
+                if hedged_arbitrage:
+                    self.logger.info(f"   Hedged Positions: {len(hedged_arbitrage)} positions")
+                    for pos in hedged_arbitrage:
+                        symbol = pos.get('symbol', '')
+                        pnl = pos.get('profit', 0)
+                        # หา recovery position ที่แก้ไม้
+                        recovery_info = self._find_recovery_for_position(pos, recovery_positions)
+                        if recovery_info:
+                            recovery_symbol = recovery_info.get('symbol', '')
+                            self.logger.info(f"     - {symbol:8s}: ${pnl:8.2f} → {recovery_symbol:8s}")
+                        else:
+                            self.logger.info(f"     - {symbol:8s}: ${pnl:8.2f} → ???")
+                
                 self.logger.info("")
             
             self.logger.info("=" * 100)
             
         except Exception as e:
             self.logger.error(f"Error logging all groups status: {e}")
+    
+    def _find_recovery_for_position(self, arbitrage_position: Dict, recovery_positions: List[Dict]) -> Dict:
+        """หา recovery position ที่แก้ไม้ arbitrage position นี้"""
+        try:
+            arbitrage_symbol = arbitrage_position.get('symbol', '')
+            arbitrage_order_id = arbitrage_position.get('ticket', '')
+            
+            for recovery_pos in recovery_positions:
+                comment = recovery_pos.get('comment', '')
+                
+                # ตรวจสอบ comment pattern
+                if f'_{arbitrage_symbol}_TO_' in comment or f'_{arbitrage_symbol[:4]}_TO_' in comment:
+                    return recovery_pos
+                
+                # ตรวจสอบ pattern อื่นๆ
+                if arbitrage_symbol == 'EURAUD' and 'EURA_TO_' in comment:
+                    return recovery_pos
+                elif arbitrage_symbol == 'GBPAUD' and 'GBPA_TO_' in comment:
+                    return recovery_pos
+                elif arbitrage_symbol == 'EURUSD' and 'EURU_TO_' in comment:
+                    return recovery_pos
+                elif arbitrage_symbol == 'GBPUSD' and 'GBPU_TO_' in comment:
+                    return recovery_pos
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Error finding recovery for position: {e}")
+            return None
     
     def _get_group_number_from_magic(self, magic: int) -> str:
         """แปลง magic number เป็น Group number"""
@@ -1366,11 +1420,11 @@ class CorrelationManager:
             valid_currency_pairs = [
                 'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'USDNZD',
                 'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY', 'CHFJPY', 'NZDJPY',
-                'EURCHF', 'GBPCHF', 'AUDCHF', 'CADCHF', 'NZDCHF',
-                'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'AUDNZD',
-                'EURNZD', 'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD',
-                'EURCAD', 'GBPCAD', 'USDCAD', 'AUDCAD', 'CADCHF'
-            ]
+                    'EURCHF', 'GBPCHF', 'AUDCHF', 'CADCHF', 'NZDCHF',
+                    'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'AUDNZD',
+                    'EURNZD', 'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD',
+                    'EURCAD', 'GBPCAD', 'USDCAD', 'AUDCAD', 'CADCHF'
+                ]
             
             # ตรวจสอบว่าเป็นคู่เงินที่ยอมรับหรือไม่
             if symbol in valid_currency_pairs:
@@ -1995,7 +2049,7 @@ class CorrelationManager:
                 
             # ปิดออเดอร์
             success = self.broker.close_position(symbol)
-            
+                
             if success:
                 position['status'] = 'closed'
                 position['closed_at'] = datetime.now()
