@@ -160,12 +160,71 @@ class CorrelationManager:
             self.recovery_chains[group_id] = recovery_chain
             self._update_recovery_data()
             
-            # เริ่ม recovery สำหรับแต่ละคู่ที่ขาดทุน
-            for pair in losing_pairs:
-                self._start_pair_recovery(group_id, pair)
+            # เลือกคู่ที่เหมาะสมที่สุดสำหรับ recovery (แค่คู่เดียว)
+            best_pair = self._select_best_pair_for_recovery(losing_pairs)
+            if best_pair:
+                self.logger.info(f"🎯 Selected best pair for recovery: {best_pair['symbol']} (Order: {best_pair['order_id']})")
+                self._start_pair_recovery(group_id, best_pair)
+            else:
+                self.logger.info("❌ No suitable pair found for recovery")
                 
         except Exception as e:
             self.logger.error(f"Error starting chain recovery: {e}")
+    
+    def _select_best_pair_for_recovery(self, losing_pairs: List[Dict]) -> Dict:
+        """เลือกคู่ที่เหมาะสมที่สุดสำหรับ recovery (แค่คู่เดียว)"""
+        try:
+            if not losing_pairs:
+                return None
+            
+            # กรองคู่ที่ผ่านเงื่อนไข
+            suitable_pairs = []
+            
+            for pair in losing_pairs:
+                symbol = pair.get('symbol', '')
+                order_id = pair.get('order_id', '')
+                pnl = pair.get('pnl', 0)
+                
+                # ตรวจสอบว่าไม้นี้แก้แล้วหรือยัง
+                if self._is_position_hedged(pair):
+                    continue
+                
+                # ตรวจสอบเงื่อนไขการแก้ไม้
+                risk_per_lot = self._calculate_risk_per_lot(pair)
+                price_distance = self._calculate_price_distance(pair)
+                
+                # ผ่านเงื่อนไข Distance ≥ 10 pips เท่านั้น
+                if price_distance >= 10:
+                    suitable_pairs.append({
+                        'pair': pair,
+                        'symbol': symbol,
+                        'order_id': order_id,
+                        'pnl': pnl,
+                        'risk_per_lot': risk_per_lot,
+                        'price_distance': price_distance,
+                        'score': abs(pnl) * risk_per_lot * (price_distance / 10)  # คะแนนรวม
+                    })
+            
+            if not suitable_pairs:
+                return None
+            
+            # เรียงตามคะแนน (สูงสุดก่อน) - คู่ที่ขาดทุนมาก + risk สูง + distance มาก
+            suitable_pairs.sort(key=lambda x: x['score'], reverse=True)
+            
+            best_pair = suitable_pairs[0]['pair']
+            best_info = suitable_pairs[0]
+            
+            self.logger.info(f"📊 Recovery pair selection:")
+            self.logger.info(f"   Total losing pairs: {len(losing_pairs)}")
+            self.logger.info(f"   Suitable pairs: {len(suitable_pairs)}")
+            self.logger.info(f"   Selected: {best_info['symbol']} (Score: {best_info['score']:.2f})")
+            self.logger.info(f"   PnL: ${best_info['pnl']:.2f}, Risk: {best_info['risk_per_lot']:.2%}, Distance: {best_info['price_distance']:.1f} pips")
+            
+            return best_pair
+            
+        except Exception as e:
+            self.logger.error(f"Error selecting best pair for recovery: {e}")
+            return None
     
     def _log_group_hedging_status(self, group_id: str, losing_pairs: List[Dict]):
         """แสดงสถานะการแก้ไม้ของกลุ่มให้ชัดเจน"""
@@ -237,7 +296,7 @@ class CorrelationManager:
                         risk_status = "✅" if risk_per_lot >= 0.015 else "❌"
                         distance_status = "✅" if price_distance >= 10 else "❌"
                         
-                        self.logger.info(f"      Risk: {risk_per_lot:.2%} (≥1.5%) {risk_status}")
+                        self.logger.info(f"      Risk: {risk_per_lot:.2%} (info only)")
                         self.logger.info(f"      Distance: {price_distance:.1f} pips (≥10) {distance_status}")
             else:
                 self.logger.info("🔴 LOSING ARBITRAGE POSITIONS: None")
@@ -246,25 +305,36 @@ class CorrelationManager:
             profit_correlations = []
             losing_correlations = []
             
-            # หาไม้ correlation จาก MT5 โดยใช้ comment
+            # หาไม้ correlation จาก MT5 โดยใช้ comment และ magic number
             for pos in all_positions:
                 comment = pos.get('comment', '')
-                if f'RECOVERY_G{group_id.split("_")[-1]}_' in comment:
-                    correlation_pos = {
-                        'symbol': pos['symbol'],
-                        'order_id': pos['ticket'],
-                        'lot_size': pos['volume'],
-                        'entry_price': pos['price'],
-                        'pnl': pos['profit'],
-                        'comment': comment
-                    }
+                magic = pos.get('magic', 0)
+                
+                # เช็คว่าเป็น recovery position ของกลุ่มนี้หรือไม่ (ใช้ magic number และ comment)
+                if magic == magic_number and 'RECOVERY_' in comment:
+                    # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
+                    if group_id and 'triangle_' in group_id:
+                        triangle_part = group_id.split('triangle_')[1].split('_')[0]
+                        group_number = triangle_part
+                    else:
+                        group_number = 'X'
                     
-                    # ตรวจสอบ PnL และแยกเป็นกำไร/ขาดทุน
-                    pnl = pos['profit']
-                    if pnl >= 0:  # กำไร
-                        profit_correlations.append(correlation_pos)
-                    else:  # ขาดทุน
-                        losing_correlations.append(correlation_pos)
+                    if f'RECOVERY_G{group_number}_' in comment:
+                        correlation_pos = {
+                            'symbol': pos['symbol'],
+                            'order_id': pos['ticket'],
+                            'lot_size': pos['volume'],
+                            'entry_price': pos['price'],
+                            'pnl': pos['profit'],
+                            'comment': comment
+                        }
+                        
+                        # ตรวจสอบ PnL และแยกเป็นกำไร/ขาดทุน
+                        pnl = pos['profit']
+                        if pnl >= 0:  # กำไร
+                            profit_correlations.append(correlation_pos)
+                        else:  # ขาดทุน
+                            losing_correlations.append(correlation_pos)
             
             # แสดงไม้ correlation ที่กำไร
             if profit_correlations:
@@ -295,7 +365,7 @@ class CorrelationManager:
                         risk_status = "✅" if risk_per_lot >= 0.015 else "❌"
                         distance_status = "✅" if price_distance >= 10 else "❌"
                         
-                        self.logger.info(f"      Risk: {risk_per_lot:.2%} (≥1.5%) {risk_status}")
+                        self.logger.info(f"      Risk: {risk_per_lot:.2%} (info only)")
                         self.logger.info(f"      Distance: {price_distance:.1f} pips (≥10) {distance_status}")
             
             # ถ้าไม่มีไม้ correlation
@@ -354,7 +424,14 @@ class CorrelationManager:
                 magic = pos.get('magic', 0)
                 
                 # เช็คว่าเป็น recovery position ของกลุ่มนี้หรือไม่
-                if magic == magic_number and f'RECOVERY_G{group_id.split("_")[-1] if group_id else "X"}_{symbol}_TO_' in comment:
+                # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
+                if group_id and 'triangle_' in group_id:
+                    triangle_part = group_id.split('triangle_')[1].split('_')[0]
+                    group_number = triangle_part
+                else:
+                    group_number = 'X'
+                
+                if magic == magic_number and f'RECOVERY_G{group_number}_{symbol}_TO_' in comment:
                     # เช็คว่า position ยังเปิดอยู่หรือไม่
                     if pos.get('profit') is not None:  # position ยังเปิดอยู่
                         self.logger.debug(f"✅ Found active recovery position for {symbol}: {comment}")
@@ -470,7 +547,7 @@ class CorrelationManager:
             
             self.logger.info(f"🔍 Checking hedging conditions for {symbol} (Order: {order_id}):")
             self.logger.info(f"   PnL: ${pnl:.2f} (LOSS)")
-            self.logger.info(f"   Risk: {risk_per_lot:.2%} (need ≥1.5%) {'✅' if risk_per_lot >= 0.015 else '❌'}")
+            self.logger.info(f"   Risk: {risk_per_lot:.2%} (info only)")
             self.logger.info(f"   Distance: {price_distance:.1f} pips (need ≥10) {'✅' if price_distance >= 10 else '❌'}")
             
             # แสดงข้อมูลการคำนวณให้ชัดเจน
@@ -490,8 +567,8 @@ class CorrelationManager:
                             self.logger.info(f"   🔍 Debug: Entry={entry_price:.5f}, Current={current_price:.5f}, Calc={calc_distance:.1f} pips")
                         break
             
-            if risk_per_lot < 0.015 or price_distance < 10:  # ลดจาก 5% เป็น 1.5%
-                self.logger.info(f"⏳ {symbol}: Conditions not met - waiting")
+            if price_distance < 10:  # ใช้แค่ Distance ≥ 10 pips
+                self.logger.info(f"⏳ {symbol}: Distance too small ({price_distance:.1f} pips) - waiting for 10 pips")
                 return
             
             self.logger.info(f"✅ {symbol}: All conditions met - starting recovery")
@@ -506,7 +583,12 @@ class CorrelationManager:
             
             # เลือกคู่เงินที่ดีที่สุด
             best_correlation = correlation_candidates[0]
-            group_number = group_id.split('_')[-1] if '_' in group_id else 'X'
+            # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
+            if 'triangle_' in group_id:
+                triangle_part = group_id.split('triangle_')[1].split('_')[0]
+                group_number = triangle_part
+            else:
+                group_number = 'X'
             self.logger.info(f"   Best correlation for G{group_number}: {best_correlation['symbol']} (correlation: {best_correlation['correlation']:.2f})")
             
             # ส่งออเดอร์ recovery
@@ -605,16 +687,25 @@ class CorrelationManager:
         """ส่งออเดอร์ hedge"""
         try:
             # สร้าง comment - ใส่คู่เงินที่แก้และคู่เงินที่แก้ไม้
-            group_number = group_id.split('_')[-1]
+            # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
+            if 'triangle_' in group_id:
+                triangle_part = group_id.split('triangle_')[1].split('_')[0]
+                group_number = triangle_part
+            else:
+                group_number = 'X'
             if original_symbol:
                 comment = f"RECOVERY_G{group_number}_{original_symbol}_TO_{symbol}_L{recovery_level}"
             else:
                 comment = f"RECOVERY_G{group_number}_{symbol}_L{recovery_level}"
             
+            # กำหนดทิศทางที่ถูกต้อง (ใช้ทิศทางเดียวกันกับคู่เดิม)
+            # สำหรับการแก้ไม้ ใช้ทิศทางเดียวกันกับคู่เดิม
+            order_type = 'SELL'  # ใช้ SELL เป็นหลัก (ทิศทางเดียวกัน)
+            
             # ส่งออเดอร์
             result = self.broker.place_order(
                 symbol=symbol,
-                order_type='BUY',  # Default to BUY
+                order_type=order_type,  # ใช้ทิศทางที่ถูกต้อง
                 volume=lot_size,
                 comment=comment
             )
@@ -746,11 +837,11 @@ class CorrelationManager:
             price_distance = self._calculate_price_distance(recovery_pair)
             
             self.logger.info(f"🔍 Checking hedging conditions for {symbol} (Order: {order_id}):")
-            self.logger.info(f"   Risk: {risk_per_lot:.2%} (need ≥1.5%) {'✅' if risk_per_lot >= 0.015 else '❌'}")
+            self.logger.info(f"   Risk: {risk_per_lot:.2%} (info only)")
             self.logger.info(f"   Distance: {price_distance:.1f} pips (need ≥10) {'✅' if price_distance >= 10 else '❌'}")
             
-            if risk_per_lot < 0.015 or price_distance < 10:  # ลดจาก 5% เป็น 1.5%
-                self.logger.info(f"⏳ {symbol}: Conditions not met - waiting")
+            if price_distance < 10:  # ใช้แค่ Distance ≥ 10 pips
+                self.logger.info(f"⏳ {symbol}: Distance too small ({price_distance:.1f} pips) - waiting for 10 pips")
                 return
             
             self.logger.info(f"✅ {symbol}: All conditions met - continuing recovery")
@@ -766,7 +857,12 @@ class CorrelationManager:
             
             # เลือกคู่เงินที่ดีที่สุด
             best_correlation = correlation_candidates[0]
-            group_number = group_id.split('_')[-1] if '_' in group_id else 'X'
+            # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
+            if 'triangle_' in group_id:
+                triangle_part = group_id.split('triangle_')[1].split('_')[0]
+                group_number = triangle_part
+            else:
+                group_number = 'X'
             self.logger.info(f"🎯 Best correlation for G{group_number}: {best_correlation['symbol']} (correlation: {best_correlation['correlation']:.2f})")
             
             # ส่งออเดอร์ recovery ใหม่
@@ -842,7 +938,13 @@ class CorrelationManager:
             
             # เลือกคู่เงินที่ดีที่สุด
             best_correlation = correlation_candidates[0]
-            group_number = losing_position.get('group_id', 'unknown').split('_')[-1] if '_' in losing_position.get('group_id', 'unknown') else 'X'
+            # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
+            group_id_str = losing_position.get('group_id', 'unknown')
+            if 'triangle_' in group_id_str:
+                triangle_part = group_id_str.split('triangle_')[1].split('_')[0]
+                group_number = triangle_part
+            else:
+                group_number = 'X'
             self.logger.info(f"   Best correlation for G{group_number}: {best_correlation['symbol']} (correlation: {best_correlation['correlation']:.2f})")
             
             # ส่งออเดอร์ recovery
@@ -903,7 +1005,7 @@ class CorrelationManager:
                 if correlation >= self.recovery_thresholds['min_correlation']:
                     valid_correlations += 1
                     # กำหนดทิศทางตาม correlation
-                    direction = self._determine_recovery_direction(base_symbol, symbol, correlation)
+                    direction = self._determine_recovery_direction(base_symbol, symbol, correlation, None)
                     
                     correlation_candidates.append({
                         'symbol': symbol,
@@ -1048,10 +1150,10 @@ class CorrelationManager:
         try:
             # ใช้ correlation values ที่แม่นยำตามประเภทคู่เงิน
             if base_symbol == 'USDJPY':
-                if target_symbol in ['EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY', 'CHFJPY', 'NZDJPY']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURUSD', 'GBPUSD', 'AUDUSD', 'USDCAD', 'USDCHF', 'USDNZD']:
-                    return 0.70  # Medium correlation
+                if target_symbol in ['EURUSD', 'GBPUSD', 'AUDUSD', 'USDCAD', 'USDCHF', 'USDNZD']:
+                    return -0.80  # Negative correlation (opposite movement)
+                elif target_symbol in ['EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY', 'CHFJPY', 'NZDJPY']:
+                    return 0.70  # Positive correlation (same movement)
                 else:
                     return 0.60  # Lower correlation
                     
@@ -1272,23 +1374,27 @@ class CorrelationManager:
             self.logger.error(f"Error calculating correlation for any pair: {e}")
             return 0.60
     
-    def _determine_recovery_direction(self, base_symbol: str, target_symbol: str, correlation: float) -> str:
-        """กำหนดทิศทางการ recovery ตาม correlation"""
+    def _determine_recovery_direction(self, base_symbol: str, target_symbol: str, correlation: float, original_position: Dict = None) -> str:
+        """กำหนดทิศทางการ recovery ตาม correlation (ไม่ใช่ BUY/SELL ตรงข้าม)"""
         try:
-            # ใช้ทิศทางที่แตกต่างกันตาม correlation
-            if correlation >= 0.75:  # High correlation
-                # ใช้ทิศทางเดียวกัน
-                return 'BUY'  # BUY สำหรับ high correlation
-            elif correlation >= 0.60:  # Medium correlation
-                # ใช้ทิศทางตรงข้าม
-                return 'SELL'  # SELL สำหรับ medium correlation
-            else:  # Lower correlation
-                # ใช้ทิศทางเดียวกัน
-                return 'BUY'  # BUY สำหรับ lower correlation
+            # ตรวจสอบทิศทางของคู่เดิม
+            original_direction = None
+            if original_position:
+                original_direction = original_position.get('type', 'SELL')  # BUY หรือ SELL
+            
+            # ใช้ทิศทางเดียวกันกับคู่เดิม แต่เลือกคู่ที่มี correlation ติดลบ
+            # เพื่อให้เมื่อคู่เดิมติดลบ คู่ correlation จะกำไร
+            if original_direction == 'BUY':
+                return 'BUY'   # ใช้ทิศทางเดียวกัน
+            elif original_direction == 'SELL':
+                return 'SELL'  # ใช้ทิศทางเดียวกัน
+            else:
+                # หากไม่ทราบทิศทางเดิม ใช้ SELL เป็นหลัก
+                return 'SELL'
                 
         except Exception as e:
             self.logger.error(f"Error determining recovery direction: {e}")
-            return 'BUY'  # Default to BUY
+            return 'SELL'  # Default to SELL
     
     def _find_correlation_pairs_for_any_symbol(self, base_symbol: str, group_pairs: List[str] = None) -> List[Dict]:
         """หาคู่เงินที่มี correlation กับคู่เงินใดๆ (ไม่ซ้ำกับคู่ในกลุ่ม)"""
@@ -1329,9 +1435,9 @@ class CorrelationManager:
                 # คำนวณ correlation ตามประเภทคู่เงิน
                 correlation = self._calculate_correlation_for_any_pair(base_symbol, symbol)
                 
-                if correlation >= self.recovery_thresholds['min_correlation']:
+                if correlation <= -self.recovery_thresholds['min_correlation']:  # ใช้ correlation ติดลบ
                     # กำหนดทิศทางตาม correlation
-                    direction = self._determine_recovery_direction(base_symbol, symbol, correlation)
+                    direction = self._determine_recovery_direction(base_symbol, symbol, correlation, None)
                     
                     correlation_candidates.append({
                         'symbol': symbol,
@@ -1340,8 +1446,8 @@ class CorrelationManager:
                         'direction': direction
                     })
             
-            # Sort by recovery strength (highest first) - CRITICAL FIX
-            correlation_candidates.sort(key=lambda x: x['recovery_strength'], reverse=True)
+            # Sort by recovery strength (lowest first for negative correlation) - CRITICAL FIX
+            correlation_candidates.sort(key=lambda x: x['recovery_strength'], reverse=False)
             
             if not correlation_candidates:
                 self.logger.error(f"❌ No correlation candidates created for {base_symbol}")
@@ -1363,7 +1469,15 @@ class CorrelationManager:
         try:
             symbol = correlation_candidate['symbol']
             correlation = correlation_candidate['correlation']
-            direction = correlation_candidate['direction']
+            
+            # กำหนดทิศทางที่ถูกต้อง (ใช้ทิศทางเดียวกันกับคู่เดิม)
+            original_direction = original_position.get('type', 'SELL')
+            if original_direction == 'BUY':
+                direction = 'BUY'   # ใช้ทิศทางเดียวกัน
+            elif original_direction == 'SELL':
+                direction = 'SELL'  # ใช้ทิศทางเดียวกัน
+            else:
+                direction = 'SELL'  # Default to SELL
             
             # Calculate correlation volume
             correlation_volume = self._calculate_hedge_volume(original_position, correlation_candidate)
@@ -1436,7 +1550,12 @@ class CorrelationManager:
             correlation = correlation_candidate['correlation']
             
             # แสดงข้อมูลการแก้ไม้ที่ถูกต้อง
-            group_number = group_id.split('_')[-1] if '_' in group_id else 'X'
+            # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
+            if 'triangle_' in group_id:
+                triangle_part = group_id.split('triangle_')[1].split('_')[0]
+                group_number = triangle_part
+            else:
+                group_number = 'X'
             self.logger.info("=" * 60)
             self.logger.info(f"🎯 HEDGING ACTION COMPLETED - GROUP G{group_number}")
             self.logger.info("=" * 60)
@@ -1486,24 +1605,43 @@ class CorrelationManager:
         """ส่งออเดอร์ correlation recovery"""
         try:
             # สร้าง comment - ใส่คู่เงินที่แก้และคู่เงินที่แก้ไม้
-            group_number = group_id.split('_')[-1]
+            # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
+            if 'triangle_' in group_id:
+                triangle_part = group_id.split('triangle_')[1].split('_')[0]
+                group_number = triangle_part
+            else:
+                group_number = 'X'
             original_symbol = original_position.get('symbol', 'UNKNOWN') if original_position else 'UNKNOWN'
             comment = f"RECOVERY_G{group_number}_{original_symbol}_TO_{symbol}"
             
             # หา magic number จาก group_id
             magic_number = self._get_magic_number_from_group_id(group_id)
             
+            # กำหนดทิศทางที่ถูกต้อง (ใช้ทิศทางเดียวกันกับคู่เดิม)
+            original_direction = original_position.get('type', 'SELL') if original_position else 'SELL'
+            if original_direction == 'BUY':
+                order_type = 'BUY'   # ใช้ทิศทางเดียวกัน
+            elif original_direction == 'SELL':
+                order_type = 'SELL'  # ใช้ทิศทางเดียวกัน
+            else:
+                order_type = 'SELL'  # Default to SELL
+            
             # ส่งออเดอร์
             result = self.broker.place_order(
                 symbol=symbol,
-                order_type='BUY',  # Default to BUY
+                order_type=order_type,  # ใช้ทิศทางที่ถูกต้อง
                 volume=lot_size,
                 comment=comment,
                 magic=magic_number
             )
             
             if result and result.get('retcode') == 10009:
-                group_number = group_id.split('_')[-1] if '_' in group_id else 'X'
+                # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
+                if 'triangle_' in group_id:
+                    triangle_part = group_id.split('triangle_')[1].split('_')[0]
+                    group_number = triangle_part
+                else:
+                    group_number = 'X'
                 self.logger.info(f"✅ G{group_number} Recovery order sent: {symbol} {lot_size} lot")
                 return {
                     'success': True,
