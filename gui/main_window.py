@@ -701,17 +701,39 @@ class MainWindow:
                 self.group_dashboard.update_summary(active_groups)
                 
         except Exception as e:
+            import traceback
             self.log_message(f"❌ Error updating group dashboard: {e}")
+            self.log_message(f"❌ Traceback: {traceback.format_exc()}")
     
     def _show_default_group_status(self):
         """Show default status for all groups when not connected"""
         try:
+            self.log_message("🔍 Debug: Checking group_dashboard...")
+            
+            # Check if group_dashboard exists
+            if not hasattr(self, 'group_dashboard'):
+                self.log_message("❌ Debug: No group_dashboard attribute")
+                return
+            
+            if not self.group_dashboard:
+                self.log_message("❌ Debug: group_dashboard is None")
+                return
+            
+            if not hasattr(self.group_dashboard, 'triangle_configs'):
+                self.log_message("❌ Debug: No triangle_configs attribute")
+                return
+            
+            self.log_message("✅ Debug: group_dashboard is ready")
+            
             # Check if group_dashboard exists and has triangle_configs
             if (hasattr(self, 'group_dashboard') and 
                 self.group_dashboard and 
                 hasattr(self.group_dashboard, 'triangle_configs')):
                 
+                self.log_message(f"🔍 Debug: triangle_configs keys: {list(self.group_dashboard.triangle_configs.keys())}")
+                
                 for triangle_id in self.group_dashboard.triangle_configs.keys():
+                    self.log_message(f"🔍 Debug: Processing {triangle_id}")
                     empty_data = {
                         'status': 'disconnected',
                         'group_id': 'Not Connected',
@@ -723,11 +745,14 @@ class MainWindow:
                 
                 # Update summary with empty data
                 self.group_dashboard.update_summary({})
+                self.log_message("✅ Debug: Default group status updated")
             else:
                 self.log_message("⚠️ Group dashboard not ready yet")
                 
         except Exception as e:
+            import traceback
             self.log_message(f"❌ Error showing default group status: {e}")
+            self.log_message(f"❌ Traceback: {traceback.format_exc()}")
     
     def start_group_dashboard_update_loop(self):
         """Start Group Dashboard update loop"""
