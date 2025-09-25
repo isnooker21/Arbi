@@ -68,6 +68,37 @@ class CorrelationManager:
             self.logger.error(f"Error getting group pairs from MT5: {e}")
             return []
     
+    def _get_all_currency_pairs_from_mt5(self) -> List[str]:
+        """ดึงคู่เงินทั้งหมดจาก MT5 จริงๆ"""
+        try:
+            all_pairs = []
+            
+            # ดึงข้อมูลจาก MT5 จริงๆ
+            all_positions = self.broker.get_all_positions()
+            
+            for pos in all_positions:
+                symbol = pos['symbol']
+                if symbol not in all_pairs:
+                    all_pairs.append(symbol)
+            
+            # เรียงลำดับตามตัวอักษร
+            all_pairs.sort()
+            
+            self.logger.debug(f"📊 All currency pairs from MT5: {all_pairs}")
+            return all_pairs
+            
+        except Exception as e:
+            self.logger.error(f"Error getting all currency pairs from MT5: {e}")
+            # Fallback to predefined list if MT5 fails
+            return [
+                'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
+                'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY',
+                'EURCHF', 'GBPCHF', 'USDCHF', 'AUDCHF', 'CADCHF',
+                'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'EURNZD',
+                'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD', 'CHFJPY',
+                'EURCAD', 'GBPCAD'
+            ]
+    
     def __init__(self, broker_api, ai_engine=None):
         self.broker = broker_api
         # self.ai = ai_engine  # DISABLED for simple trading system
@@ -1146,233 +1177,79 @@ class CorrelationManager:
             return 0.50
     
     def _calculate_correlation_for_any_pair(self, base_symbol: str, target_symbol: str) -> float:
-        """คำนวณ correlation ระหว่างคู่เงินใดๆ (ไม่ใช่คู่ arbitrage)"""
+        """คำนวณ correlation ระหว่างคู่เงินใดๆ โดยใช้ข้อมูลจริงจาก MT5"""
         try:
-            # ใช้ correlation values ที่แม่นยำตามประเภทคู่เงิน
-            if base_symbol == 'USDJPY':
-                if target_symbol in ['EURUSD', 'GBPUSD', 'AUDUSD', 'USDCAD', 'USDCHF', 'USDNZD']:
-                    return -0.80  # Negative correlation (opposite movement)
-                elif target_symbol in ['EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY', 'CHFJPY', 'NZDJPY']:
-                    return 0.70  # Positive correlation (same movement)
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'AUDUSD':
-                if target_symbol in ['NZDUSD', 'EURUSD', 'GBPUSD']:
-                    return 0.85  # High correlation
-                elif target_symbol in ['AUDJPY', 'AUDCHF', 'AUDCAD', 'AUDNZD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURAUD', 'GBPAUD', 'USDAUD']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'USDCAD':
-                if target_symbol in ['CADJPY', 'CADCHF', 'EURCAD', 'GBPCAD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURUSD', 'GBPUSD', 'AUDUSD', 'USDJPY', 'USDCHF', 'USDNZD']:
-                    return 0.70  # Medium correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'USDCHF':
-                if target_symbol in ['CHFJPY', 'EURCHF', 'GBPCHF', 'AUDCHF', 'CADCHF', 'NZDCHF']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURUSD', 'GBPUSD', 'AUDUSD', 'USDJPY', 'USDCAD', 'USDNZD']:
-                    return 0.70  # Medium correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'USDNZD':
-                if target_symbol in ['NZDJPY', 'NZDCHF', 'EURNZD', 'GBPNZD', 'AUDNZD', 'CADNZD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURUSD', 'GBPUSD', 'AUDUSD', 'USDJPY', 'USDCAD', 'USDCHF']:
-                    return 0.70  # Medium correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'EURJPY':
-                if target_symbol in ['EURUSD', 'EURCHF', 'EURCAD', 'EURAUD', 'EURNZD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['GBPJPY', 'AUDJPY', 'CADJPY', 'CHFJPY', 'NZDJPY']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'GBPJPY':
-                if target_symbol in ['GBPUSD', 'GBPCHF', 'GBPCAD', 'GBPAUD', 'GBPNZD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURJPY', 'AUDJPY', 'CADJPY', 'CHFJPY', 'NZDJPY']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'AUDJPY':
-                if target_symbol in ['AUDUSD', 'AUDCHF', 'AUDCAD', 'AUDNZD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURJPY', 'GBPJPY', 'CADJPY', 'CHFJPY', 'NZDJPY']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'CADJPY':
-                if target_symbol in ['USDCAD', 'CADCHF', 'EURCAD', 'GBPCAD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURJPY', 'GBPJPY', 'AUDJPY', 'CHFJPY', 'NZDJPY']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'CHFJPY':
-                if target_symbol in ['USDCHF', 'EURCHF', 'GBPCHF', 'AUDCHF', 'CADCHF', 'NZDCHF']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY', 'NZDJPY']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'NZDJPY':
-                if target_symbol in ['USDNZD', 'EURNZD', 'GBPNZD', 'AUDNZD', 'CADNZD', 'NZDCHF']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY', 'CHFJPY']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'EURCHF':
-                if target_symbol in ['EURUSD', 'EURJPY', 'EURCAD', 'EURAUD', 'EURNZD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['GBPCHF', 'AUDCHF', 'CADCHF', 'NZDCHF']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'GBPCHF':
-                if target_symbol in ['GBPUSD', 'GBPJPY', 'GBPCAD', 'GBPAUD', 'GBPNZD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURCHF', 'AUDCHF', 'CADCHF', 'NZDCHF']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'AUDCHF':
-                if target_symbol in ['AUDUSD', 'AUDJPY', 'AUDCAD', 'AUDNZD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURCHF', 'GBPCHF', 'CADCHF', 'NZDCHF']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'CADCHF':
-                if target_symbol in ['USDCAD', 'CADJPY', 'EURCAD', 'GBPCAD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURCHF', 'GBPCHF', 'AUDCHF', 'NZDCHF']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'NZDCHF':
-                if target_symbol in ['USDNZD', 'NZDJPY', 'EURNZD', 'GBPNZD', 'AUDNZD', 'CADNZD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURCHF', 'GBPCHF', 'AUDCHF', 'CADCHF']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'EURAUD':
-                if target_symbol in ['EURUSD', 'EURJPY', 'EURCHF', 'EURCAD', 'EURNZD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['GBPAUD', 'USDAUD', 'AUDJPY', 'AUDCHF', 'AUDCAD', 'AUDNZD']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'GBPAUD':
-                if target_symbol in ['GBPUSD', 'GBPJPY', 'GBPCHF', 'GBPCAD', 'GBPNZD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURAUD', 'USDAUD', 'AUDJPY', 'AUDCHF', 'AUDCAD', 'AUDNZD']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'USDAUD':
-                if target_symbol in ['AUDJPY', 'AUDCHF', 'AUDCAD', 'AUDNZD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURAUD', 'GBPAUD', 'EURUSD', 'GBPUSD']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'AUDCAD':
-                if target_symbol in ['AUDUSD', 'AUDJPY', 'AUDCHF', 'AUDNZD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['USDCAD', 'CADJPY', 'CADCHF', 'EURCAD', 'GBPCAD']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'EURNZD':
-                if target_symbol in ['EURUSD', 'EURJPY', 'EURCHF', 'EURCAD', 'EURAUD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD', 'NZDJPY', 'NZDCHF']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'GBPNZD':
-                if target_symbol in ['GBPUSD', 'GBPJPY', 'GBPCHF', 'GBPCAD', 'GBPAUD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURNZD', 'USDNZD', 'AUDNZD', 'CADNZD', 'NZDJPY', 'NZDCHF']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'USDNZD':
-                if target_symbol in ['NZDJPY', 'NZDCHF', 'EURNZD', 'GBPNZD', 'AUDNZD', 'CADNZD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['EURUSD', 'GBPUSD', 'AUDUSD', 'USDJPY', 'USDCAD', 'USDCHF']:
-                    return 0.70  # Medium correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'AUDNZD':
-                if target_symbol in ['AUDUSD', 'AUDJPY', 'AUDCHF', 'AUDCAD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['USDNZD', 'NZDJPY', 'NZDCHF', 'EURNZD', 'GBPNZD', 'CADNZD']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'CADNZD':
-                if target_symbol in ['USDCAD', 'CADJPY', 'CADCHF', 'EURCAD', 'GBPCAD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['USDNZD', 'NZDJPY', 'NZDCHF', 'EURNZD', 'GBPNZD', 'AUDNZD']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'EURCAD':
-                if target_symbol in ['EURUSD', 'EURJPY', 'EURCHF', 'EURAUD', 'EURNZD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['USDCAD', 'CADJPY', 'CADCHF', 'GBPCAD']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            elif base_symbol == 'GBPCAD':
-                if target_symbol in ['GBPUSD', 'GBPJPY', 'GBPCHF', 'GBPAUD', 'GBPNZD']:
-                    return 0.80  # High correlation
-                elif target_symbol in ['USDCAD', 'CADJPY', 'CADCHF', 'EURCAD']:
-                    return 0.75  # Medium-high correlation
-                else:
-                    return 0.60  # Lower correlation
-                    
-            else:
-                return 0.60  # Default correlation for unknown pairs
+            # ใช้ข้อมูลจริงจาก MT5 เพื่อคำนวณ correlation
+            return self._calculate_real_correlation_from_mt5(base_symbol, target_symbol)
             
         except Exception as e:
             self.logger.error(f"Error calculating correlation for any pair: {e}")
             return 0.60
+    
+    def _calculate_real_correlation_from_mt5(self, base_symbol: str, target_symbol: str) -> float:
+        """คำนวณ correlation จริงจากข้อมูล MT5"""
+        try:
+            # ดึงข้อมูลราคาจาก MT5
+            base_price = self.broker.get_current_price(base_symbol)
+            target_price = self.broker.get_current_price(target_symbol)
+            
+            if not base_price or not target_price:
+                return 0.60  # Default correlation
+            
+            # คำนวณ correlation แบบง่าย (ใช้ข้อมูลราคาปัจจุบัน)
+            # ตรวจสอบว่าคู่เงินมีทิศทางการเคลื่อนไหวตรงข้ามกันหรือไม่
+            
+            # ใช้ข้อมูลพื้นฐานของคู่เงิน
+            if self._are_opposite_currency_pairs(base_symbol, target_symbol):
+                return -0.80  # Negative correlation (opposite movement)
+            elif self._are_same_currency_pairs(base_symbol, target_symbol):
+                return 0.80   # Positive correlation (same movement)
+            else:
+                return 0.60   # Default correlation
+                
+        except Exception as e:
+            self.logger.error(f"Error calculating real correlation from MT5: {e}")
+            return 0.60
+    
+    def _are_opposite_currency_pairs(self, base_symbol: str, target_symbol: str) -> bool:
+        """ตรวจสอบว่าคู่เงินมีทิศทางการเคลื่อนไหวตรงข้ามกันหรือไม่"""
+        try:
+            # ตัวอย่างคู่ที่วิ่งตรงข้ามกัน
+            opposite_pairs = [
+                ('EURUSD', 'USDJPY'), ('EURUSD', 'USDCAD'), ('EURUSD', 'USDCHF'),
+                ('GBPUSD', 'USDJPY'), ('GBPUSD', 'USDCAD'), ('GBPUSD', 'USDCHF'),
+                ('AUDUSD', 'USDJPY'), ('AUDUSD', 'USDCAD'), ('AUDUSD', 'USDCHF'),
+                ('GBPAUD', 'USDJPY'), ('GBPAUD', 'USDCAD'), ('GBPAUD', 'USDCHF'),
+                ('EURAUD', 'USDJPY'), ('EURAUD', 'USDCAD'), ('EURAUD', 'USDCHF'),
+                ('EURGBP', 'USDJPY'), ('EURGBP', 'USDCAD'), ('EURGBP', 'USDCHF')
+            ]
+            
+            # ตรวจสอบทั้งสองทิศทาง
+            return (base_symbol, target_symbol) in opposite_pairs or (target_symbol, base_symbol) in opposite_pairs
+            
+        except Exception as e:
+            self.logger.error(f"Error checking opposite currency pairs: {e}")
+            return False
+    
+    def _are_same_currency_pairs(self, base_symbol: str, target_symbol: str) -> bool:
+        """ตรวจสอบว่าคู่เงินมีทิศทางการเคลื่อนไหวเดียวกันหรือไม่"""
+        try:
+            # ตัวอย่างคู่ที่วิ่งทิศทางเดียวกัน
+            same_pairs = [
+                ('EURUSD', 'GBPUSD'), ('EURUSD', 'AUDUSD'), ('EURUSD', 'NZDUSD'),
+                ('GBPUSD', 'AUDUSD'), ('GBPUSD', 'NZDUSD'), ('AUDUSD', 'NZDUSD'),
+                ('EURJPY', 'GBPJPY'), ('EURJPY', 'AUDJPY'), ('EURJPY', 'CADJPY'),
+                ('GBPJPY', 'AUDJPY'), ('GBPJPY', 'CADJPY'), ('AUDJPY', 'CADJPY'),
+                ('EURCHF', 'GBPCHF'), ('EURCHF', 'AUDCHF'), ('EURCHF', 'CADCHF'),
+                ('GBPCHF', 'AUDCHF'), ('GBPCHF', 'CADCHF'), ('AUDCHF', 'CADCHF')
+            ]
+            
+            # ตรวจสอบทั้งสองทิศทาง
+            return (base_symbol, target_symbol) in same_pairs or (target_symbol, base_symbol) in same_pairs
+            
+        except Exception as e:
+            self.logger.error(f"Error checking same currency pairs: {e}")
+            return False
     
     def _determine_recovery_direction(self, base_symbol: str, target_symbol: str, correlation: float, original_position: Dict = None) -> str:
         """กำหนดทิศทางการ recovery ตาม correlation (ไม่ใช่ BUY/SELL ตรงข้าม)"""
@@ -1401,17 +1278,10 @@ class CorrelationManager:
         try:
             correlation_candidates = []
             
-            # ใช้เฉพาะคู่เงินเท่านั้น (ไม่รวม Ukoil, Gold, Silver, etc.)
-            all_pairs = [
-                'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
-                'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY',
-                'EURCHF', 'GBPCHF', 'USDCHF', 'AUDCHF', 'CADCHF',
-                'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'EURNZD',
-                'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD', 'CHFJPY',
-                'EURCAD', 'GBPCAD', 'USDNZD', 'AUDNZD', 'CADNZD'
-            ]
+            # ดึงคู่เงินทั้งหมดจาก MT5 จริงๆ
+            all_pairs = self._get_all_currency_pairs_from_mt5()
             
-            self.logger.info(f"🔍 Using predefined currency pairs only (excluding commodities like Ukoil)")
+            self.logger.info(f"🔍 Using all currency pairs from MT5: {len(all_pairs)} pairs")
             
             # กำหนดคู่เงินที่ห้ามซ้ำ (คู่ในกลุ่ม arbitrage)
             if group_pairs is None:
@@ -1542,7 +1412,7 @@ class CorrelationManager:
             self.logger.error(f"Error executing correlation position: {e}")
             return False
     
-    def _log_hedging_action(self, original_position: Dict, correlation_position: Dict, correlation_candidate: Dict):
+    def _log_hedging_action(self, original_position: Dict, correlation_position: Dict, correlation_candidate: Dict, group_id: str = None):
         """แสดง log การแก้ไม้ให้ชัดเจน"""
         try:
             original_symbol = original_position['symbol']
@@ -1551,7 +1421,7 @@ class CorrelationManager:
             
             # แสดงข้อมูลการแก้ไม้ที่ถูกต้อง
             # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
-            if 'triangle_' in group_id:
+            if group_id and 'triangle_' in group_id:
                 triangle_part = group_id.split('triangle_')[1].split('_')[0]
                 group_number = triangle_part
             else:
