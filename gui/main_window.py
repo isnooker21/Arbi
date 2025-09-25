@@ -690,7 +690,7 @@ class MainWindow:
             self.group_dashboard.update_summary(active_groups)
                 
         except Exception as e:
-            self.log_message(f"Error updating group dashboard: {e}", "ERROR")
+            self.log_message(f"❌ Error updating group dashboard: {e}")
     
     def _show_default_group_status(self):
         """Show default status for all groups when not connected"""
