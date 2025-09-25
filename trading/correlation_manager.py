@@ -336,33 +336,28 @@ class CorrelationManager:
             return 0.0
     
     def _is_position_hedged(self, position: Dict, group_id: str = None) -> bool:
-        """ตรวจสอบว่าตำแหน่งนี้แก้ไม้แล้วหรือยัง (รองรับการแยกตาม Group)"""
+        """ตรวจสอบว่าตำแหน่งนี้แก้ไม้แล้วหรือยัง - เช็คจาก MT5 จริงๆ"""
         try:
             order_id = position.get('order_id')
             symbol = position.get('symbol')
             
-            # ตรวจสอบจาก order_id
-            if order_id and order_id in self.hedged_positions:
-                return True
+            if not order_id or not symbol:
+                return False
             
-            # ตรวจสอบจาก symbol ใน Group ที่ระบุ
-            if symbol and group_id:
-                if group_id in self.hedged_pairs_by_group:
-                    if symbol in self.hedged_pairs_by_group[group_id]:
-                        return True
+            # เช็คจาก MT5 จริงๆ โดยใช้ magic number
+            magic_number = self._get_magic_number_from_group_id(group_id) if group_id else 0
+            all_positions = self.broker.get_all_positions()
+            
+            # หา recovery positions ที่เกี่ยวข้องกับคู่เงินนี้
+            for pos in all_positions:
+                comment = pos.get('comment', '')
+                magic = pos.get('magic', 0)
                 
-                # ตรวจสอบจาก recovery_positions ของ Group นี้
-                if group_id in self.recovery_positions_by_group:
-                    for recovery_id, recovery_pos in self.recovery_positions_by_group[group_id].items():
-                        if (recovery_pos.get('original_pair') == symbol and 
-                            recovery_pos.get('status') == 'active'):
-                            return True
-            
-            # ตรวจสอบจาก recovery_positions เก่า (backward compatibility)
-            if symbol:
-                for recovery_id, recovery_pos in self.recovery_positions.items():
-                    if (recovery_pos.get('original_pair') == symbol and 
-                        recovery_pos.get('status') == 'active'):
+                # เช็คว่าเป็น recovery position ของกลุ่มนี้หรือไม่
+                if magic == magic_number and f'RECOVERY_G{group_id.split("_")[-1] if group_id else "X"}_{symbol}_TO_' in comment:
+                    # เช็คว่า position ยังเปิดอยู่หรือไม่
+                    if pos.get('profit') is not None:  # position ยังเปิดอยู่
+                        self.logger.debug(f"✅ Found active recovery position for {symbol}: {comment}")
                         return True
             
             return False
