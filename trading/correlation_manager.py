@@ -64,11 +64,13 @@ class CorrelationManager:
             'total_recovered_amount': 0.0
         }
         
-        # Multi-timeframe correlation cache
+        # Multi-timeframe correlation cache - แยกตาม Group
         self.recovery_chains = {}  # เก็บข้อมูล recovery chain ของแต่ละกลุ่ม
+        self.recovery_positions_by_group = {}  # เก็บ recovery positions แยกตาม Group
+        self.hedged_positions_by_group = {}  # เก็บ hedged positions แยกตาม Group
         
-        # ระบบติดตามไม้ที่แก้แล้ว (ป้องกันการแก้ไม้ซ้ำ)
-        self.hedged_pairs = set()  # เก็บคู่ที่แก้แล้ว (symbol)
+        # ระบบติดตามไม้ที่แก้แล้ว (ป้องกันการแก้ไม้ซ้ำ) - แยกตาม Group
+        self.hedged_pairs_by_group = {}  # เก็บคู่ที่แก้แล้วแยกตาม Group (group_id -> set of symbols)
         self.hedged_positions = {}  # เก็บข้อมูลไม้ที่แก้แล้ว (order_id -> position_info)
         self.hedged_groups = {}  # เก็บข้อมูลกลุ่มที่แก้แล้ว (group_id -> hedged_info)
         
@@ -121,7 +123,7 @@ class CorrelationManager:
             # หาไม้ที่เกี่ยวข้องกับกลุ่มนี้จาก MT5
             for pos in all_positions:
                 comment = pos.get('comment', '')
-                if f'SIMPLE_G{group_id.split("_")[-1]}_' in comment:
+                if f'G{group_id.split("_")[-1]}_' in comment:
                     group_positions.append({
                         'symbol': pos['symbol'],
                         'order_id': pos['ticket'],
@@ -161,7 +163,7 @@ class CorrelationManager:
                     symbol = pos['symbol']
                     order_id = pos['order_id']
                     pnl = pos['pnl']
-                    is_hedged = self._is_position_hedged(pos)
+                    is_hedged = self._is_position_hedged(pos, group_id)
                     status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
                     
                     self.logger.info(f"   {i}. {symbol} (Order: {order_id}) - {status} | PnL: ${pnl:.2f}")
@@ -219,7 +221,7 @@ class CorrelationManager:
                     symbol = pos['symbol']
                     order_id = pos['order_id']
                     pnl = pos['pnl']
-                    is_hedged = self._is_position_hedged(pos)
+                    is_hedged = self._is_position_hedged(pos, group_id)
                     status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
                     
                     self.logger.info(f"   {i}. {symbol} (Order: {order_id}) - {status} | PnL: ${pnl:.2f}")
@@ -241,8 +243,8 @@ class CorrelationManager:
             
             # สรุปสถานะ
             total_losing_positions = len(losing_positions) + len(losing_correlations)
-            hedged_count = sum(1 for pair in losing_positions if self._is_position_hedged(pair))
-            hedged_count += sum(1 for position in losing_correlations if self._is_position_hedged(position))
+            hedged_count = sum(1 for pair in losing_positions if self._is_position_hedged(pair, group_id))
+            hedged_count += sum(1 for position in losing_correlations if self._is_position_hedged(position, group_id))
             
             self.logger.info("-" * 50)
             self.logger.info(f"📈 SUMMARY: {hedged_count}/{total_losing_positions} losing positions hedged")
@@ -272,8 +274,8 @@ class CorrelationManager:
             self.logger.error(f"Error getting position PnL: {e}")
             return 0.0
     
-    def _is_position_hedged(self, position: Dict) -> bool:
-        """ตรวจสอบว่าตำแหน่งนี้แก้ไม้แล้วหรือยัง"""
+    def _is_position_hedged(self, position: Dict, group_id: str = None) -> bool:
+        """ตรวจสอบว่าตำแหน่งนี้แก้ไม้แล้วหรือยัง (รองรับการแยกตาม Group)"""
         try:
             order_id = position.get('order_id')
             symbol = position.get('symbol')
@@ -282,11 +284,20 @@ class CorrelationManager:
             if order_id and order_id in self.hedged_positions:
                 return True
             
-            # ตรวจสอบจาก symbol
-            if symbol and symbol in self.hedged_pairs:
-                return True
+            # ตรวจสอบจาก symbol ใน Group ที่ระบุ
+            if symbol and group_id:
+                if group_id in self.hedged_pairs_by_group:
+                    if symbol in self.hedged_pairs_by_group[group_id]:
+                        return True
+                
+                # ตรวจสอบจาก recovery_positions ของ Group นี้
+                if group_id in self.recovery_positions_by_group:
+                    for recovery_id, recovery_pos in self.recovery_positions_by_group[group_id].items():
+                        if (recovery_pos.get('original_pair') == symbol and 
+                            recovery_pos.get('status') == 'active'):
+                            return True
             
-            # ตรวจสอบจาก recovery_positions ว่ามีไม้แก้สำหรับไม้นี้หรือไม่
+            # ตรวจสอบจาก recovery_positions เก่า (backward compatibility)
             if symbol:
                 for recovery_id, recovery_pos in self.recovery_positions.items():
                     if (recovery_pos.get('original_pair') == symbol and 
@@ -453,8 +464,8 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"Error starting pair recovery: {e}")
     
-    def _mark_position_as_hedged(self, position: Dict):
-        """บันทึกว่าตำแหน่งนี้แก้ไม้แล้ว"""
+    def _mark_position_as_hedged(self, position: Dict, group_id: str = None):
+        """บันทึกว่าตำแหน่งนี้แก้ไม้แล้ว (รองรับการแยกตาม Group)"""
         try:
             order_id = position.get('order_id')
             symbol = position.get('symbol')
@@ -462,12 +473,25 @@ class CorrelationManager:
             if order_id:
                 self.hedged_positions[order_id] = {
                     'symbol': symbol,
+                    'group_id': group_id,
                     'hedged_at': datetime.now(),
                     'position_info': position
                 }
             
-            if symbol:
-                self.hedged_pairs.add(symbol)
+            if symbol and group_id:
+                # เก็บใน hedged_pairs_by_group
+                if group_id not in self.hedged_pairs_by_group:
+                    self.hedged_pairs_by_group[group_id] = set()
+                self.hedged_pairs_by_group[group_id].add(symbol)
+                
+                # เก็บใน hedged_positions_by_group
+                if group_id not in self.hedged_positions_by_group:
+                    self.hedged_positions_by_group[group_id] = {}
+                self.hedged_positions_by_group[group_id][order_id] = {
+                    'symbol': symbol,
+                    'hedged_at': datetime.now(),
+                    'position_info': position
+                }
             
             self.logger.debug(f"📝 Marked position as hedged: {symbol} (Order: {order_id})")
             
@@ -1291,6 +1315,11 @@ class CorrelationManager:
                 
                 recovery_id = f"recovery_{group_id}_{symbol}_{int(datetime.now().timestamp())}"
                 self.recovery_positions[recovery_id] = correlation_position
+                
+                # เก็บใน recovery_positions_by_group
+                if group_id not in self.recovery_positions_by_group:
+                    self.recovery_positions_by_group[group_id] = {}
+                self.recovery_positions_by_group[group_id][recovery_id] = correlation_position
                 self._update_recovery_data()
                 
                 # บันทึกข้อมูลการแก้ไม้
@@ -1652,23 +1681,35 @@ class CorrelationManager:
             self.logger.error(f"Error removing recovery data: {e}")
     
     def clear_hedged_data_for_group(self, group_id: str):
-        """ล้างข้อมูลการแก้ไม้สำหรับกลุ่มที่ปิดแล้ว"""
+        """ล้างข้อมูลการแก้ไม้สำหรับกลุ่มที่ปิดแล้ว (รองรับการแยกตาม Group)"""
         try:
-            # ลบข้อมูลการแก้ไม้ที่เกี่ยวข้องกับกลุ่มนี้
+            # ลบข้อมูลการแก้ไม้ที่เกี่ยวข้องกับกลุ่มนี้ (global)
             positions_to_remove = []
             for order_id, hedged_info in self.hedged_positions.items():
-                if hedged_info.get('position_info', {}).get('group_id') == group_id:
+                if hedged_info.get('group_id') == group_id:
                     positions_to_remove.append(order_id)
             
             for order_id in positions_to_remove:
                 symbol = self.hedged_positions[order_id].get('symbol')
                 if symbol:
-                    self.hedged_pairs.discard(symbol)
+                    # ลบจาก global hedged_pairs (backward compatibility)
+                    if hasattr(self, 'hedged_pairs'):
+                        self.hedged_pairs.discard(symbol)
                 del self.hedged_positions[order_id]
             
-            # ลบข้อมูลกลุ่ม
+            # ลบข้อมูลกลุ่ม (global)
             if group_id in self.hedged_groups:
                 del self.hedged_groups[group_id]
+            
+            # ลบข้อมูลแยกตาม Group
+            if group_id in self.hedged_pairs_by_group:
+                del self.hedged_pairs_by_group[group_id]
+            
+            if group_id in self.hedged_positions_by_group:
+                del self.hedged_positions_by_group[group_id]
+            
+            if group_id in self.recovery_positions_by_group:
+                del self.recovery_positions_by_group[group_id]
             
             if positions_to_remove:
                 self.logger.info(f"🗑️ Cleared {len(positions_to_remove)} hedged positions for group {group_id}")

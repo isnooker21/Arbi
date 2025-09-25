@@ -53,12 +53,19 @@ class TriangleArbitrageDetector:
         self.price_stability_checks = 3  # Number of price stability checks
         self.confirmation_delay = 2  # Seconds to wait for confirmation
         
-        # Group management for single arbitrage entry
-        self.active_groups = {}  # เก็บข้อมูลกลุ่มที่เปิดอยู่
-        self.group_counter = 0   # ตัวนับกลุ่ม
-        self.is_arbitrage_paused = False  # หยุดตรวจสอบ arbitrage ใหม่
-        self.used_currency_pairs = set()  # เก็บคู่เงินที่ถูกใช้ในกลุ่มที่ยังเปิดอยู่
+        # Group management for multiple arbitrage triangles (แยกกัน)
+        self.active_groups = {}  # เก็บข้อมูลกลุ่มที่เปิดอยู่ (รวมทุกสามเหลี่ยม)
+        self.group_counters = {}  # ตัวนับกลุ่มแยกตามสามเหลี่ยม
+        self.is_arbitrage_paused = {}  # หยุดตรวจสอบ arbitrage ใหม่แยกตามสามเหลี่ยม
+        self.used_currency_pairs = {}  # เก็บคู่เงินที่ถูกใช้ในกลุ่มที่ยังเปิดอยู่แยกตามสามเหลี่ยม
         self.group_currency_mapping = {}  # เก็บการแมปกลุ่มกับคู่เงินที่ใช้
+        
+        # เริ่มต้นตัวนับกลุ่มสำหรับแต่ละสามเหลี่ยม
+        for i, triangle in enumerate(self.triangle_combinations, 1):
+            triangle_name = f"triangle_{i}"
+            self.group_counters[triangle_name] = 0
+            self.is_arbitrage_paused[triangle_name] = False
+            self.used_currency_pairs[triangle_name] = set()
         
         # ระบบส่งออเดอร์รอบเดียวทันที
         self.arbitrage_sent = False  # ตรวจสอบว่าส่งออเดอร์ arbitrage แล้วหรือไม่
@@ -89,9 +96,25 @@ class TriangleArbitrageDetector:
         # Initialize pairs and combinations after logger is set
         self.available_pairs = self._get_available_pairs()
         
-        # ใช้เฉพาะคู่เงิน Arbitrage 3 คู่ที่กำหนด
-        self.arbitrage_pairs = ['EURUSD', 'GBPUSD', 'EURGBP']
-        self.triangle_combinations = [('EURUSD', 'GBPUSD', 'EURGBP')]  # Fixed triangle combination
+        # ใช้ 6 สามเหลี่ยม Arbitrage แยกกัน
+        self.arbitrage_pairs = [
+            'EURUSD', 'GBPUSD', 'EURGBP',  # Group 1
+            'USDJPY', 'EURJPY',            # Group 2, 3
+            'GBPJPY',                      # Group 3
+            'AUDUSD', 'EURAUD',            # Group 4, 6
+            'USDCAD', 'EURCAD',            # Group 5
+            'GBPAUD'                       # Group 6
+        ]
+        
+        # 6 สามเหลี่ยม arbitrage แยกกัน
+        self.triangle_combinations = [
+            ('EURUSD', 'GBPUSD', 'EURGBP'),    # Group 1: EUR/USD, GBP/USD, EUR/GBP
+            ('USDJPY', 'EURUSD', 'EURJPY'),    # Group 2: USD/JPY, EUR/USD, EUR/JPY
+            ('USDJPY', 'GBPUSD', 'GBPJPY'),    # Group 3: USD/JPY, GBP/USD, GBP/JPY
+            ('AUDUSD', 'EURUSD', 'EURAUD'),    # Group 4: AUD/USD, EUR/USD, EUR/AUD
+            ('USDCAD', 'EURUSD', 'EURCAD'),    # Group 5: USD/CAD, EUR/USD, EUR/CAD
+            ('AUDUSD', 'GBPUSD', 'GBPAUD')     # Group 6: AUD/USD, GBP/USD, GBP/AUD
+        ]
         
         # ใช้ lot size ปกติ 0.1 สำหรับทุกคู่เงิน
         self.standard_lot_size = 0.1
@@ -249,7 +272,7 @@ class TriangleArbitrageDetector:
         while self.is_running:
             try:
                 loop_count += 1
-                self.logger.info(f"🔄 Trading loop #{loop_count} - Checking system status...")
+                # self.logger.info(f"🔄 Trading loop #{loop_count} - Checking system status...")  # DISABLED - ไม่จำเป็น
                 
                 # ตรวจสอบว่ามีกลุ่มที่เปิดอยู่จริงหรือไม่
                 if len(self.active_groups) > 0:
@@ -325,9 +348,9 @@ class TriangleArbitrageDetector:
         self.logger.info("🛑 Simple trading system stopped")
     
     def _send_simple_orders(self):
-        """ส่งออเดอร์ง่ายๆ ตามคู่เงินที่กำหนด - ใช้ balance-based lot sizing"""
+        """ส่งออเดอร์ง่ายๆ สำหรับทุกสามเหลี่ยม arbitrage - ใช้ balance-based lot sizing"""
         try:
-            self.logger.info("🔍 Starting _send_simple_orders...")
+            self.logger.info("🔍 Starting _send_simple_orders for all triangles...")
             
             # ดึง balance จาก broker
             self.logger.info("🔍 Getting account balance...")
@@ -338,9 +361,37 @@ class TriangleArbitrageDetector:
             
             self.logger.info(f"💰 Account Balance: {balance:.2f} USD")
             
+            # ตรวจสอบแต่ละสามเหลี่ยมว่าสามารถส่งออเดอร์ได้หรือไม่
+            for i, triangle in enumerate(self.triangle_combinations, 1):
+                triangle_name = f"triangle_{i}"
+                
+                # ตรวจสอบว่าสามเหลี่ยมนี้ถูก pause หรือไม่
+                if self.is_arbitrage_paused.get(triangle_name, False):
+                    continue
+                
+                # ตรวจสอบว่ามี active group สำหรับสามเหลี่ยมนี้อยู่แล้วหรือไม่
+                has_active_group = False
+                for group_id, group_data in self.active_groups.items():
+                    if group_data.get('triangle_type') == triangle_name:
+                        has_active_group = True
+                        break
+                
+                if has_active_group:
+                    continue  # ข้ามไปสามเหลี่ยมถัดไป
+                
+                # ส่งออเดอร์สำหรับสามเหลี่ยมนี้
+                self._send_orders_for_triangle(triangle, triangle_name, balance)
+                
+        except Exception as e:
+            self.logger.error(f"Error in _send_simple_orders: {e}")
+    
+    def _send_orders_for_triangle(self, triangle, triangle_name, balance):
+        """ส่งออเดอร์สำหรับสามเหลี่ยมเดียว"""
+        try:
+            self.logger.info(f"🔍 Processing {triangle_name}: {triangle}")
+            
             # คำนวณ lot sizes ให้ pip value เท่ากัน + scale ตาม balance
-            self.logger.info("🔍 Calculating lot sizes...")
-            triangle_symbols = ['EURUSD', 'GBPUSD', 'EURGBP']
+            triangle_symbols = list(triangle)
             lot_sizes = TradingCalculations.get_uniform_triangle_lots(
                 triangle_symbols=triangle_symbols,
                 balance=balance,
@@ -348,19 +399,18 @@ class TriangleArbitrageDetector:
                 broker_api=self.broker  # ส่ง broker API สำหรับดึงอัตราแลกเปลี่ยน
             )
             
-            self.logger.info(f"📊 Calculated lot sizes: {lot_sizes}")
+            self.logger.info(f"📊 {triangle_name} lot sizes: {lot_sizes}")
             
-            # สร้างกลุ่มใหม่
-            self.logger.info("🔍 Creating new group...")
-            self.group_counter += 1
-            group_id = f"simple_group_{self.group_counter}"
-            self.logger.info(f"🆕 Creating new group: {group_id} (Counter: {self.group_counter})")
+            # สร้างกลุ่มใหม่สำหรับสามเหลี่ยมนี้
+            self.group_counters[triangle_name] += 1
+            group_id = f"group_{triangle_name}_{self.group_counters[triangle_name]}"
+            self.logger.info(f"🆕 Creating new group: {group_id} for {triangle_name}")
             
             # สร้างข้อมูลกลุ่ม
-            self.logger.info("🔍 Setting up group data...")
             group_data = {
                 'group_id': group_id,
-                'triangle': ('EURUSD', 'GBPUSD', 'EURGBP'),
+                'triangle': triangle,
+                'triangle_type': triangle_name,
                 'created_at': datetime.now(),
                 'positions': [],
                 'status': 'active',
@@ -393,7 +443,7 @@ class TriangleArbitrageDetector:
                     
                     # สร้าง comment
                     group_number = group_id.split('_')[-1]
-                    comment = f"SIMPLE_G{group_number}_{order_data['symbol']}"
+                    comment = f"G{group_number}_{order_data['symbol']}"
                     
                     # ใช้ lot size ที่คำนวณแล้ว
                     lot_size = order_data.get('lot_size', 0.01)
@@ -475,7 +525,7 @@ class TriangleArbitrageDetector:
                         'entry_price': entry_price,
                         'status': 'active',
                         'order_id': result.get('order_id'),
-                        'comment': f"SIMPLE_G{group_id.split('_')[-1]}_{result['symbol']}"
+                        'comment': f"G{group_id.split('_')[-1]}_{result['symbol']}"
                     })
                     self.logger.info(f"✅ Order sent: {result['symbol']} {result['direction']} {lot_size} lot")
                 elif result:
@@ -489,21 +539,21 @@ class TriangleArbitrageDetector:
                 group_number = group_id.split('_')[-1]
                 for result in results:
                     if result and result.get('success'):
-                        comment = f"SIMPLE_G{group_number}_{result['symbol']}"
+                        comment = f"G{group_number}_{result['symbol']}"
                         self.used_currency_pairs.add(comment)
                         self.logger.debug(f"💾 Added comment to used_currency_pairs: {comment}")
                 
                 self._update_group_data(group_id, group_data)
-                self.logger.info(f"✅ Simple group {group_id} created successfully")
+                self.logger.info(f"✅ Group {group_id} created successfully")
                 self.logger.info(f"   🚀 Orders sent: {orders_sent}/3")
                 self.logger.info(f"   ⏱️ Execution time: {total_execution_time:.1f}ms")
                 self.logger.info("🔄 เริ่มใช้ระบบ Correlation Recovery")
             else:
-                self.logger.error(f"❌ Failed to create simple group {group_id}")
+                self.logger.error(f"❌ Failed to create group {group_id}")
                 self.logger.error(f"   Orders sent: {orders_sent}/3")
                 
         except Exception as e:
-            self.logger.error(f"Error sending simple orders: {e}")
+            self.logger.error(f"Error sending orders: {e}")
     
     def detect_opportunities(self):
         """Legacy method - ไม่ใช้แล้ว ใช้ _send_simple_orders แทน"""
@@ -1014,7 +1064,7 @@ class TriangleArbitrageDetector:
             group_number = group_id.split('_')[-1]
             comments_to_remove = []
             for comment in list(self.used_currency_pairs):
-                if comment.startswith(f"SIMPLE_G{group_number}_"):
+                if comment.startswith(f"G{group_number}_"):
                     comments_to_remove.append(comment)
             
             for comment in comments_to_remove:
@@ -1047,10 +1097,12 @@ class TriangleArbitrageDetector:
                 self.recovery_in_progress.remove(group_id)
                 self.logger.info(f"🔄 Reset recovery status for group {group_id}")
             
-            # Reset group counter กลับไปเป็น 0 เมื่อปิดกลุ่มแล้ว
-            old_counter = self.group_counter
-            self.group_counter = 0
-            self.logger.info(f"🔄 Reset group counter from {old_counter} to 0 - next group will be simple_group_1")
+            # Reset group counter สำหรับสามเหลี่ยมนี้เท่านั้น
+            triangle_type = group_data.get('triangle_type', 'triangle_1')
+            if triangle_type in self.group_counters:
+                old_counter = self.group_counters[triangle_type]
+                self.group_counters[triangle_type] = 0
+                self.logger.info(f"🔄 Reset {triangle_type} counter from {old_counter} to 0 - next group will be group_{triangle_type}_1")
             
             # Reset ข้อมูลกลุ่มให้ถูกต้อง
             self._reset_group_data()
@@ -1154,9 +1206,9 @@ class TriangleArbitrageDetector:
             
             # สร้าง comment patterns ที่ต้อง reset
             comment_patterns = [
-                f"SIMPLE_G{group_number}_EURUSD",
-                f"SIMPLE_G{group_number}_GBPUSD", 
-                f"SIMPLE_G{group_number}_EURGBP",
+                f"G{group_number}_EURUSD",
+                f"G{group_number}_GBPUSD", 
+                f"G{group_number}_EURGBP",
                 f"RECOVERY_G{group_number}_",
                 f"ARB_G{group_number}_"
             ]
@@ -1188,19 +1240,23 @@ class TriangleArbitrageDetector:
             self.logger.error(f"Error resetting comments for group {group_id}: {e}")
     
     def _reset_group_data(self):
-        """Reset ข้อมูลกลุ่มให้ถูกต้อง"""
+        """Reset ข้อมูลกลุ่มให้ถูกต้อง (รองรับการแยกกันของแต่ละสามเหลี่ยม)"""
         try:
             # ตรวจสอบว่ามีกลุ่มที่เปิดอยู่จริงหรือไม่
             if len(self.active_groups) == 0:
                 # ถ้าไม่มีกลุ่มที่เปิดอยู่ ให้ reset ข้อมูลทั้งหมด
-                self.used_currency_pairs.clear()
+                for triangle_name in self.used_currency_pairs:
+                    self.used_currency_pairs[triangle_name].clear()
                 self.group_currency_mapping.clear()
                 self.recovery_in_progress.clear()
-                # Reset group counter เมื่อไม่มีกลุ่มที่เปิดอยู่
-                old_counter = self.group_counter
-                self.group_counter = 0
+                
+                # Reset group counters เมื่อไม่มีกลุ่มที่เปิดอยู่
+                for triangle_name, counter in self.group_counters.items():
+                    if counter > 0:
+                        self.group_counters[triangle_name] = 0
+                        self.logger.info(f"🔄 Reset {triangle_name} counter to 0 - next group will be group_{triangle_name}_1")
+                
                 self.logger.info("🔄 Reset ข้อมูลกลุ่ม - คู่เงินและ comment ทั้งหมดปลดล็อคแล้ว")
-                self.logger.info(f"🔄 Reset group counter from {old_counter} to 0 - next group will be simple_group_1")
             else:
                 # ถ้ายังมีกลุ่มที่เปิดอยู่ ให้ตรวจสอบข้อมูลให้ถูกต้อง
                 current_used_pairs = set()
@@ -1657,7 +1713,7 @@ class TriangleArbitrageDetector:
             return False
     
     def _save_active_groups(self):
-        """บันทึกข้อมูล active groups ลงไฟล์"""
+        """บันทึกข้อมูล active groups ลงไฟล์ (รองรับการแยกกันของแต่ละสามเหลี่ยม)"""
         try:
             import json
             import os
@@ -1665,15 +1721,16 @@ class TriangleArbitrageDetector:
             # สร้างโฟลเดอร์ data ถ้าไม่มี
             os.makedirs(os.path.dirname(self.persistence_file), exist_ok=True)
             
-            # เตรียมข้อมูลสำหรับบันทึก
+            # เตรียมข้อมูลสำหรับบันทึก (รองรับการแยกกันของแต่ละสามเหลี่ยม)
             save_data = {
                 'active_groups': self.active_groups,
                 'recovery_in_progress': list(self.recovery_in_progress),
-                'group_counter': self.group_counter,
+                'group_counters': self.group_counters,  # แยกตามสามเหลี่ยม
+                'is_arbitrage_paused': self.is_arbitrage_paused,  # แยกตามสามเหลี่ยม
+                'used_currency_pairs': {k: list(v) for k, v in self.used_currency_pairs.items()},  # แยกตามสามเหลี่ยม
+                'group_currency_mapping': self.group_currency_mapping,
                 'arbitrage_sent': self.arbitrage_sent,
                 'arbitrage_send_time': self.arbitrage_send_time.isoformat() if self.arbitrage_send_time else None,
-                'used_currency_pairs': list(self.used_currency_pairs),
-                'group_currency_mapping': self.group_currency_mapping,
                 'saved_at': datetime.now().isoformat()
             }
             
@@ -1687,7 +1744,7 @@ class TriangleArbitrageDetector:
             self.logger.error(f"Error saving active groups: {e}")
     
     def _load_active_groups(self):
-        """โหลดข้อมูล active groups จากไฟล์"""
+        """โหลดข้อมูล active groups จากไฟล์ (รองรับการแยกกันของแต่ละสามเหลี่ยม)"""
         try:
             import json
             import os
@@ -1700,10 +1757,24 @@ class TriangleArbitrageDetector:
             with open(self.persistence_file, 'r') as f:
                 save_data = json.load(f)
             
-            # โหลดข้อมูลกลับมา
+            # โหลดข้อมูลกลับมา (รองรับการแยกกันของแต่ละสามเหลี่ยม)
             self.active_groups = save_data.get('active_groups', {})
             self.recovery_in_progress = set(save_data.get('recovery_in_progress', []))
-            self.group_counter = save_data.get('group_counter', 0)
+            
+            # โหลดข้อมูลแยกตามสามเหลี่ยม
+            self.group_counters = save_data.get('group_counters', {})
+            self.is_arbitrage_paused = save_data.get('is_arbitrage_paused', {})
+            
+            # แปลง used_currency_pairs กลับเป็น set
+            used_currency_pairs_data = save_data.get('used_currency_pairs', {})
+            if isinstance(used_currency_pairs_data, dict):
+                # รูปแบบใหม่: แยกตามสามเหลี่ยม
+                self.used_currency_pairs = {k: set(v) for k, v in used_currency_pairs_data.items()}
+            else:
+                # รูปแบบเก่า: global set (backward compatibility)
+                self.used_currency_pairs = {f"triangle_{i}": set(used_currency_pairs_data) for i in range(1, 7)}
+            
+            self.group_currency_mapping = save_data.get('group_currency_mapping', {})
             self.arbitrage_sent = save_data.get('arbitrage_sent', False)
             
             # แปลง arbitrage_send_time กลับเป็น datetime
@@ -1712,9 +1783,6 @@ class TriangleArbitrageDetector:
                 self.arbitrage_send_time = datetime.fromisoformat(arbitrage_send_time_str)
             else:
                 self.arbitrage_send_time = None
-            
-            self.used_currency_pairs = set(save_data.get('used_currency_pairs', []))
-            self.group_currency_mapping = save_data.get('group_currency_mapping', {})
             
             saved_at = save_data.get('saved_at', 'Unknown')
             
