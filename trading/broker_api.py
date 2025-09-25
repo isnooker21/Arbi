@@ -474,7 +474,7 @@ class BrokerAPI:
             return None
     
     def place_order(self, symbol: str, order_type: str, volume: float, 
-                   price: float = None, sl: float = None, tp: float = None, comment: str = None) -> Optional[Dict]:
+                   price: float = None, sl: float = None, tp: float = None, comment: str = None, magic: int = None) -> Optional[Dict]:
         """Place an order"""
         try:
             if not self._connected:
@@ -505,13 +505,16 @@ class BrokerAPI:
                 # ใช้ comment ตามกลุ่มและลำดับ
                 simple_comment = comment if comment else "Trade"
                 
+                # ใช้ magic number ที่ระบุ หรือใช้ default
+                magic_number = magic if magic is not None else 234000
+                
                 request = {
                     "action": mt5.TRADE_ACTION_DEAL,
                     "symbol": symbol,
                     "volume": volume,
                     "type": order_type_mt5,
                     "price": price,
-                    "magic": 234000,  # Use unique magic number
+                    "magic": magic_number,  # Use unique magic number for each group
                     "comment": simple_comment,
                 }
                 

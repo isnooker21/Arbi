@@ -116,6 +116,16 @@ class TriangleArbitrageDetector:
             self.is_arbitrage_paused[triangle_name] = False
             self.used_currency_pairs[triangle_name] = set()
         
+        # Magic numbers สำหรับแต่ละสามเหลี่ยม
+        self.triangle_magic_numbers = {
+            'triangle_1': 234001,  # EURUSD, GBPUSD, EURGBP
+            'triangle_2': 234002,  # USDJPY, EURUSD, EURJPY
+            'triangle_3': 234003,  # USDJPY, GBPUSD, GBPJPY
+            'triangle_4': 234004,  # AUDUSD, EURUSD, EURAUD
+            'triangle_5': 234005,  # USDCAD, EURUSD, EURCAD
+            'triangle_6': 234006   # AUDUSD, GBPUSD, GBPAUD
+        }
+        
         # ใช้ lot size ปกติ 0.1 สำหรับทุกคู่เงิน
         self.standard_lot_size = 0.1
         
@@ -275,6 +285,11 @@ class TriangleArbitrageDetector:
                 # self.logger.info(f"🔄 Trading loop #{loop_count} - Checking system status...")  # DISABLED - ไม่จำเป็น
                 
                 # ตรวจสอบว่ามีกลุ่มที่เปิดอยู่จริงหรือไม่
+                self.logger.info(f"🔍 Checking active groups: {len(self.active_groups)} groups found")
+                for group_id, group_data in self.active_groups.items():
+                    triangle_type = group_data.get('triangle_type', 'unknown')
+                    self.logger.info(f"   - {group_id} (triangle_type: {triangle_type})")
+                
                 if len(self.active_groups) > 0:
                     # ตรวจสอบว่า Group ยังเปิดอยู่จริงใน broker หรือไม่
                     has_valid_groups = False
@@ -333,6 +348,12 @@ class TriangleArbitrageDetector:
                 
                 # ออกไม้ทันทีตามคู่เงินที่กำหนด
                 self.logger.info("🎯 No active groups - attempting to send new orders...")
+                self.logger.info(f"🔍 Triangle combinations available: {len(self.triangle_combinations)}")
+                for i, triangle in enumerate(self.triangle_combinations, 1):
+                    triangle_name = f"triangle_{i}"
+                    is_paused = self.is_arbitrage_paused.get(triangle_name, False)
+                    self.logger.info(f"   - {triangle_name}: {triangle} (paused: {is_paused})")
+                
                 self._send_simple_orders()
                 
                 # รอ 30 วินาทีก่อนตรวจสอบอีกครั้ง (ลด log ที่ไม่จำเป็น)
@@ -361,29 +382,136 @@ class TriangleArbitrageDetector:
             
             self.logger.info(f"💰 Account Balance: {balance:.2f} USD")
             
+            # ตรวจสอบไม้จาก MT5 ก่อน
+            self.logger.info("🔍 Checking existing positions from MT5...")
+            all_positions = self.broker.get_all_positions()
+            self.logger.info(f"📊 Found {len(all_positions)} positions in MT5")
+            
+            # ตรวจสอบว่ามีไม้ arbitrage อยู่หรือไม่ (ใช้ magic number)
+            arbitrage_positions = []
+            for pos in all_positions:
+                magic = pos.get('magic', 0)
+                comment = pos.get('comment', '')
+                # ตรวจสอบ magic number ที่อยู่ในช่วง 234001-234006
+                if 234001 <= magic <= 234006:
+                    arbitrage_positions.append(pos)
+                    self.logger.info(f"   - {pos.get('symbol')} {pos.get('type')} (Magic: {magic}, Comment: {comment})")
+            
+            self.logger.info(f"📊 Found {len(arbitrage_positions)} arbitrage positions in MT5")
+            
+            # ซิงค์ข้อมูลจาก MT5 กับ memory
+            self._sync_active_groups_from_mt5(arbitrage_positions)
+            
+            # แสดงข้อมูล active groups ปัจจุบัน
+            self.logger.info(f"📊 Current active groups in memory: {len(self.active_groups)}")
+            for group_id, group_data in self.active_groups.items():
+                triangle_type = group_data.get('triangle_type', 'unknown')
+                self.logger.info(f"   - {group_id} (triangle_type: {triangle_type})")
+            
             # ตรวจสอบแต่ละสามเหลี่ยมว่าสามารถส่งออเดอร์ได้หรือไม่
             for i, triangle in enumerate(self.triangle_combinations, 1):
                 triangle_name = f"triangle_{i}"
                 
+                self.logger.info(f"🔍 Checking {triangle_name}: {triangle}")
+                
                 # ตรวจสอบว่าสามเหลี่ยมนี้ถูก pause หรือไม่
                 if self.is_arbitrage_paused.get(triangle_name, False):
+                    self.logger.info(f"⏸️ {triangle_name} is paused - skipping")
                     continue
                 
-                # ตรวจสอบว่ามี active group สำหรับสามเหลี่ยมนี้อยู่แล้วหรือไม่
-                has_active_group = False
-                for group_id, group_data in self.active_groups.items():
-                    if group_data.get('triangle_type') == triangle_name:
-                        has_active_group = True
+                # ตรวจสอบว่ามีไม้ arbitrage สำหรับสามเหลี่ยมนี้อยู่แล้วหรือไม่ใน MT5 (ใช้ magic number)
+                has_arbitrage_positions = False
+                triangle_magic = self.triangle_magic_numbers.get(triangle_name, 234000)
+                
+                for pos in arbitrage_positions:
+                    magic = pos.get('magic', 0)
+                    if magic == triangle_magic:
+                        has_arbitrage_positions = True
+                        symbol = pos.get('symbol', '')
+                        comment = pos.get('comment', '')
+                        self.logger.info(f"🚫 {triangle_name} has arbitrage position: {symbol} (Magic: {magic}, Comment: {comment})")
                         break
                 
-                if has_active_group:
+                if has_arbitrage_positions:
+                    self.logger.info(f"⏭️ {triangle_name} has arbitrage positions in MT5 - skipping")
                     continue  # ข้ามไปสามเหลี่ยมถัดไป
                 
                 # ส่งออเดอร์สำหรับสามเหลี่ยมนี้
+                self.logger.info(f"🚀 Sending orders for {triangle_name}: {triangle}")
                 self._send_orders_for_triangle(triangle, triangle_name, balance)
                 
         except Exception as e:
             self.logger.error(f"Error in _send_simple_orders: {e}")
+    
+    def _sync_active_groups_from_mt5(self, arbitrage_positions):
+        """ซิงค์ข้อมูล active groups จาก MT5"""
+        try:
+            # เก็บข้อมูลกลุ่มจาก MT5
+            mt5_groups = {}
+            
+            for pos in arbitrage_positions:
+                magic = pos.get('magic', 0)
+                comment = pos.get('comment', '')
+                symbol = pos.get('symbol', '')
+                
+                # หาสามเหลี่ยมจาก magic number
+                triangle_type = None
+                for triangle_name, magic_num in self.triangle_magic_numbers.items():
+                    if magic == magic_num:
+                        triangle_type = triangle_name
+                        break
+                
+                if triangle_type:
+                    # แยก group number จาก comment
+                    group_number = "1"  # default
+                    if comment.startswith('G') and '_' in comment:
+                        parts = comment.split('_')
+                        if len(parts) >= 2:
+                            group_number = parts[0][1:]  # เอา G ออก
+                        
+                    group_id = f"group_{triangle_type}_{group_number}"
+                    
+                    if group_id not in mt5_groups:
+                        mt5_groups[group_id] = {
+                            'group_id': group_id,
+                            'triangle_type': triangle_type,
+                            'created_at': datetime.now(),
+                            'positions': [],
+                            'status': 'active',
+                            'total_pnl': 0.0,
+                            'recovery_chain': [],
+                            'lot_sizes': {}
+                        }
+                    
+                    # เพิ่มตำแหน่ง
+                    mt5_groups[group_id]['positions'].append({
+                        'symbol': symbol,
+                        'order_id': pos.get('ticket'),
+                        'lot_size': pos.get('volume', 0.1),
+                        'entry_price': pos.get('price', 0.0),
+                        'direction': pos.get('type', 'BUY'),
+                        'comment': comment,
+                        'magic': magic
+                    })
+            
+            # อัปเดต active_groups
+            self.active_groups = mt5_groups
+            
+            # อัปเดต used_currency_pairs
+            for group_id, group_data in mt5_groups.items():
+                triangle_type = group_data.get('triangle_type')
+                if triangle_type and triangle_type not in self.used_currency_pairs:
+                    self.used_currency_pairs[triangle_type] = set()
+                
+                for pos in group_data.get('positions', []):
+                    symbol = pos.get('symbol')
+                    if symbol and triangle_type:
+                        self.used_currency_pairs[triangle_type].add(symbol)
+            
+            self.logger.info(f"🔄 Synced {len(mt5_groups)} groups from MT5")
+            
+        except Exception as e:
+            self.logger.error(f"Error syncing active groups from MT5: {e}")
     
     def _send_orders_for_triangle(self, triangle, triangle_name, balance):
         """ส่งออเดอร์สำหรับสามเหลี่ยมเดียว"""
@@ -448,12 +576,16 @@ class TriangleArbitrageDetector:
                     # ใช้ lot size ที่คำนวณแล้ว
                     lot_size = order_data.get('lot_size', 0.01)
                     
-                    self.logger.info(f"🔍 Thread {result_index}: Sending {order_data['symbol']} {order_data['direction']} {lot_size} lot")
+                    # ใช้ magic number สำหรับสามเหลี่ยมนี้
+                    magic_number = self.triangle_magic_numbers.get(triangle_name, 234000)
+                    
+                    self.logger.info(f"🔍 Thread {result_index}: Sending {order_data['symbol']} {order_data['direction']} {lot_size} lot (Magic: {magic_number})")
                     result = self.broker.place_order(
                         symbol=order_data['symbol'],
                         order_type=order_data['direction'],
                         volume=lot_size,
-                        comment=comment
+                        comment=comment,
+                        magic=magic_number
                     )
                     
                     if result and result.get('retcode') == 10009:
