@@ -1001,7 +1001,6 @@ class TriangleArbitrageDetector:
                 return False
                 
             risk_per_lot = abs(total_pnl) / total_lot_size
-            self.logger.info(f"🔍 Recovery check for {triangle_type}: PnL={total_pnl:.2f}, Lot size={total_lot_size:.1f}, Risk per lot={risk_per_lot:.2%}")
             
             if risk_per_lot < 0.015:  # risk น้อยกว่า 1.5%
                 self.logger.info(f"⏳ Group {triangle_type} risk too low ({risk_per_lot:.2%}) - Waiting for 1.5%")
@@ -1009,7 +1008,6 @@ class TriangleArbitrageDetector:
             
             # ตรวจสอบระยะห่างราคา
             max_price_distance = 0
-            self.logger.info(f"🔍 Checking price distance for {triangle_type}...")
             
             for pos in group_positions:
                 symbol = pos.get('symbol', '')
@@ -1029,7 +1027,6 @@ class TriangleArbitrageDetector:
             
             
             if max_price_distance < 10:  # ระยะห่างน้อยกว่า 10 จุด
-                self.logger.info(f"⏳ Group {triangle_type} price distance too small ({max_price_distance:.1f} pips) - Waiting for 10 pips")
                 return False
             
             # ผ่านเงื่อนไขทั้งหมด - แก้ไม้ทันที
