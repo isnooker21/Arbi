@@ -568,16 +568,16 @@ class TriangleArbitrageDetector:
     def _send_arbitrage_order(self, symbol: str, direction: str, group_id: str) -> bool:
         """ส่งออเดอร์ arbitrage"""
         try:
-            # ตรวจสอบว่าส่งออเดอร์ arbitrage แล้วหรือไม่
-            if self.arbitrage_sent:
-                self.logger.warning(f"🚫 ส่งออเดอร์ arbitrage แล้ว - หยุดส่งออเดอร์ {symbol}")
-                return {
-                    'success': False,
-                    'order_id': None,
-                    'symbol': symbol,
-                    'direction': direction,
-                    'error': 'Arbitrage already sent'
-                }
+            # ตรวจสอบว่าส่งออเดอร์ arbitrage แล้วหรือไม่ (สำหรับระบบเก่า - ไม่ใช้แล้ว)
+            # if self.arbitrage_sent:
+            #     self.logger.warning(f"🚫 ส่งออเดอร์ arbitrage แล้ว - หยุดส่งออเดอร์ {symbol}")
+            #     return {
+            #         'success': False,
+            #         'order_id': None,
+            #         'symbol': symbol,
+            #         'direction': direction,
+            #         'error': 'Arbitrage already sent'
+            #     }
             
             # ตรวจสอบเพิ่มเติม: ตรวจสอบว่าคู่เงินนี้ถูกใช้แล้วหรือไม่
             if symbol in self.used_currency_pairs:
@@ -1088,9 +1088,9 @@ class TriangleArbitrageDetector:
             # ลบกลุ่มออกจาก active_groups
             self._remove_group_data(group_id)
             
-            # Reset arbitrage_sent เพื่อให้สามารถส่งออเดอร์ใหม่ได้
-            self.arbitrage_sent = False
-            self.arbitrage_send_time = None
+            # Reset arbitrage_sent เพื่อให้สามารถส่งออเดอร์ใหม่ได้ (สำหรับระบบเก่า - ไม่ใช้แล้ว)
+            # self.arbitrage_sent = False
+            # self.arbitrage_send_time = None
             
             # Reset recovery_in_progress สำหรับกลุ่มนี้
             if group_id in self.recovery_in_progress:
@@ -1729,8 +1729,8 @@ class TriangleArbitrageDetector:
                 'is_arbitrage_paused': self.is_arbitrage_paused,  # แยกตามสามเหลี่ยม
                 'used_currency_pairs': {k: list(v) for k, v in self.used_currency_pairs.items()},  # แยกตามสามเหลี่ยม
                 'group_currency_mapping': self.group_currency_mapping,
-                'arbitrage_sent': self.arbitrage_sent,
-                'arbitrage_send_time': self.arbitrage_send_time.isoformat() if self.arbitrage_send_time else None,
+                # 'arbitrage_sent': self.arbitrage_sent,  # ไม่ใช้แล้ว - ระบบเก่า
+                # 'arbitrage_send_time': self.arbitrage_send_time.isoformat() if self.arbitrage_send_time else None,  # ไม่ใช้แล้ว - ระบบเก่า
                 'saved_at': datetime.now().isoformat()
             }
             
@@ -1775,14 +1775,14 @@ class TriangleArbitrageDetector:
                 self.used_currency_pairs = {f"triangle_{i}": set(used_currency_pairs_data) for i in range(1, 7)}
             
             self.group_currency_mapping = save_data.get('group_currency_mapping', {})
-            self.arbitrage_sent = save_data.get('arbitrage_sent', False)
+            # self.arbitrage_sent = save_data.get('arbitrage_sent', False)  # ไม่ใช้แล้ว - ระบบเก่า
             
-            # แปลง arbitrage_send_time กลับเป็น datetime
-            arbitrage_send_time_str = save_data.get('arbitrage_send_time')
-            if arbitrage_send_time_str:
-                self.arbitrage_send_time = datetime.fromisoformat(arbitrage_send_time_str)
-            else:
-                self.arbitrage_send_time = None
+            # แปลง arbitrage_send_time กลับเป็น datetime (ไม่ใช้แล้ว - ระบบเก่า)
+            # arbitrage_send_time_str = save_data.get('arbitrage_send_time')
+            # if arbitrage_send_time_str:
+            #     self.arbitrage_send_time = datetime.fromisoformat(arbitrage_send_time_str)
+            # else:
+            #     self.arbitrage_send_time = None
             
             saved_at = save_data.get('saved_at', 'Unknown')
             
@@ -1799,10 +1799,10 @@ class TriangleArbitrageDetector:
             # เริ่มต้นใหม่ถ้าโหลดไม่ได้
             self.active_groups = {}
             self.recovery_in_progress = set()
-            self.group_counter = 0
-            self.arbitrage_sent = False
-            self.arbitrage_send_time = None
-            self.used_currency_pairs = set()
+            # self.group_counter = 0  # ไม่ใช้แล้ว - ใช้ group_counters แทน
+            # self.arbitrage_sent = False  # ไม่ใช้แล้ว - ระบบเก่า
+            # self.arbitrage_send_time = None  # ไม่ใช้แล้ว - ระบบเก่า
+            # self.used_currency_pairs = set()  # ไม่ใช้แล้ว - ใช้ used_currency_pairs แทน
             self.group_currency_mapping = {}
     
     def _update_group_data(self, group_id: str, group_data: Dict):
