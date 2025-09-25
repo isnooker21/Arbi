@@ -841,7 +841,14 @@ class CorrelationManager:
             
             # ตรวจสอบไม้ที่ปิดแล้ว
             closed_symbols = []
-            for original_symbol, recovery_info in self.group_hedge_tracking[group_id].items():
+            # สร้าง copy ของ dictionary keys เพื่อป้องกัน "dictionary changed size during iteration"
+            original_symbols = list(self.group_hedge_tracking[group_id].keys())
+            
+            for original_symbol in original_symbols:
+                if original_symbol not in self.group_hedge_tracking[group_id]:
+                    continue  # ถ้า symbol ถูกลบไปแล้วระหว่างการ iterate
+                    
+                recovery_info = self.group_hedge_tracking[group_id][original_symbol]
                 all_closed = True
                 for recovery_symbol, info in recovery_info.items():
                     if self._is_recovery_position_active(info.get('recovery_order_id')):
@@ -2020,7 +2027,15 @@ class CorrelationManager:
             active_recovery_count = 0
             positions_to_remove = []
             
-            for recovery_id, position in self.recovery_positions.items():
+            # สร้าง copy ของ dictionary keys เพื่อป้องกัน "dictionary changed size during iteration"
+            recovery_ids = list(self.recovery_positions.keys())
+            
+            for recovery_id in recovery_ids:
+                if recovery_id not in self.recovery_positions:
+                    continue  # ถ้า position ถูกลบไปแล้วระหว่างการ iterate
+                    
+                position = self.recovery_positions[recovery_id]
+                
                 if position['status'] == 'active':
                     # ตรวจสอบว่ากลุ่มยังเปิดอยู่หรือไม่
                     group_id = position.get('group_id', '')
@@ -2040,8 +2055,9 @@ class CorrelationManager:
             
             # ลบ positions ที่ไม่มี group_id
             for recovery_id in positions_to_remove:
-                del self.recovery_positions[recovery_id]
-                self.logger.info(f"🗑️ Removed orphaned recovery position: {recovery_id}")
+                if recovery_id in self.recovery_positions:
+                    del self.recovery_positions[recovery_id]
+                    self.logger.info(f"🗑️ Removed orphaned recovery position: {recovery_id}")
             
             # แสดง log เฉพาะเมื่อมี recovery positions และมีการเปลี่ยนแปลง
             if active_recovery_count > 0:
@@ -2096,7 +2112,7 @@ class CorrelationManager:
                 self.logger.info(f"✅ Recovery position {symbol} was already closed - updated status")
                 return 0.0
                 
-            # ปิดออเดอร์
+                # ปิดออเดอร์
             success = self.broker.close_position(symbol)
                 
             if success:
@@ -2284,7 +2300,14 @@ class CorrelationManager:
             positions_to_remove = []
             seen_positions = {}  # เก็บข้อมูลไม้ที่เห็นแล้ว
             
-            for recovery_id, position in self.recovery_positions.items():
+            # สร้าง copy ของ dictionary keys เพื่อป้องกัน "dictionary changed size during iteration"
+            recovery_ids = list(self.recovery_positions.keys())
+            
+            for recovery_id in recovery_ids:
+                if recovery_id not in self.recovery_positions:
+                    continue  # ถ้า position ถูกลบไปแล้วระหว่างการ iterate
+                    
+                position = self.recovery_positions[recovery_id]
                 symbol = position.get('symbol')
                 order_id = position.get('order_id')
                 
