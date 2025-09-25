@@ -586,6 +586,9 @@ class CorrelationManager:
             self.logger.info("📊 ALL GROUPS STATUS OVERVIEW")
             self.logger.info("=" * 100)
             
+            # Sync tracking จาก MT5 ก่อน
+            self.sync_tracking_from_mt5()
+            
             # ดึงข้อมูลจาก MT5 จริงๆ
             all_positions = self.broker.get_all_positions()
             
@@ -631,6 +634,18 @@ class CorrelationManager:
                         group_id = f"group_triangle_{group_number.replace('G', '')}_1"
                         is_hedged = self._is_position_hedged(pos, group_id)
                         hedge_status = "✅ HG" if is_hedged else "❌ NH"
+                        
+                        # Debug: แสดงข้อมูล tracking
+                        if group_id in self.group_hedge_tracking:
+                            tracking_info = self.group_hedge_tracking[group_id]
+                            if symbol in tracking_info:
+                                recovery_pairs = list(tracking_info[symbol].keys())
+                                self.logger.debug(f"     📝 Tracking: {symbol} -> {recovery_pairs}")
+                            else:
+                                self.logger.debug(f"     📝 No tracking for {symbol}")
+                        else:
+                            self.logger.debug(f"     📝 No tracking for group {group_id}")
+                        
                         self.logger.info(f"     - {symbol:8s}: ${pnl:8.2f} [{hedge_status}]")
                 
                 # แสดงไม้ recovery ที่ขาดทุน
@@ -739,10 +754,14 @@ class CorrelationManager:
             symbol = position.get('symbol')
             
             if not order_id or not symbol or not group_id:
+                self.logger.debug(f"❌ Missing data: order_id={order_id}, symbol={symbol}, group_id={group_id}")
                 return False
+            
+            self.logger.debug(f"🔍 Checking hedge status for {symbol} in {group_id}")
             
             # ใช้ระบบ tracking ใหม่เป็นหลัก
             if self._check_hedge_status_from_tracking(group_id, symbol):
+                self.logger.debug(f"✅ Found hedge from tracking: {symbol}")
                 return True
             
             # Fallback: ตรวจสอบจาก MT5 positions โดยใช้ comment pattern
@@ -757,6 +776,7 @@ class CorrelationManager:
                             self.logger.debug(f"✅ Found active recovery position for {symbol}: {pos.get('symbol')} (from MT5 fallback)")
                             return True
             
+            self.logger.debug(f"❌ No hedge found for {symbol}")
             return False
             
         except Exception as e:
@@ -828,10 +848,14 @@ class CorrelationManager:
         """Sync ข้อมูล tracking จาก MT5 positions ที่มีอยู่"""
         try:
             all_positions = self.broker.get_all_positions()
+            recovery_count = 0
             
             for pos in all_positions:
                 comment = pos.get('comment', '')
                 if comment.startswith('RECOVERY_'):
+                    recovery_count += 1
+                    self.logger.debug(f"🔍 Found recovery position: {pos.get('symbol')} - {comment}")
+                    
                     # แยกข้อมูลจาก comment
                     # Format: RECOVERY_G{group_number}_{original_symbol}_TO_{recovery_symbol}
                     parts = comment.split('_')
@@ -844,6 +868,8 @@ class CorrelationManager:
                             
                             # สร้าง group_id
                             group_id = f"group_triangle_{group_number[1:]}_1"  # G1 -> group_triangle_1_1
+                            
+                            self.logger.debug(f"🔍 Parsed: group_id={group_id}, original={original_symbol}, recovery={recovery_symbol}")
                             
                             # เพิ่มเข้า tracking ถ้ายังไม่มี
                             if group_id not in self.group_hedge_tracking:
@@ -860,9 +886,16 @@ class CorrelationManager:
                                 }
                                 
                                 self.logger.info(f"🔄 Synced tracking from MT5: {group_id} - {original_symbol} -> {recovery_symbol} (Order: {recovery_order_id})")
+                            else:
+                                self.logger.debug(f"🔄 Already tracked: {group_id} - {original_symbol} -> {recovery_symbol}")
                         
                         except Exception as e:
                             self.logger.error(f"Error parsing recovery comment: {comment} - {e}")
+                    else:
+                        self.logger.debug(f"🔍 Invalid recovery comment format: {comment}")
+            
+            self.logger.debug(f"🔍 Total recovery positions found: {recovery_count}")
+            self.logger.debug(f"🔍 Current tracking data: {self.group_hedge_tracking}")
             
         except Exception as e:
             self.logger.error(f"Error syncing tracking from MT5: {e}")
