@@ -665,49 +665,69 @@ class MainWindow:
             self.log_message(f"📊 Found {len(active_groups)} active groups")
             
             # Update each triangle
-            for triangle_id in self.group_dashboard.triangle_configs.keys():
-                # Find group data for this triangle
-                group_data = None
-                for group_id, group_info in active_groups.items():
-                    if group_info.get('triangle_type') == triangle_id:
-                        group_data = group_info
-                        break
+            if (hasattr(self, 'group_dashboard') and 
+                self.group_dashboard and 
+                hasattr(self.group_dashboard, 'triangle_configs')):
                 
-                if group_data:
-                    # Update group status
-                    self.group_dashboard.update_group_status(triangle_id, group_data)
-                    self.log_message(f"✅ Updated {triangle_id}: {group_data.get('group_id', 'Unknown')}")
-                else:
-                    # No active group for this triangle
-                    empty_data = {
-                        'status': 'inactive',
-                        'group_id': 'None',
-                        'total_pnl': 0.0,
-                        'positions': [],
-                        'recovery_chain': []
-                    }
-                    self.group_dashboard.update_group_status(triangle_id, empty_data)
+                for triangle_id in self.group_dashboard.triangle_configs.keys():
+                    # Find group data for this triangle
+                    group_data = None
+                    for group_id, group_info in active_groups.items():
+                        if group_info.get('triangle_type') == triangle_id:
+                            group_data = group_info
+                            break
+                    
+                    if group_data:
+                        # Update group status
+                        self.group_dashboard.update_group_status(triangle_id, group_data)
+                        self.log_message(f"✅ Updated {triangle_id}: {group_data.get('group_id', 'Unknown')}")
+                    else:
+                        # No active group for this triangle
+                        empty_data = {
+                            'status': 'inactive',
+                            'group_id': 'None',
+                            'total_pnl': 0.0,
+                            'positions': [],
+                            'recovery_chain': []
+                        }
+                        self.group_dashboard.update_group_status(triangle_id, empty_data)
+            else:
+                self.log_message("⚠️ Group dashboard not ready yet")
             
             # Update summary
-            self.group_dashboard.update_summary(active_groups)
+            if (hasattr(self, 'group_dashboard') and 
+                self.group_dashboard and 
+                hasattr(self.group_dashboard, 'update_summary')):
+                self.group_dashboard.update_summary(active_groups)
                 
         except Exception as e:
             self.log_message(f"❌ Error updating group dashboard: {e}")
     
     def _show_default_group_status(self):
         """Show default status for all groups when not connected"""
-        for triangle_id in self.group_dashboard.triangle_configs.keys():
-            empty_data = {
-                'status': 'disconnected',
-                'group_id': 'Not Connected',
-                'total_pnl': 0.0,
-                'positions': [],
-                'recovery_chain': []
-            }
-            self.group_dashboard.update_group_status(triangle_id, empty_data)
-        
-        # Update summary with empty data
-        self.group_dashboard.update_summary({})
+        try:
+            # Check if group_dashboard exists and has triangle_configs
+            if (hasattr(self, 'group_dashboard') and 
+                self.group_dashboard and 
+                hasattr(self.group_dashboard, 'triangle_configs')):
+                
+                for triangle_id in self.group_dashboard.triangle_configs.keys():
+                    empty_data = {
+                        'status': 'disconnected',
+                        'group_id': 'Not Connected',
+                        'total_pnl': 0.0,
+                        'positions': [],
+                        'recovery_chain': []
+                    }
+                    self.group_dashboard.update_group_status(triangle_id, empty_data)
+                
+                # Update summary with empty data
+                self.group_dashboard.update_summary({})
+            else:
+                self.log_message("⚠️ Group dashboard not ready yet")
+                
+        except Exception as e:
+            self.log_message(f"❌ Error showing default group status: {e}")
     
     def start_group_dashboard_update_loop(self):
         """Start Group Dashboard update loop"""
