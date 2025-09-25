@@ -603,37 +603,27 @@ class CorrelationManager:
             return False
     
     def _is_recovery_suitable_for_symbol(self, original_symbol: str, recovery_symbol: str, comment: str) -> bool:
-        """ตรวจสอบว่า recovery position นี้เหมาะสมสำหรับ original symbol หรือไม่"""
+        """ตรวจสอบว่า recovery position นี้เหมาะสมสำหรับ original symbol หรือไม่ - ใช้วิธีง่ายๆ"""
         try:
-            # วิธีที่ 1: ตรวจสอบจาก comment pattern
+            # วิธีง่ายๆ: ตรวจสอบจาก comment pattern เท่านั้น
+            # ถ้า comment มี original_symbol อยู่ = เหมาะสม
             if original_symbol in comment:
                 return True
             
-            # วิธีที่ 2: ตรวจสอบจาก symbol mapping
-            # EURAUD -> USDCAD, USDJPY (USD-based pairs)
-            if original_symbol == 'EURAUD':
-                if recovery_symbol in ['USDCAD', 'USDJPY', 'USDCHF', 'USDNZD']:
-                    return True
-            
-            # GBPAUD -> USDCAD, USDJPY (USD-based pairs)
-            elif original_symbol == 'GBPAUD':
-                if recovery_symbol in ['USDCAD', 'USDJPY', 'USDCHF', 'USDNZD']:
-                    return True
-            
-            # GBPUSD -> EURUSD, AUDUSD (non-USD pairs)
-            elif original_symbol == 'GBPUSD':
-                if recovery_symbol in ['EURUSD', 'AUDUSD', 'NZDUSD', 'EURJPY', 'AUDJPY']:
-                    return True
-            
-            # EURUSD -> GBPUSD, AUDUSD (non-USD pairs)
-            elif original_symbol == 'EURUSD':
-                if recovery_symbol in ['GBPUSD', 'AUDUSD', 'NZDUSD', 'GBPJPY', 'AUDJPY']:
-                    return True
-            
-            # วิธีที่ 3: ตรวจสอบจาก comment pattern ที่ย่อ
+            # ตรวจสอบจาก comment pattern ที่ย่อ
             if original_symbol == 'EURAUD' and 'EURA' in comment:
                 return True
             elif original_symbol == 'GBPAUD' and 'GBPA' in comment:
+                return True
+            elif original_symbol == 'EURUSD' and 'EURU' in comment:
+                return True
+            elif original_symbol == 'GBPUSD' and 'GBPU' in comment:
+                return True
+            elif original_symbol == 'AUDUSD' and 'AUDU' in comment:
+                return True
+            elif original_symbol == 'USDCAD' and 'USDC' in comment:
+                return True
+            elif original_symbol == 'USDJPY' and 'USDJ' in comment:
                 return True
             
             return False
