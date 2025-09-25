@@ -991,6 +991,8 @@ class TriangleArbitrageDetector:
             # ตรวจสอบว่ามีการขาดทุนหรือไม่
             if total_pnl >= 0:
                 self.logger.info(f"💰 Group {triangle_type} has profit: ${total_pnl:.2f} - No recovery needed")
+                # แสดงสถานะไม้ทั้งหมดแม้ว่า Group จะมีกำไร
+                self._log_group_status_for_recovery(magic_num, triangle_type, group_positions, total_pnl, 0.0)
                 return False
             
             # คำนวณ risk per lot
@@ -1024,6 +1026,8 @@ class TriangleArbitrageDetector:
             
             
             if max_price_distance < 10:  # ระยะห่างน้อยกว่า 10 จุด
+                # แสดงสถานะไม้ทั้งหมดแม้ว่า distance จะไม่ถึง 10 pips
+                self._log_group_status_for_recovery(magic_num, triangle_type, group_positions, total_pnl, max_price_distance)
                 return False
             
             # ผ่านเงื่อนไขทั้งหมด - แก้ไม้ทันที
@@ -1033,6 +1037,32 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error checking if should start recovery from MT5: {e}")
             return False
+    
+    def _log_group_status_for_recovery(self, magic_num: int, triangle_type: str, group_positions: List[Dict], total_pnl: float, max_price_distance: float):
+        """แสดงสถานะไม้ทั้งหมดในกลุ่มสำหรับ recovery"""
+        try:
+            # สร้าง group_id จาก triangle_type
+            group_id = f"group_{triangle_type}_1"
+            
+            # สร้าง losing_pairs list จาก group_positions
+            losing_pairs = []
+            for pos in group_positions:
+                if pos.get('profit', 0) < 0:
+                    losing_pairs.append({
+                        'symbol': pos.get('symbol', ''),
+                        'order_id': pos.get('ticket', ''),
+                        'lot_size': pos.get('volume', 0.1),
+                        'entry_price': pos.get('price', 0),
+                        'pnl': pos.get('profit', 0),
+                        'comment': pos.get('comment', ''),
+                        'magic': pos.get('magic', 0)
+                    })
+            
+            # เรียกใช้ correlation_manager เพื่อแสดงสถานะ
+            self.correlation_manager._log_group_hedging_status(group_id, losing_pairs)
+            
+        except Exception as e:
+            self.logger.error(f"Error logging group status for recovery: {e}")
     
     def _close_group_by_magic(self, magic_num: int, group_id: str):
         """ปิด Group โดยใช้ magic number"""
