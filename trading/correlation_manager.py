@@ -261,9 +261,6 @@ class CorrelationManager:
     def start_chain_recovery(self, group_id: str, losing_pairs: List[Dict]):
         """เริ่ม chain recovery สำหรับกลุ่มที่ขาดทุน"""
         try:
-            # แสดงสถานะทุก Group ก่อน
-            self._log_all_groups_status()
-            
             self.logger.info("=" * 80)
             self.logger.info(f"🔗 STARTING CHAIN RECOVERY FOR GROUP {group_id}")
             self.logger.info("=" * 80)
