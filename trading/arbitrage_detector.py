@@ -286,7 +286,7 @@ class TriangleArbitrageDetector:
                 
                 # ตรวจสอบว่ามีกลุ่มที่เปิดอยู่จริงหรือไม่
                 self.logger.info(f"🔍 Checking active groups: {len(self.active_groups)} groups found")
-                for group_id, group_data in self.active_groups.items():
+                for group_id, group_data in list(self.active_groups.items()):
                     triangle_type = group_data.get('triangle_type', 'unknown')
                     self.logger.info(f"   - {group_id} (triangle_type: {triangle_type})")
                 
@@ -319,7 +319,7 @@ class TriangleArbitrageDetector:
                         self.logger.info(f"📊 Found {len(self.active_groups)} active groups - monitoring positions...")
                         
                         # แสดงสถานะไม้ทุกครั้งที่ตรวจสอบ
-                        for group_id, group_data in self.active_groups.items():
+                        for group_id, group_data in list(self.active_groups.items()):
                             self.logger.info(f"🔍 Checking group {group_id} for recovery conditions...")
                             # เรียก correlation manager เพื่อตรวจสอบพร้อมแสดงสถานะ
                             if self.correlation_manager:
@@ -407,7 +407,7 @@ class TriangleArbitrageDetector:
             
             # แสดงข้อมูล active groups ปัจจุบัน
             self.logger.info(f"📊 Current active groups in memory: {len(self.active_groups)}")
-            for group_id, group_data in self.active_groups.items():
+            for group_id, group_data in list(self.active_groups.items()):
                 triangle_type = group_data.get('triangle_type', 'unknown')
                 self.logger.info(f"   - {group_id} (triangle_type: {triangle_type})")
             
@@ -465,14 +465,9 @@ class TriangleArbitrageDetector:
                         break
                 
                 if triangle_type:
-                    # แยก group number จาก comment
-                    group_number = "1"  # default
-                    if comment.startswith('G') and '_' in comment:
-                        parts = comment.split('_')
-                        if len(parts) >= 2:
-                            group_number = parts[0][1:]  # เอา G ออก
-                        
-                    group_id = f"group_{triangle_type}_{group_number}"
+                    # แยก triangle number จาก magic number (ไม่ใช้ comment แล้ว)
+                    triangle_number = triangle_type.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
+                    group_id = f"group_{triangle_type}_{triangle_number}"
                     
                     if group_id not in mt5_groups:
                         mt5_groups[group_id] = {
@@ -789,7 +784,7 @@ class TriangleArbitrageDetector:
             
             groups_to_close = []
             
-            for group_id, group_data in self.active_groups.items():
+            for group_id, group_data in list(self.active_groups.items()):
                 # ตรวจสอบว่ากลุ่มหมดเวลา 24 ชั่วโมง
                 created_at = group_data['created_at']
                 if isinstance(created_at, str):
@@ -1430,7 +1425,7 @@ class TriangleArbitrageDetector:
                 current_used_pairs = set()
                 groups_to_remove = []
                 
-                for group_id, group_data in self.active_groups.items():
+                for group_id, group_data in list(self.active_groups.items()):
                     # ตรวจสอบว่า Group ยังเปิดอยู่จริงใน broker หรือไม่
                     valid_positions = 0
                     for position in group_data['positions']:
