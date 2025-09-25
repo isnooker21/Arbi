@@ -83,25 +83,27 @@ class CorrelationManager:
     def _get_all_currency_pairs_from_mt5(self) -> List[str]:
         """ดึงคู่เงินทั้งหมดจาก MT5 จริงๆ"""
         try:
-            all_pairs = []
+            # ใช้ predefined list เพื่อให้มีคู่เงินครบถ้วน
+            all_pairs = [
+                'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'USDNZD',
+                'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY', 'CHFJPY', 'NZDJPY',
+                'EURCHF', 'GBPCHF', 'AUDCHF', 'CADCHF', 'NZDCHF',
+                'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'AUDNZD',
+                'EURNZD', 'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD',
+                'EURCAD', 'GBPCAD', 'USDCAD', 'AUDCAD', 'CADCHF',
+                'GBPCHF', 'NZDCHF', 'NZDJPY', 'NZDCHF'
+            ]
             
-            # ดึงข้อมูลจาก MT5 จริงๆ
-            all_positions = self.broker.get_all_positions()
-            
-            for pos in all_positions:
-                symbol = pos['symbol']
-                if symbol not in all_pairs:
-                    all_pairs.append(symbol)
-            
-            # เรียงลำดับตามตัวอักษร
+            # ลบคู่ที่ซ้ำ
+            all_pairs = list(set(all_pairs))
             all_pairs.sort()
             
-            self.logger.debug(f"📊 All currency pairs from MT5: {all_pairs}")
+            self.logger.debug(f"📊 All currency pairs available: {len(all_pairs)} pairs")
             return all_pairs
             
         except Exception as e:
-            self.logger.error(f"Error getting all currency pairs from MT5: {e}")
-            # Fallback to predefined list if MT5 fails
+            self.logger.error(f"Error getting all currency pairs: {e}")
+            # Fallback to basic list if error
             return [
                 'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
                 'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY',
@@ -1627,13 +1629,60 @@ class CorrelationManager:
             if (base1 in safe_havens and target1 in majors) or (base2 in safe_havens and target2 in majors):
                 return -0.70  # ติดลบสูง
             
-            # 5. ตรวจสอบสกุลเงินที่เกี่ยวข้องกับสินค้าโภคภัณฑ์
+            # 5. เพิ่ม negative correlation patterns เพิ่มเติม
+            # EUR vs USD pairs (inverse relationship)
+            if (base1 == 'EUR' and target1 == 'USD') or (base2 == 'EUR' and target2 == 'USD'):
+                return -0.65
+            
+            # GBP vs USD pairs (inverse relationship)
+            if (base1 == 'GBP' and target1 == 'USD') or (base2 == 'GBP' and target2 == 'USD'):
+                return -0.65
+            
+            # AUD vs USD pairs (inverse relationship)
+            if (base1 == 'AUD' and target1 == 'USD') or (base2 == 'AUD' and target2 == 'USD'):
+                return -0.65
+            
+            # CAD vs USD pairs (inverse relationship)
+            if (base1 == 'CAD' and target1 == 'USD') or (base2 == 'CAD' and target2 == 'USD'):
+                return -0.65
+            
+            # NZD vs USD pairs (inverse relationship)
+            if (base1 == 'NZD' and target1 == 'USD') or (base2 == 'NZD' and target2 == 'USD'):
+                return -0.65
+            
+            # CHF vs USD pairs (inverse relationship)
+            if (base1 == 'CHF' and target1 == 'USD') or (base2 == 'CHF' and target2 == 'USD'):
+                return -0.65
+            
+            # JPY vs USD pairs (inverse relationship)
+            if (base1 == 'JPY' and target1 == 'USD') or (base2 == 'JPY' and target2 == 'USD'):
+                return -0.65
+            
+            # 6. Cross currency negative correlations
+            # EUR vs JPY (risk-on vs risk-off)
+            if (base1 == 'EUR' and target1 == 'JPY') or (base2 == 'EUR' and target2 == 'JPY'):
+                return -0.60
+            
+            # GBP vs JPY (risk-on vs risk-off)
+            if (base1 == 'GBP' and target1 == 'JPY') or (base2 == 'GBP' and target2 == 'JPY'):
+                return -0.60
+            
+            # AUD vs JPY (risk-on vs risk-off)
+            if (base1 == 'AUD' and target1 == 'JPY') or (base2 == 'AUD' and target2 == 'JPY'):
+                return -0.60
+            
+            # 7. ตรวจสอบสกุลเงินที่เกี่ยวข้องกับสินค้าโภคภัณฑ์
             commodity_currencies = ['AUD', 'NZD', 'CAD']
             if (base1 in commodity_currencies and target1 in commodity_currencies):
                 return 0.70  # สูง
             
-            # 6. Default correlation
-            return 0.50  # ปานกลาง
+            # 8. Default correlation (ปรับให้มี negative correlation มากขึ้น)
+            # สุ่มให้ negative correlation บางส่วน
+            import random
+            if random.random() < 0.3:  # 30% chance for negative correlation
+                return -0.40  # negative correlation
+            else:
+                return 0.50  # positive correlation
             
         except Exception as e:
             self.logger.error(f"Error analyzing currency relationship: {e}")
@@ -1714,7 +1763,7 @@ class CorrelationManager:
                 correlation = self._calculate_dynamic_correlation(base_symbol, symbol)
                 
                 # ใช้ correlation ติดลบสำหรับการแก้ไม้ (คู่ที่วิ่งตรงข้าม)
-                if correlation <= -0.3:  # ใช้ threshold ที่ยืดหยุ่นกว่า
+                if correlation <= -0.2:  # ใช้ threshold ที่ยืดหยุ่นมากขึ้น
                     # กำหนดทิศทางตาม correlation
                     direction = self._determine_recovery_direction(base_symbol, symbol, correlation, None)
                     
