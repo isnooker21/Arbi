@@ -328,7 +328,7 @@ class TriangleArbitrageDetector:
                             group_id = f"group_{triangle_name}_1"
                             self._close_group_by_magic(triangle_magic, group_id)
                             closed_triangles.append(triangle_name)
-                            continue
+                        continue
                         
                         # ตรวจสอบ recovery จะทำใน _check_and_close_groups
                     else:
@@ -896,9 +896,7 @@ class TriangleArbitrageDetector:
                 
                 # ปิดกลุ่มเมื่อกำไรต่อ lot เดี่ยว ถึงเป้าหมาย
                 if profit_per_single_lot >= self.profit_threshold_per_lot:
-                    self.logger.info(f"✅ Group {group_id} reached profit target - Total PnL: {total_group_pnl:.2f} USD")
-                    self.logger.info(f"✅ Closing group {group_id} - All positions will be closed together")
-                    self.logger.info(f"   🎯 Profit per single lot: {profit_per_single_lot:.2f} USD (Target: {self.profit_threshold_per_lot} USD)")
+                    self.logger.info(f"✅ Closing {group_id} - Profit: ${total_group_pnl:.2f}")
                     groups_to_close.append(group_id)
                 elif total_group_pnl > 0:
                     self.logger.info(f"💰 Group {group_id} profitable but below threshold - Total PnL: {total_group_pnl:.2f} USD")
@@ -974,7 +972,7 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error checking if should close group from MT5: {e}")
             return False
-    
+            
     def _should_start_recovery_from_mt5(self, magic_num: int, triangle_type: str) -> bool:
         """ตรวจสอบว่าควรเริ่ม recovery หรือไม่ - เช็คจาก MT5 จริงๆ"""
         try:
@@ -1343,7 +1341,7 @@ class TriangleArbitrageDetector:
                     pnl = result.get('pnl', 0)
                     total_pnl += pnl
                     pnl_status = "💰" if pnl > 0 else "💸" if pnl < 0 else "⚖️"
-                    self.logger.info(f"   ✅ Closed: {result['symbol']} {result['direction']} (Order: {result['order_id']}) {pnl_status} PnL: {pnl:.2f} USD")
+                    self.logger.info(f"   ✅ {result['symbol']} {result['direction']} {pnl_status} ${pnl:.2f}")
                 elif result:
                     self.logger.warning(f"   ❌ Failed to close: {result['symbol']} {result['direction']}")
                     if 'error' in result:
@@ -1464,13 +1462,11 @@ class TriangleArbitrageDetector:
                 # ถ้า recovery position นี้เกี่ยวข้องกับกลุ่ม arbitrage นี้
                 if (original_symbol in group_pairs) or (original_symbol == 'MATCH'):
                     recovery_positions_to_close.append(recovery_id)
-                    self.logger.info(f"🔍 Found recovery position {recovery_id} for group {group_id} (original: {original_symbol})")
             
             # ปิด recovery positions ที่เกี่ยวข้องและเก็บ PnL
             if recovery_positions_to_close:
-                self.logger.info(f"🔄 Closing {len(recovery_positions_to_close)} recovery positions for group {group_id}")
+                self.logger.info(f"🔄 Closing {len(recovery_positions_to_close)} recovery positions")
             for recovery_id in recovery_positions_to_close:
-                    self.logger.info(f"   🔄 Closing recovery position {recovery_id}")
                     pnl = self.correlation_manager._close_recovery_position(recovery_id)
                     if pnl is not None:
                         total_correlation_pnl += pnl
@@ -1484,9 +1480,8 @@ class TriangleArbitrageDetector:
             
             # ปิด recovery positions เพิ่มเติมและเก็บ PnL
             if additional_recovery_positions:
-                self.logger.info(f"🔄 Closing {len(additional_recovery_positions)} additional recovery positions for group {group_id}")
+                self.logger.info(f"🔄 Closing {len(additional_recovery_positions)} additional recovery positions")
             for recovery_id in additional_recovery_positions:
-                    self.logger.info(f"   🔄 Closing additional recovery position {recovery_id}")
                     pnl = self.correlation_manager._close_recovery_position(recovery_id)
                     if pnl is not None:
                         total_correlation_pnl += pnl
@@ -1603,7 +1598,8 @@ class TriangleArbitrageDetector:
                         self.recovery_in_progress.remove(group_id)
                 
                 # อัพเดท used_currency_pairs ให้ตรงกับข้อมูลจริง
-                self.used_currency_pairs = current_used_pairs
+                # current_used_pairs เป็น set แต่ self.used_currency_pairs ต้องเป็น dict
+                # ไม่ต้องอัพเดทเพราะใช้ magic number แล้ว
                 self.logger.info(f"🔄 อัพเดทข้อมูลกลุ่ม - คู่เงินที่ใช้: {self.used_currency_pairs}")
                 
         except Exception as e:
@@ -1922,12 +1918,12 @@ class TriangleArbitrageDetector:
                 else:
                     # If t is not a dict, assume it's active
                     active_triangles += 1
-            
+        
             return {
-            'total_triangles': total_triangles,
-            'active_triangles': active_triangles,
-            'closed_triangles': closed_triangles,
-            'adaptive_threshold': self.volatility_threshold,
+                'total_triangles': total_triangles,
+                'active_triangles': active_triangles,
+                'closed_triangles': closed_triangles,
+                'adaptive_threshold': self.volatility_threshold,
                 'avg_execution_time_ms': self.performance_metrics.get('avg_execution_time', 0),
                 'total_opportunities': self.performance_metrics.get('total_opportunities', 0),
                 'successful_trades': self.performance_metrics.get('successful_trades', 0)
@@ -1943,7 +1939,7 @@ class TriangleArbitrageDetector:
                 'avg_execution_time_ms': 0,
                 'total_opportunities': 0,
                 'successful_trades': 0
-            }
+        }
     
     def get_adaptive_parameters(self) -> Dict:
         """Get current adaptive parameters"""
