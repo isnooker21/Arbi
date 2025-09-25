@@ -141,6 +141,9 @@ class MainWindow:
         
         # Group Dashboard
         self.group_dashboard = GroupDashboard(right_panel)
+        
+        # Initialize group dashboard with default status
+        self.update_group_dashboard()
     
     def create_trading_control_panel(self, parent):
         """Create trading control panel"""
@@ -429,11 +432,17 @@ class MainWindow:
             account = self.trading_system.broker_api.account_info
             self.log_message(f"Account: {account.login} | Server: {account.server}")
             self.log_message(f"Balance: ${account.balance:.2f} | Equity: ${account.equity:.2f}")
+        
+        # Update Group Dashboard
+        self.update_group_dashboard()
     
     def _on_reconnected(self):
         """Called when reconnected to broker"""
         self.update_connection_status("connected")
         self.log_message("✅ Reconnected to broker successfully")
+        
+        # Update Group Dashboard
+        self.update_group_dashboard()
     
     def _on_reconnect_failed(self):
         """Called when reconnect to broker failed"""
@@ -633,41 +642,70 @@ class MainWindow:
     def update_group_dashboard(self):
         """Update Group Dashboard with current data"""
         try:
-            if (self.trading_system and 
-                hasattr(self.trading_system, 'arbitrage_detector') and
-                hasattr(self.trading_system.arbitrage_detector, 'active_groups')):
+            # Debug: Check if trading system exists
+            if not self.trading_system:
+                self.log_message("⚠️ Trading system not connected - showing default status")
+                self._show_default_group_status()
+                return
+            
+            if not hasattr(self.trading_system, 'arbitrage_detector'):
+                self.log_message("⚠️ Arbitrage detector not available - showing default status")
+                self._show_default_group_status()
+                return
+            
+            if not hasattr(self.trading_system.arbitrage_detector, 'active_groups'):
+                self.log_message("⚠️ Active groups not available - showing default status")
+                self._show_default_group_status()
+                return
                 
-                # Get active groups data
-                active_groups = self.trading_system.arbitrage_detector.active_groups
+            # Get active groups data
+            active_groups = self.trading_system.arbitrage_detector.active_groups
+            self.log_message(f"📊 Found {len(active_groups)} active groups")
+            
+            # Update each triangle
+            for triangle_id in self.group_dashboard.triangle_configs.keys():
+                # Find group data for this triangle
+                group_data = None
+                for group_id, group_info in active_groups.items():
+                    if group_info.get('triangle_type') == triangle_id:
+                        group_data = group_info
+                        break
                 
-                # Update each triangle
-                for triangle_id in self.group_dashboard.triangle_configs.keys():
-                    # Find group data for this triangle
-                    group_data = None
-                    for group_id, group_info in active_groups.items():
-                        if group_info.get('triangle_type') == triangle_id:
-                            group_data = group_info
-                            break
-                    
-                    if group_data:
-                        # Update group status
-                        self.group_dashboard.update_group_status(triangle_id, group_data)
-                    else:
-                        # No active group for this triangle
-                        empty_data = {
-                            'status': 'inactive',
-                            'group_id': 'None',
-                            'total_pnl': 0.0,
-                            'positions': [],
-                            'recovery_chain': []
-                        }
-                        self.group_dashboard.update_group_status(triangle_id, empty_data)
-                
-                # Update summary
-                self.group_dashboard.update_summary(active_groups)
+                if group_data:
+                    # Update group status
+                    self.group_dashboard.update_group_status(triangle_id, group_data)
+                    self.log_message(f"✅ Updated {triangle_id}: {group_data.get('group_id', 'Unknown')}")
+                else:
+                    # No active group for this triangle
+                    empty_data = {
+                        'status': 'inactive',
+                        'group_id': 'None',
+                        'total_pnl': 0.0,
+                        'positions': [],
+                        'recovery_chain': []
+                    }
+                    self.group_dashboard.update_group_status(triangle_id, empty_data)
+            
+            # Update summary
+            self.group_dashboard.update_summary(active_groups)
                 
         except Exception as e:
             self.log_message(f"Error updating group dashboard: {e}", "ERROR")
+    
+    def _show_default_group_status(self):
+        """Show default status for all groups when not connected"""
+        for triangle_id in self.group_dashboard.triangle_configs.keys():
+            empty_data = {
+                'status': 'disconnected',
+                'group_id': 'Not Connected',
+                'total_pnl': 0.0,
+                'positions': [],
+                'recovery_chain': []
+            }
+            self.group_dashboard.update_group_status(triangle_id, empty_data)
+        
+        # Update summary with empty data
+        self.group_dashboard.update_summary({})
     
     def start_group_dashboard_update_loop(self):
         """Start Group Dashboard update loop"""
