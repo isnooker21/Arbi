@@ -341,9 +341,7 @@ class TriangleArbitrageDetector:
                 if closed_triangles:
                     self.logger.info(f"📊 Closed triangles: {closed_triangles}")
                 
-                # ตรวจสอบและปิด groups ที่มีกำไร
-                if active_triangles:
-                    self._check_and_close_groups()
+                # ตรวจสอบและปิด groups ที่มีกำไร (ทำใน loop ข้างบนแล้ว)
                 
                 # ส่งไม้ใหม่สำหรับ triangles ที่ปิดแล้ว
                 if closed_triangles:
