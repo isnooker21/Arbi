@@ -275,6 +275,9 @@ class CorrelationManager:
             self.logger.info(f"🔗 STARTING CHAIN RECOVERY FOR GROUP {group_id}")
             self.logger.info("=" * 80)
             
+            # Sync tracking จาก MT5 ก่อน
+            self.sync_tracking_from_mt5()
+            
             # แสดงสถานะไม้ทั้งหมดในกลุ่ม
             self._log_group_hedging_status(group_id, losing_pairs)
             
@@ -738,8 +741,23 @@ class CorrelationManager:
             if not order_id or not symbol or not group_id:
                 return False
             
-            # ใช้ระบบ tracking ใหม่
-            return self._check_hedge_status_from_tracking(group_id, symbol)
+            # ใช้ระบบ tracking ใหม่เป็นหลัก
+            if self._check_hedge_status_from_tracking(group_id, symbol):
+                return True
+            
+            # Fallback: ตรวจสอบจาก MT5 positions โดยใช้ comment pattern
+            all_positions = self.broker.get_all_positions()
+            for pos in all_positions:
+                comment = pos.get('comment', '')
+                if comment.startswith('RECOVERY_'):
+                    # ตรวจสอบว่า recovery position นี้แก้ไม้ original symbol หรือไม่
+                    if self._is_recovery_suitable_for_symbol(symbol, pos.get('symbol', ''), comment):
+                        # ตรวจสอบว่า recovery position ยังเปิดอยู่หรือไม่
+                        if pos.get('profit') is not None:  # position ยังเปิดอยู่
+                            self.logger.debug(f"✅ Found active recovery position for {symbol}: {pos.get('symbol')} (from MT5 fallback)")
+                            return True
+            
+            return False
             
         except Exception as e:
             self.logger.error(f"Error checking if position is hedged: {e}")
@@ -805,6 +823,49 @@ class CorrelationManager:
             
         except Exception as e:
             self.logger.error(f"Error adding hedge tracking: {e}")
+    
+    def sync_tracking_from_mt5(self):
+        """Sync ข้อมูล tracking จาก MT5 positions ที่มีอยู่"""
+        try:
+            all_positions = self.broker.get_all_positions()
+            
+            for pos in all_positions:
+                comment = pos.get('comment', '')
+                if comment.startswith('RECOVERY_'):
+                    # แยกข้อมูลจาก comment
+                    # Format: RECOVERY_G{group_number}_{original_symbol}_TO_{recovery_symbol}
+                    parts = comment.split('_')
+                    if len(parts) >= 5 and parts[0] == 'RECOVERY':
+                        try:
+                            group_number = parts[1]  # G1, G2, etc.
+                            original_symbol = parts[2]  # GBPAUD, EURUSD, etc.
+                            recovery_symbol = pos.get('symbol', '')
+                            recovery_order_id = pos.get('ticket', '')
+                            
+                            # สร้าง group_id
+                            group_id = f"group_triangle_{group_number[1:]}_1"  # G1 -> group_triangle_1_1
+                            
+                            # เพิ่มเข้า tracking ถ้ายังไม่มี
+                            if group_id not in self.group_hedge_tracking:
+                                self.group_hedge_tracking[group_id] = {}
+                            
+                            if original_symbol not in self.group_hedge_tracking[group_id]:
+                                self.group_hedge_tracking[group_id][original_symbol] = {}
+                            
+                            if recovery_symbol not in self.group_hedge_tracking[group_id][original_symbol]:
+                                self.group_hedge_tracking[group_id][original_symbol][recovery_symbol] = {
+                                    'recovery_order_id': recovery_order_id,
+                                    'created_at': datetime.now(),
+                                    'status': 'active'
+                                }
+                                
+                                self.logger.info(f"🔄 Synced tracking from MT5: {group_id} - {original_symbol} -> {recovery_symbol} (Order: {recovery_order_id})")
+                        
+                        except Exception as e:
+                            self.logger.error(f"Error parsing recovery comment: {comment} - {e}")
+            
+        except Exception as e:
+            self.logger.error(f"Error syncing tracking from MT5: {e}")
     
     def _remove_hedge_tracking(self, group_id: str, original_symbol: str, recovery_symbol: str = None):
         """ลบข้อมูลการแก้ไม้จากระบบ tracking"""
@@ -904,10 +965,24 @@ class CorrelationManager:
     def _is_recovery_suitable_for_symbol(self, original_symbol: str, recovery_symbol: str, comment: str) -> bool:
         """ตรวจสอบว่า recovery position นี้เหมาะสมสำหรับ original symbol หรือไม่ - ใช้ระบบ tracking ใหม่"""
         try:
-            # ระบบเก่าถูกลบออกแล้ว ใช้ระบบ tracking ใหม่แทน
-            # ระบบ tracking ใหม่จะตรวจสอบจาก memory และ MT5 จริงๆ
-            self.logger.debug(f"📝 Recovery suitability handled by new tracking system: {original_symbol} -> {recovery_symbol}")
-            return True  # ให้ระบบ tracking ใหม่จัดการ
+            # ใช้ระบบ tracking ใหม่แทน comment pattern
+            # ตรวจสอบจาก group_hedge_tracking
+            for group_id, group_data in self.group_hedge_tracking.items():
+                if original_symbol in group_data:
+                    for tracked_recovery_symbol, info in group_data[original_symbol].items():
+                        if tracked_recovery_symbol == recovery_symbol:
+                            # ตรวจสอบว่า recovery position ยังเปิดอยู่หรือไม่
+                            if self._is_recovery_position_active(info.get('recovery_order_id')):
+                                self.logger.debug(f"✅ Found suitable recovery: {original_symbol} -> {recovery_symbol} (from tracking)")
+                                return True
+            
+            # ถ้าไม่เจอใน tracking ให้ตรวจสอบ comment pattern เป็น fallback
+            if original_symbol in comment:
+                self.logger.debug(f"✅ Found suitable recovery: {original_symbol} -> {recovery_symbol} (from comment fallback)")
+                return True
+            
+            self.logger.debug(f"❌ No suitable recovery found: {original_symbol} -> {recovery_symbol}")
+            return False
             
         except Exception as e:
             self.logger.error(f"Error checking recovery suitability: {e}")
