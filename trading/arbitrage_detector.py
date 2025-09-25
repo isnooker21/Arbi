@@ -60,13 +60,6 @@ class TriangleArbitrageDetector:
         self.used_currency_pairs = {}  # เก็บคู่เงินที่ถูกใช้ในกลุ่มที่ยังเปิดอยู่แยกตามสามเหลี่ยม
         self.group_currency_mapping = {}  # เก็บการแมปกลุ่มกับคู่เงินที่ใช้
         
-        # เริ่มต้นตัวนับกลุ่มสำหรับแต่ละสามเหลี่ยม
-        for i, triangle in enumerate(self.triangle_combinations, 1):
-            triangle_name = f"triangle_{i}"
-            self.group_counters[triangle_name] = 0
-            self.is_arbitrage_paused[triangle_name] = False
-            self.used_currency_pairs[triangle_name] = set()
-        
         # ระบบส่งออเดอร์รอบเดียวทันที
         self.arbitrage_sent = False  # ตรวจสอบว่าส่งออเดอร์ arbitrage แล้วหรือไม่
         self.arbitrage_send_time = None  # เวลาที่ส่งออเดอร์ arbitrage
@@ -115,6 +108,13 @@ class TriangleArbitrageDetector:
             ('USDCAD', 'EURUSD', 'EURCAD'),    # Group 5: USD/CAD, EUR/USD, EUR/CAD
             ('AUDUSD', 'GBPUSD', 'GBPAUD')     # Group 6: AUD/USD, GBP/USD, GBP/AUD
         ]
+        
+        # เริ่มต้นตัวนับกลุ่มสำหรับแต่ละสามเหลี่ยม
+        for i, triangle in enumerate(self.triangle_combinations, 1):
+            triangle_name = f"triangle_{i}"
+            self.group_counters[triangle_name] = 0
+            self.is_arbitrage_paused[triangle_name] = False
+            self.used_currency_pairs[triangle_name] = set()
         
         # ใช้ lot size ปกติ 0.1 สำหรับทุกคู่เงิน
         self.standard_lot_size = 0.1
