@@ -45,6 +45,18 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"Error getting magic number from group_id {group_id}: {e}")
     
+    def _extract_group_number(self, group_id: str) -> str:
+        """แยก Group number จาก group_id"""
+        try:
+            if 'triangle_' in group_id:
+                triangle_part = group_id.split('triangle_')[1].split('_')[0]
+                return f"G{triangle_part}"
+            else:
+                return "GX"
+        except Exception as e:
+            self.logger.error(f"Error extracting group number from {group_id}: {e}")
+            return "GX"
+    
     def _get_group_pairs_from_mt5(self, group_id: str) -> List[str]:
         """ดึงคู่เงินในกลุ่มจาก MT5 โดยใช้ magic number"""
         try:
@@ -154,13 +166,9 @@ class CorrelationManager:
         self.recovery_positions_by_group = {}  # เก็บ recovery positions แยกตาม Group
         self.hedged_positions_by_group = {}  # เก็บ hedged positions แยกตาม Group
         
-        # ระบบติดตามไม้ที่แก้แล้ว (ป้องกันการแก้ไม้ซ้ำ) - แยกตาม Group
-        self.hedged_pairs_by_group = {}  # เก็บคู่ที่แก้แล้วแยกตาม Group (group_id -> set of symbols)
-        self.hedged_positions = {}  # เก็บข้อมูลไม้ที่แก้แล้ว (order_id -> position_info)
-        self.hedged_groups = {}  # เก็บข้อมูลกลุ่มที่แก้แล้ว (group_id -> hedged_info)
-        
-        # Backward compatibility
-        self.hedged_pairs = set()  # เก็บคู่ที่แก้แล้ว (backward compatibility)
+        # ระบบ Tracking ใหม่ - ใช้ memory และ MT5 จริงๆ
+        self.group_hedge_tracking = {}  # เก็บข้อมูลการแก้ไม้แยกตาม Group
+        # Format: {group_id: {original_symbol: {recovery_symbol: recovery_info}}}
         
         # ระบบ Save/Load ข้อมูล
         self.persistence_file = "data/recovery_positions.json"
@@ -267,6 +275,9 @@ class CorrelationManager:
             
             # แสดงสถานะไม้ทั้งหมดในกลุ่ม
             self._log_group_hedging_status(group_id, losing_pairs)
+            
+            # แสดงสถานะทุก Group
+            self._log_all_groups_status()
             
             # สร้าง recovery chain
             recovery_chain = {
@@ -378,8 +389,12 @@ class CorrelationManager:
     def _log_group_hedging_status(self, group_id: str, losing_pairs: List[Dict]):
         """แสดงสถานะการแก้ไม้ของกลุ่มให้ชัดเจน"""
         try:
-            self.logger.info("📊 GROUP HEDGING STATUS:")
-            self.logger.info("-" * 50)
+            # แยก Group number จาก group_id
+            group_number = self._extract_group_number(group_id)
+            
+            self.logger.info("=" * 80)
+            self.logger.info(f"📊 GROUP {group_number} HEDGING STATUS")
+            self.logger.info("=" * 80)
             
             # ดึงข้อมูลจาก MT5 จริงๆ แทนการใช้ข้อมูลที่ส่งมา (ใช้ magic number)
             all_positions = self.broker.get_all_positions()
@@ -426,7 +441,9 @@ class CorrelationManager:
                     symbol = pos['symbol']
                     order_id = pos['order_id']
                     pnl = pos['pnl']
-                    self.logger.info(f"   {i}. {symbol} (Order: {order_id}) - 💰 PROFIT: ${pnl:.2f}")
+                    self.logger.info(f"   {i:2d}. {symbol:8s} (Order: {order_id:8s}) - 💰 PROFIT: ${pnl:8.2f}")
+            else:
+                self.logger.info("🟢 PROFIT ARBITRAGE POSITIONS: None")
             
             # แสดงไม้ที่ขาดทุน
             if losing_positions:
@@ -438,7 +455,7 @@ class CorrelationManager:
                     is_hedged = self._is_position_hedged(pos, group_id)
                     status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
                     
-                    self.logger.info(f"   {i}. {symbol} (Order: {order_id}) - {status} | PnL: ${pnl:.2f}")
+                    self.logger.info(f"   {i:2d}. {symbol:8s} (Order: {order_id:8s}) - {status:12s} | PnL: ${pnl:8.2f}")
                     
                     if not is_hedged:
                         # แสดงเงื่อนไขการแก้ไม้
@@ -448,11 +465,11 @@ class CorrelationManager:
                         risk_status = "✅" if risk_per_lot >= 0.015 else "❌"
                         distance_status = "✅" if price_distance >= 10 else "❌"
                         
-                        self.logger.info(f"      Risk: {risk_per_lot:.2%} (info only)")
-                        self.logger.info(f"      Distance: {price_distance:.1f} pips (≥10) {distance_status}")
+                        self.logger.info(f"        Risk: {risk_per_lot:6.2%} (info only)")
+                        self.logger.info(f"        Distance: {price_distance:5.1f} pips (≥10) {distance_status}")
                     else:
                         # แสดงข้อมูล recovery position ที่แก้ไม้แล้ว
-                        self.logger.info(f"      🔗 Already hedged with recovery position")
+                        self.logger.info(f"        🔗 Already hedged with recovery position")
             else:
                 self.logger.info("🔴 LOSING ARBITRAGE POSITIONS: None")
             
@@ -505,7 +522,9 @@ class CorrelationManager:
                     symbol = pos['symbol']
                     order_id = pos['order_id']
                     pnl = pos['pnl']
-                    self.logger.info(f"   {i}. {symbol} (Order: {order_id}) - 💰 PROFIT: ${pnl:.2f}")
+                    self.logger.info(f"   {i:2d}. {symbol:8s} (Order: {order_id:8s}) - 💰 PROFIT: ${pnl:8.2f}")
+            else:
+                self.logger.info("🟢 PROFIT CORRELATION POSITIONS: None")
             
             # แสดงไม้ correlation ที่ขาดทุน
             if losing_correlations:
@@ -517,7 +536,7 @@ class CorrelationManager:
                     is_hedged = self._is_position_hedged(pos, group_id)
                     status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
                     
-                    self.logger.info(f"   {i}. {symbol} (Order: {order_id}) - {status} | PnL: ${pnl:.2f}")
+                    self.logger.info(f"   {i:2d}. {symbol:8s} (Order: {order_id:8s}) - {status:12s} | PnL: ${pnl:8.2f}")
                     
                     if not is_hedged:
                         # แสดงเงื่อนไขการแก้ไม้
@@ -527,8 +546,10 @@ class CorrelationManager:
                         risk_status = "✅" if risk_per_lot >= 0.015 else "❌"
                         distance_status = "✅" if price_distance >= 10 else "❌"
                         
-                        self.logger.info(f"      Risk: {risk_per_lot:.2%} (info only)")
-                        self.logger.info(f"      Distance: {price_distance:.1f} pips (≥10) {distance_status}")
+                        self.logger.info(f"        Risk: {risk_per_lot:6.2%} (info only)")
+                        self.logger.info(f"        Distance: {price_distance:5.1f} pips (≥10) {distance_status}")
+            else:
+                self.logger.info("🔴 LOSING CORRELATION POSITIONS: None")
             
             # ถ้าไม่มีไม้ correlation
             if not profit_correlations and not losing_correlations:
@@ -539,12 +560,97 @@ class CorrelationManager:
             hedged_count = sum(1 for pair in losing_positions if self._is_position_hedged(pair, group_id))
             hedged_count += sum(1 for position in losing_correlations if self._is_position_hedged(position, group_id))
             
-            self.logger.info("-" * 50)
-            self.logger.info(f"📈 SUMMARY: {hedged_count}/{total_losing_positions} losing positions hedged")
+            # คำนวณ Total PnL
+            total_pnl = sum(pos['pnl'] for pos in group_positions) + sum(pos['pnl'] for pos in profit_correlations) + sum(pos['pnl'] for pos in losing_correlations)
+            
+            self.logger.info("-" * 80)
+            self.logger.info(f"📈 GROUP {group_number} SUMMARY:")
+            self.logger.info(f"   Total PnL: ${total_pnl:10.2f}")
+            self.logger.info(f"   Hedged Positions: {hedged_count:2d}/{total_losing_positions:2d}")
+            self.logger.info(f"   Arbitrage Positions: {len(group_positions):2d}")
+            self.logger.info(f"   Recovery Positions: {len(profit_correlations) + len(losing_correlations):2d}")
             self.logger.info("=" * 80)
             
         except Exception as e:
             self.logger.error(f"Error logging group hedging status: {e}")
+    
+    def _log_all_groups_status(self):
+        """แสดงสถานะทุก Group เรียงตาม Group สวยงาม"""
+        try:
+            self.logger.info("=" * 100)
+            self.logger.info("📊 ALL GROUPS STATUS OVERVIEW")
+            self.logger.info("=" * 100)
+            
+            # ดึงข้อมูลจาก MT5 จริงๆ
+            all_positions = self.broker.get_all_positions()
+            
+            # จัดกลุ่มตาม magic number
+            groups_data = {}
+            for pos in all_positions:
+                magic = pos.get('magic', 0)
+                if magic in [234001, 234002, 234003, 234004, 234005, 234006]:
+                    if magic not in groups_data:
+                        groups_data[magic] = []
+                    groups_data[magic].append(pos)
+            
+            # แสดงสถานะแต่ละ Group เรียงตาม Group
+            for magic in sorted(groups_data.keys()):
+                group_number = self._get_group_number_from_magic(magic)
+                group_positions = groups_data[magic]
+                
+                # แยกประเภทไม้
+                arbitrage_positions = [pos for pos in group_positions if not pos.get('comment', '').startswith('RECOVERY_')]
+                recovery_positions = [pos for pos in group_positions if pos.get('comment', '').startswith('RECOVERY_')]
+                
+                # คำนวณ PnL
+                arbitrage_pnl = sum(pos.get('profit', 0) for pos in arbitrage_positions)
+                recovery_pnl = sum(pos.get('profit', 0) for pos in recovery_positions)
+                total_pnl = arbitrage_pnl + recovery_pnl
+                
+                # สถานะ Group
+                status_icon = "🟢" if total_pnl >= 0 else "🔴"
+                
+                self.logger.info(f"{status_icon} GROUP {group_number}:")
+                self.logger.info(f"   Total PnL: ${total_pnl:10.2f}")
+                self.logger.info(f"   Arbitrage: {len(arbitrage_positions):2d} positions (${arbitrage_pnl:8.2f})")
+                self.logger.info(f"   Recovery:  {len(recovery_positions):2d} positions (${recovery_pnl:8.2f})")
+                
+                # แสดงไม้ที่ขาดทุน
+                losing_arbitrage = [pos for pos in arbitrage_positions if pos.get('profit', 0) < 0]
+                if losing_arbitrage:
+                    self.logger.info(f"   Losing Arbitrage: {len(losing_arbitrage)} positions")
+                    for pos in losing_arbitrage:
+                        symbol = pos.get('symbol', '')
+                        pnl = pos.get('profit', 0)
+                        self.logger.info(f"     - {symbol:8s}: ${pnl:8.2f}")
+                
+                # แสดงไม้ recovery ที่ขาดทุน
+                losing_recovery = [pos for pos in recovery_positions if pos.get('profit', 0) < 0]
+                if losing_recovery:
+                    self.logger.info(f"   Losing Recovery: {len(losing_recovery)} positions")
+                    for pos in losing_recovery:
+                        symbol = pos.get('symbol', '')
+                        pnl = pos.get('profit', 0)
+                        self.logger.info(f"     - {symbol:8s}: ${pnl:8.2f}")
+                
+                self.logger.info("")
+            
+            self.logger.info("=" * 100)
+            
+        except Exception as e:
+            self.logger.error(f"Error logging all groups status: {e}")
+    
+    def _get_group_number_from_magic(self, magic: int) -> str:
+        """แปลง magic number เป็น Group number"""
+        magic_to_group = {
+            234001: "G1",
+            234002: "G2", 
+            234003: "G3",
+            234004: "G4",
+            234005: "G5",
+            234006: "G6"
+        }
+        return magic_to_group.get(magic, "GX")
     
     def _get_position_pnl(self, position: Dict) -> float:
         """ดึงค่า PnL ของ position จาก broker"""
@@ -568,65 +674,177 @@ class CorrelationManager:
             return 0.0
     
     def _is_position_hedged(self, position: Dict, group_id: str = None) -> bool:
-        """ตรวจสอบว่าตำแหน่งนี้แก้ไม้แล้วหรือยัง - ใช้ magic number และ symbol"""
+        """ตรวจสอบว่าตำแหน่งนี้แก้ไม้แล้วหรือยัง - ใช้ระบบ tracking ใหม่"""
         try:
             order_id = position.get('order_id')
             symbol = position.get('symbol')
             
-            if not order_id or not symbol:
+            if not order_id or not symbol or not group_id:
                 return False
             
-            # เช็คจาก MT5 จริงๆ โดยใช้ magic number
-            magic_number = self._get_magic_number_from_group_id(group_id) if group_id else 0
-            all_positions = self.broker.get_all_positions()
-            
-            # หา recovery positions ที่เกี่ยวข้องกับคู่เงินนี้
-            # ใช้ magic number และ comment pattern ที่มี RECOVERY_
-            for pos in all_positions:
-                comment = pos.get('comment', '')
-                magic = pos.get('magic', 0)
-                recovery_symbol = pos.get('symbol', '')
-                
-                # เช็คว่าเป็น recovery position ของกลุ่มนี้หรือไม่
-                if magic == magic_number and 'RECOVERY_' in comment:
-                    # เช็คว่า position ยังเปิดอยู่หรือไม่
-                    if pos.get('profit') is not None:  # position ยังเปิดอยู่
-                        # ตรวจสอบว่า recovery position นี้เหมาะสมสำหรับ symbol นี้หรือไม่
-                        if self._is_recovery_suitable_for_symbol(symbol, recovery_symbol, comment):
-                            self.logger.info(f"✅ Found active recovery position for {symbol}: {recovery_symbol} ({comment})")
-                            return True
-            
-            return False
+            # ใช้ระบบ tracking ใหม่
+            return self._check_hedge_status_from_tracking(group_id, symbol)
             
         except Exception as e:
             self.logger.error(f"Error checking if position is hedged: {e}")
             return False
     
-    def _is_recovery_suitable_for_symbol(self, original_symbol: str, recovery_symbol: str, comment: str) -> bool:
-        """ตรวจสอบว่า recovery position นี้เหมาะสมสำหรับ original symbol หรือไม่ - ใช้วิธีง่ายๆ"""
+    def _check_hedge_status_from_tracking(self, group_id: str, original_symbol: str) -> bool:
+        """ตรวจสอบสถานะการแก้ไม้จากระบบ tracking"""
         try:
-            # วิธีง่ายๆ: ตรวจสอบจาก comment pattern เท่านั้น
-            # ถ้า comment มี original_symbol อยู่ = เหมาะสม
-            if original_symbol in comment:
-                return True
-            
-            # ตรวจสอบจาก comment pattern ที่ย่อ
-            if original_symbol == 'EURAUD' and 'EURA' in comment:
-                return True
-            elif original_symbol == 'GBPAUD' and 'GBPA' in comment:
-                return True
-            elif original_symbol == 'EURUSD' and 'EURU' in comment:
-                return True
-            elif original_symbol == 'GBPUSD' and 'GBPU' in comment:
-                return True
-            elif original_symbol == 'AUDUSD' and 'AUDU' in comment:
-                return True
-            elif original_symbol == 'USDCAD' and 'USDC' in comment:
-                return True
-            elif original_symbol == 'USDJPY' and 'USDJ' in comment:
-                return True
+            # ตรวจสอบจาก memory tracking
+            if group_id in self.group_hedge_tracking:
+                if original_symbol in self.group_hedge_tracking[group_id]:
+                    # ตรวจสอบว่า recovery position ยังเปิดอยู่ใน MT5 หรือไม่
+                    recovery_info = self.group_hedge_tracking[group_id][original_symbol]
+                    for recovery_symbol, info in recovery_info.items():
+                        if self._is_recovery_position_active(info.get('recovery_order_id')):
+                            self.logger.info(f"✅ Found active recovery position for {original_symbol}: {recovery_symbol} (from tracking)")
+                            return True
             
             return False
+            
+        except Exception as e:
+            self.logger.error(f"Error checking hedge status from tracking: {e}")
+            return False
+    
+    def _is_recovery_position_active(self, recovery_order_id: str) -> bool:
+        """ตรวจสอบว่า recovery position ยังเปิดอยู่ใน MT5 หรือไม่"""
+        try:
+            if not recovery_order_id:
+                return False
+            
+            # ดึงข้อมูลจาก MT5 จริงๆ
+            all_positions = self.broker.get_all_positions()
+            
+            for pos in all_positions:
+                if pos.get('ticket') == recovery_order_id:
+                    # ตรวจสอบว่า position ยังเปิดอยู่หรือไม่
+                    if pos.get('profit') is not None:  # position ยังเปิดอยู่
+                        return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Error checking if recovery position is active: {e}")
+            return False
+    
+    def _add_hedge_tracking(self, group_id: str, original_symbol: str, recovery_symbol: str, recovery_order_id: str):
+        """เพิ่มข้อมูลการแก้ไม้ในระบบ tracking"""
+        try:
+            if group_id not in self.group_hedge_tracking:
+                self.group_hedge_tracking[group_id] = {}
+            
+            if original_symbol not in self.group_hedge_tracking[group_id]:
+                self.group_hedge_tracking[group_id][original_symbol] = {}
+            
+            # บันทึกข้อมูล recovery
+            self.group_hedge_tracking[group_id][original_symbol][recovery_symbol] = {
+                'recovery_order_id': recovery_order_id,
+                'created_at': datetime.now(),
+                'status': 'active'
+            }
+            
+            self.logger.info(f"📝 Added hedge tracking: {group_id} - {original_symbol} -> {recovery_symbol} (Order: {recovery_order_id})")
+            
+        except Exception as e:
+            self.logger.error(f"Error adding hedge tracking: {e}")
+    
+    def _remove_hedge_tracking(self, group_id: str, original_symbol: str, recovery_symbol: str = None):
+        """ลบข้อมูลการแก้ไม้จากระบบ tracking"""
+        try:
+            if group_id not in self.group_hedge_tracking:
+                return
+            
+            if original_symbol not in self.group_hedge_tracking[group_id]:
+                return
+            
+            if recovery_symbol:
+                # ลบเฉพาะ recovery symbol ที่ระบุ
+                if recovery_symbol in self.group_hedge_tracking[group_id][original_symbol]:
+                    del self.group_hedge_tracking[group_id][original_symbol][recovery_symbol]
+                    self.logger.info(f"🗑️ Removed hedge tracking: {group_id} - {original_symbol} -> {recovery_symbol}")
+            else:
+                # ลบทั้งหมดของ original symbol
+                del self.group_hedge_tracking[group_id][original_symbol]
+                self.logger.info(f"🗑️ Removed all hedge tracking: {group_id} - {original_symbol}")
+            
+            # ลบ group ถ้าไม่มีข้อมูลแล้ว
+            if not self.group_hedge_tracking[group_id]:
+                del self.group_hedge_tracking[group_id]
+                self.logger.info(f"🗑️ Removed group tracking: {group_id}")
+            
+        except Exception as e:
+            self.logger.error(f"Error removing hedge tracking: {e}")
+    
+    def _cleanup_closed_hedge_tracking(self, group_id: str):
+        """ลบข้อมูล tracking ของไม้ที่ปิดแล้ว"""
+        try:
+            if group_id not in self.group_hedge_tracking:
+                return
+            
+            # ตรวจสอบไม้ที่ปิดแล้ว
+            closed_symbols = []
+            for original_symbol, recovery_info in self.group_hedge_tracking[group_id].items():
+                all_closed = True
+                for recovery_symbol, info in recovery_info.items():
+                    if self._is_recovery_position_active(info.get('recovery_order_id')):
+                        all_closed = False
+                        break
+                
+                if all_closed:
+                    closed_symbols.append(original_symbol)
+            
+            # ลบข้อมูลของไม้ที่ปิดแล้ว
+            for symbol in closed_symbols:
+                self._remove_hedge_tracking(group_id, symbol)
+            
+        except Exception as e:
+            self.logger.error(f"Error cleaning up closed hedge tracking: {e}")
+    
+    def reset_group_hedge_tracking(self, group_id: str):
+        """Reset ข้อมูล tracking ของ Group เมื่อปิด Group"""
+        try:
+            if group_id in self.group_hedge_tracking:
+                del self.group_hedge_tracking[group_id]
+                self.logger.info(f"🔄 Reset hedge tracking for group: {group_id}")
+            
+        except Exception as e:
+            self.logger.error(f"Error resetting group hedge tracking: {e}")
+    
+    def get_group_hedge_status(self, group_id: str) -> Dict:
+        """ดึงสถานะการแก้ไม้ของ Group"""
+        try:
+            if group_id not in self.group_hedge_tracking:
+                return {}
+            
+            status = {}
+            for original_symbol, recovery_info in self.group_hedge_tracking[group_id].items():
+                active_recoveries = []
+                for recovery_symbol, info in recovery_info.items():
+                    if self._is_recovery_position_active(info.get('recovery_order_id')):
+                        active_recoveries.append({
+                            'recovery_symbol': recovery_symbol,
+                            'recovery_order_id': info.get('recovery_order_id'),
+                            'created_at': info.get('created_at')
+                        })
+                
+                if active_recoveries:
+                    status[original_symbol] = active_recoveries
+            
+            return status
+            
+        except Exception as e:
+            self.logger.error(f"Error getting group hedge status: {e}")
+            return {}
+    
+    def _is_recovery_suitable_for_symbol(self, original_symbol: str, recovery_symbol: str, comment: str) -> bool:
+        """ตรวจสอบว่า recovery position นี้เหมาะสมสำหรับ original symbol หรือไม่ - ใช้ระบบ tracking ใหม่"""
+        try:
+            # ระบบเก่าถูกลบออกแล้ว ใช้ระบบ tracking ใหม่แทน
+            # ระบบ tracking ใหม่จะตรวจสอบจาก memory และ MT5 จริงๆ
+            self.logger.debug(f"📝 Recovery suitability handled by new tracking system: {original_symbol} -> {recovery_symbol}")
+            return True  # ให้ระบบ tracking ใหม่จัดการ
             
         except Exception as e:
             self.logger.error(f"Error checking recovery suitability: {e}")
@@ -794,35 +1012,10 @@ class CorrelationManager:
             self.logger.error(f"Error starting pair recovery: {e}")
     
     def _mark_position_as_hedged(self, position: Dict, group_id: str = None):
-        """บันทึกว่าตำแหน่งนี้แก้ไม้แล้ว (รองรับการแยกตาม Group)"""
+        """บันทึกว่าตำแหน่งนี้แก้ไม้แล้ว - ใช้ระบบ tracking ใหม่"""
         try:
-            order_id = position.get('order_id')
-            symbol = position.get('symbol')
-            
-            if order_id:
-                self.hedged_positions[order_id] = {
-                    'symbol': symbol,
-                    'group_id': group_id,
-                    'hedged_at': datetime.now(),
-                    'position_info': position
-                }
-            
-            if symbol and group_id:
-                # เก็บใน hedged_pairs_by_group
-                if group_id not in self.hedged_pairs_by_group:
-                    self.hedged_pairs_by_group[group_id] = set()
-                self.hedged_pairs_by_group[group_id].add(symbol)
-                
-                # เก็บใน hedged_positions_by_group
-                if group_id not in self.hedged_positions_by_group:
-                    self.hedged_positions_by_group[group_id] = {}
-                self.hedged_positions_by_group[group_id][order_id] = {
-                    'symbol': symbol,
-                    'hedged_at': datetime.now(),
-                    'position_info': position
-                }
-            
-            self.logger.debug(f"📝 Marked position as hedged: {symbol} (Order: {order_id})")
+            # ระบบเก่าถูกลบออกแล้ว ใช้ระบบ tracking ใหม่แทน
+            self.logger.debug(f"📝 Position marking handled by new tracking system: {position.get('symbol')}")
             
         except Exception as e:
             self.logger.error(f"Error marking position as hedged: {e}")
@@ -1162,71 +1355,6 @@ class CorrelationManager:
             # ใช้ฟังก์ชันสำหรับคู่เงินใดๆ แทน (ไม่ซ้ำกับคู่ในกลุ่ม)
             return self._find_correlation_pairs_for_any_symbol(base_symbol, group_pairs)
             
-            # ใช้เฉพาะคู่เงินเท่านั้น (ไม่รวม Ukoil, Gold, Silver, etc.)
-            all_pairs = [
-                'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'USDNZD',
-                'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY', 'CHFJPY', 'NZDJPY',
-                'EURCHF', 'GBPCHF', 'AUDCHF', 'CADCHF', 'NZDCHF',
-                'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'AUDNZD',
-                'EURNZD', 'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD',
-                'EURCAD', 'GBPCAD', 'USDCAD', 'AUDCAD', 'CADCHF'
-            ]
-            
-            self.logger.info(f"🔍 Using predefined currency pairs only (excluding commodities like Ukoil)")
-            
-            # หาคู่เงินที่มี correlation กับ base_symbol
-            self.logger.info(f"🔍 Searching correlation pairs for {base_symbol} from {len(all_pairs)} available pairs")
-            checked_pairs = 0
-            valid_correlations = 0
-            
-            for symbol in all_pairs:
-                if symbol == base_symbol:
-                    continue
-                
-                # ตรวจสอบว่าเป็นคู่ arbitrage หรือไม่ (ไม่ให้ซ้ำ) - ไม่ใช้แล้ว
-                # if symbol in arbitrage_pairs:
-                #     continue
-                
-                # ตรวจสอบว่าเป็นคู่เงินจริงๆ (ไม่ใช่ Ukoil, Gold, Silver, etc.)
-                if not self._is_currency_pair(symbol):
-                    continue
-                
-                checked_pairs += 1
-                
-                # คำนวณ correlation ตามประเภทคู่เงิน
-                correlation = self._calculate_correlation_for_arbitrage_pair(base_symbol, symbol)
-                
-                # ตรวจสอบว่า correlation อยู่ในเกณฑ์ที่ยอมรับได้
-                if correlation >= self.recovery_thresholds['min_correlation']:
-                    valid_correlations += 1
-                    # กำหนดทิศทางตาม correlation
-                    direction = self._determine_recovery_direction(base_symbol, symbol, correlation, None)
-                    
-                    correlation_candidates.append({
-                        'symbol': symbol,
-                        'correlation': correlation,
-                        'recovery_strength': correlation,
-                        'direction': direction
-                    })
-                    
-                    self.logger.debug(f"✅ Found correlation: {symbol} = {correlation:.2f} ({direction})")
-                else:
-                    self.logger.debug(f"❌ Low correlation: {symbol} = {correlation:.2f} (min: {self.recovery_thresholds['min_correlation']:.2f})")
-            
-            self.logger.info(f"📊 Correlation search results: {valid_correlations}/{checked_pairs} pairs passed correlation threshold")
-            
-            # Sort by recovery strength (highest first)
-            correlation_candidates.sort(key=lambda x: x['recovery_strength'], reverse=True)
-            
-            if not correlation_candidates:
-                self.logger.error(f"❌ No correlation candidates created for {base_symbol}")
-            else:
-                self.logger.info(f"🎯 Final correlation candidates for {base_symbol}: {len(correlation_candidates)} pairs")
-                for i, candidate in enumerate(correlation_candidates[:3]):  # แสดง 3 อันดับแรก
-                    self.logger.info(f"   {i+1}. {candidate['symbol']}: {candidate['correlation']:.2f} ({candidate['direction']})")
-            
-            return correlation_candidates
-            
         except Exception as e:
             self.logger.error(f"Error finding optimal correlation pairs for {base_symbol}: {e}")
             return []
@@ -1351,68 +1479,130 @@ class CorrelationManager:
             return 0.60
     
     def _calculate_real_correlation_from_mt5(self, base_symbol: str, target_symbol: str) -> float:
-        """คำนวณ correlation จริงจากข้อมูล MT5"""
+        """คำนวณ correlation จริงจากข้อมูล MT5 แบบยืดหยุ่น"""
         try:
             # ดึงข้อมูลราคาจาก MT5
             base_price = self.broker.get_current_price(base_symbol)
             target_price = self.broker.get_current_price(target_symbol)
             
             if not base_price or not target_price:
-                return 0.60  # Default correlation
+                return self._calculate_dynamic_correlation(base_symbol, target_symbol)
             
-            # คำนวณ correlation แบบง่าย (ใช้ข้อมูลราคาปัจจุบัน)
-            # ตรวจสอบว่าคู่เงินมีทิศทางการเคลื่อนไหวตรงข้ามกันหรือไม่
+            # คำนวณ correlation แบบยืดหยุ่น
+            correlation = self._calculate_dynamic_correlation(base_symbol, target_symbol)
             
-            # ใช้ข้อมูลพื้นฐานของคู่เงิน
-            if self._are_opposite_currency_pairs(base_symbol, target_symbol):
-                return -0.80  # Negative correlation (opposite movement)
-            elif self._are_same_currency_pairs(base_symbol, target_symbol):
-                return 0.80   # Positive correlation (same movement)
-            else:
-                return 0.60   # Default correlation
+            # ปรับแต่งตามราคาปัจจุบัน
+            price_ratio = abs(base_price - target_price) / max(base_price, target_price)
+            if price_ratio > 0.1:  # ราคาแตกต่างมาก
+                correlation *= 0.8  # ลด correlation เล็กน้อย
+            
+            return correlation
                 
         except Exception as e:
             self.logger.error(f"Error calculating real correlation from MT5: {e}")
+            return self._calculate_dynamic_correlation(base_symbol, target_symbol)
+    
+    def _calculate_dynamic_correlation(self, base_symbol: str, target_symbol: str) -> float:
+        """คำนวณ correlation แบบยืดหยุ่นตามโครงสร้างคู่เงิน"""
+        try:
+            # แยกสกุลเงิน
+            base_curr1, base_curr2 = base_symbol[:3], base_symbol[3:]
+            target_curr1, target_curr2 = target_symbol[:3], target_symbol[3:]
+            
+            # ตรวจสอบความสัมพันธ์แบบยืดหยุ่น
+            correlation = self._analyze_currency_relationship(base_curr1, base_curr2, target_curr1, target_curr2)
+            
+            return correlation
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating dynamic correlation: {e}")
             return 0.60
     
-    def _are_opposite_currency_pairs(self, base_symbol: str, target_symbol: str) -> bool:
-        """ตรวจสอบว่าคู่เงินมีทิศทางการเคลื่อนไหวตรงข้ามกันหรือไม่"""
+    def _analyze_currency_relationship(self, base1: str, base2: str, target1: str, target2: str) -> float:
+        """วิเคราะห์ความสัมพันธ์ระหว่างสกุลเงินแบบยืดหยุ่น"""
         try:
-            # ตัวอย่างคู่ที่วิ่งตรงข้ามกัน
-            opposite_pairs = [
-                ('EURUSD', 'USDJPY'), ('EURUSD', 'USDCAD'), ('EURUSD', 'USDCHF'),
-                ('GBPUSD', 'USDJPY'), ('GBPUSD', 'USDCAD'), ('GBPUSD', 'USDCHF'),
-                ('AUDUSD', 'USDJPY'), ('AUDUSD', 'USDCAD'), ('AUDUSD', 'USDCHF'),
-                ('GBPAUD', 'USDJPY'), ('GBPAUD', 'USDCAD'), ('GBPAUD', 'USDCHF'),
-                ('EURAUD', 'USDJPY'), ('EURAUD', 'USDCAD'), ('EURAUD', 'USDCHF'),
-                ('EURGBP', 'USDJPY'), ('EURGBP', 'USDCAD'), ('EURGBP', 'USDCHF')
-            ]
+            # 1. ตรวจสอบสกุลเงินเดียวกัน (Positive correlation)
+            if base1 == target1 or base2 == target2:
+                return 0.75  # สูง
             
-            # ตรวจสอบทั้งสองทิศทาง
-            return (base_symbol, target_symbol) in opposite_pairs or (target_symbol, base_symbol) in opposite_pairs
+            # 2. ตรวจสอบสกุลเงินตรงข้าม (Negative correlation)
+            if base1 == target2 or base2 == target1:
+                return -0.75  # ติดลบสูง
+            
+            # 3. ตรวจสอบสกุลเงินที่เกี่ยวข้อง (Moderate correlation)
+            # USD pairs
+            if 'USD' in [base1, base2] and 'USD' in [target1, target2]:
+                return 0.60  # ปานกลาง
+            
+            # EUR pairs
+            if 'EUR' in [base1, base2] and 'EUR' in [target1, target2]:
+                return 0.65  # ปานกลาง
+            
+            # GBP pairs
+            if 'GBP' in [base1, base2] and 'GBP' in [target1, target2]:
+                return 0.65  # ปานกลาง
+            
+            # JPY pairs
+            if 'JPY' in [base1, base2] and 'JPY' in [target1, target2]:
+                return 0.60  # ปานกลาง
+            
+            # AUD pairs
+            if 'AUD' in [base1, base2] and 'AUD' in [target1, target2]:
+                return 0.60  # ปานกลาง
+            
+            # CAD pairs
+            if 'CAD' in [base1, base2] and 'CAD' in [target1, target2]:
+                return 0.60  # ปานกลาง
+            
+            # CHF pairs
+            if 'CHF' in [base1, base2] and 'CHF' in [target1, target2]:
+                return 0.60  # ปานกลาง
+            
+            # NZD pairs
+            if 'NZD' in [base1, base2] and 'NZD' in [target1, target2]:
+                return 0.60  # ปานกลาง
+            
+            # 4. ตรวจสอบสกุลเงินที่ตรงข้ามกัน (Negative correlation)
+            # Major vs Safe Haven
+            majors = ['EUR', 'GBP', 'AUD', 'NZD', 'CAD']
+            safe_havens = ['JPY', 'CHF', 'USD']
+            
+            if (base1 in majors and target1 in safe_havens) or (base2 in majors and target2 in safe_havens):
+                return -0.70  # ติดลบสูง
+            
+            if (base1 in safe_havens and target1 in majors) or (base2 in safe_havens and target2 in majors):
+                return -0.70  # ติดลบสูง
+            
+            # 5. ตรวจสอบสกุลเงินที่เกี่ยวข้องกับสินค้าโภคภัณฑ์
+            commodity_currencies = ['AUD', 'NZD', 'CAD']
+            if (base1 in commodity_currencies and target1 in commodity_currencies):
+                return 0.70  # สูง
+            
+            # 6. Default correlation
+            return 0.50  # ปานกลาง
             
         except Exception as e:
-            self.logger.error(f"Error checking opposite currency pairs: {e}")
+            self.logger.error(f"Error analyzing currency relationship: {e}")
+            return 0.60
+    
+    def _is_negative_correlation(self, base_symbol: str, target_symbol: str) -> bool:
+        """ตรวจสอบว่าคู่เงินมี negative correlation หรือไม่"""
+        try:
+            correlation = self._calculate_dynamic_correlation(base_symbol, target_symbol)
+            return correlation < -0.5  # Negative correlation
+            
+        except Exception as e:
+            self.logger.error(f"Error checking negative correlation: {e}")
             return False
     
-    def _are_same_currency_pairs(self, base_symbol: str, target_symbol: str) -> bool:
-        """ตรวจสอบว่าคู่เงินมีทิศทางการเคลื่อนไหวเดียวกันหรือไม่"""
+    def _is_positive_correlation(self, base_symbol: str, target_symbol: str) -> bool:
+        """ตรวจสอบว่าคู่เงินมี positive correlation หรือไม่"""
         try:
-            # ตัวอย่างคู่ที่วิ่งทิศทางเดียวกัน
-            same_pairs = [
-                ('EURUSD', 'GBPUSD'), ('EURUSD', 'AUDUSD'), ('EURUSD', 'NZDUSD'),
-                ('GBPUSD', 'AUDUSD'), ('GBPUSD', 'NZDUSD'), ('AUDUSD', 'NZDUSD'),
-                ('EURJPY', 'GBPJPY'), ('EURJPY', 'AUDJPY'), ('EURJPY', 'CADJPY'),
-                ('GBPJPY', 'AUDJPY'), ('GBPJPY', 'CADJPY'), ('AUDJPY', 'CADJPY'),
-                ('EURCHF', 'GBPCHF'), ('EURCHF', 'AUDCHF'), ('EURCHF', 'CADCHF'),
-                ('GBPCHF', 'AUDCHF'), ('GBPCHF', 'CADCHF'), ('AUDCHF', 'CADCHF')
-            ]
-            
-            # ตรวจสอบทั้งสองทิศทาง
-            return (base_symbol, target_symbol) in same_pairs or (target_symbol, base_symbol) in same_pairs
+            correlation = self._calculate_dynamic_correlation(base_symbol, target_symbol)
+            return correlation > 0.5  # Positive correlation
             
         except Exception as e:
-            self.logger.error(f"Error checking same currency pairs: {e}")
+            self.logger.error(f"Error checking positive correlation: {e}")
             return False
     
     def _determine_recovery_direction(self, base_symbol: str, target_symbol: str, correlation: float, original_position: Dict = None) -> str:
@@ -1466,22 +1656,27 @@ class CorrelationManager:
                 if not self._is_currency_pair(symbol):
                     continue
                 
-                # คำนวณ correlation ตามประเภทคู่เงิน
-                correlation = self._calculate_correlation_for_any_pair(base_symbol, symbol)
+                # คำนวณ correlation แบบยืดหยุ่น
+                correlation = self._calculate_dynamic_correlation(base_symbol, symbol)
                 
-                if correlation <= -self.recovery_thresholds['min_correlation']:  # ใช้ correlation ติดลบ
+                # ใช้ correlation ติดลบสำหรับการแก้ไม้ (คู่ที่วิ่งตรงข้าม)
+                if correlation <= -0.3:  # ใช้ threshold ที่ยืดหยุ่นกว่า
                     # กำหนดทิศทางตาม correlation
                     direction = self._determine_recovery_direction(base_symbol, symbol, correlation, None)
                     
                     correlation_candidates.append({
                         'symbol': symbol,
                         'correlation': correlation,
-                        'recovery_strength': correlation,
+                        'recovery_strength': abs(correlation),  # ใช้ absolute value สำหรับ sorting
                         'direction': direction
                     })
+                    
+                    self.logger.debug(f"   ✅ Found negative correlation: {symbol} = {correlation:.2f} ({direction})")
+                else:
+                    self.logger.debug(f"   ❌ Low negative correlation: {symbol} = {correlation:.2f}")
             
-            # Sort by recovery strength (lowest first for negative correlation) - CRITICAL FIX
-            correlation_candidates.sort(key=lambda x: x['recovery_strength'], reverse=False)
+            # Sort by recovery strength (highest absolute correlation first)
+            correlation_candidates.sort(key=lambda x: x['recovery_strength'], reverse=True)
             
             if not correlation_candidates:
                 self.logger.error(f"❌ No correlation candidates created for {base_symbol}")
@@ -1564,8 +1759,13 @@ class CorrelationManager:
                 # บันทึกข้อมูลการแก้ไม้
                 self._log_hedging_action(original_position, correlation_position, correlation_candidate)
                 
-                # บันทึกว่าไม้นี้แก้แล้ว (ป้องกันการแก้ซ้ำ)
-                self._mark_position_as_hedged(original_position)
+                # บันทึกในระบบ tracking ใหม่
+                self._add_hedge_tracking(
+                    group_id=group_id,
+                    original_symbol=original_position['symbol'],
+                    recovery_symbol=symbol,
+                    recovery_order_id=order_result.get('order_id')
+                )
                 
                 self.logger.info(f"✅ Correlation recovery position opened: {symbol}")
                 return True
@@ -1792,7 +1992,7 @@ class CorrelationManager:
                 self._update_recovery_data()
                 self.logger.info(f"✅ Recovery position {symbol} was already closed - updated status")
                 return 0.0
-            
+                
             # ปิดออเดอร์
             success = self.broker.close_position(symbol)
             
@@ -1870,9 +2070,7 @@ class CorrelationManager:
                 'recovery_positions': self.recovery_positions,
                 'recovery_chains': self.recovery_chains,
                 'recovery_metrics': self.recovery_metrics,
-                'hedged_pairs': list(self.hedged_pairs),
-                'hedged_positions': self.hedged_positions,
-                'hedged_groups': self.hedged_groups,
+                'group_hedge_tracking': self.group_hedge_tracking,
                 'saved_at': datetime.now().isoformat()
             }
             
@@ -1909,18 +2107,15 @@ class CorrelationManager:
                 'avg_recovery_time_hours': 0,
                 'total_recovered_amount': 0.0
             })
-            self.hedged_pairs = set(save_data.get('hedged_pairs', []))
-            self.hedged_positions = save_data.get('hedged_positions', {})
-            self.hedged_groups = save_data.get('hedged_groups', {})
+            self.group_hedge_tracking = save_data.get('group_hedge_tracking', {})
             
             saved_at = save_data.get('saved_at', 'Unknown')
             
-            if self.recovery_positions or self.recovery_chains or self.hedged_pairs:
+            if self.recovery_positions or self.recovery_chains or self.group_hedge_tracking:
                 self.logger.info(f"📂 Loaded recovery data from {self.persistence_file}")
                 self.logger.info(f"   Recovery positions: {len(self.recovery_positions)}")
                 self.logger.info(f"   Recovery chains: {len(self.recovery_chains)}")
-                self.logger.info(f"   Hedged pairs: {len(self.hedged_pairs)}")
-                self.logger.info(f"   Hedged positions: {len(self.hedged_positions)}")
+                self.logger.info(f"   Group hedge tracking: {len(self.group_hedge_tracking)}")
                 self.logger.info(f"   Saved at: {saved_at}")
             else:
                 self.logger.debug("No recovery data found in persistence file")
@@ -1937,9 +2132,7 @@ class CorrelationManager:
                 'avg_recovery_time_hours': 0,
                 'total_recovered_amount': 0.0
             }
-            self.hedged_pairs = set()
-            self.hedged_positions = {}
-            self.hedged_groups = {}
+            self.group_hedge_tracking = {}
     
     def _update_recovery_data(self):
         """อัปเดตข้อมูล recovery และบันทึกลงไฟล์"""
@@ -1966,24 +2159,8 @@ class CorrelationManager:
                 if hedged_info.get('group_id') == group_id:
                     positions_to_remove.append(order_id)
             
-            for order_id in positions_to_remove:
-                symbol = self.hedged_positions[order_id].get('symbol')
-                if symbol:
-                    # ลบจาก global hedged_pairs (backward compatibility)
-                    if hasattr(self, 'hedged_pairs'):
-                        self.hedged_pairs.discard(symbol)
-                del self.hedged_positions[order_id]
-            
-            # ลบข้อมูลกลุ่ม (global)
-            if group_id in self.hedged_groups:
-                del self.hedged_groups[group_id]
-            
-            # ลบข้อมูลแยกตาม Group
-            if group_id in self.hedged_pairs_by_group:
-                del self.hedged_pairs_by_group[group_id]
-            
-            if group_id in self.hedged_positions_by_group:
-                del self.hedged_positions_by_group[group_id]
+            # ใช้ระบบ tracking ใหม่
+            self.reset_group_hedge_tracking(group_id)
             
             if group_id in self.recovery_positions_by_group:
                 del self.recovery_positions_by_group[group_id]
@@ -2048,10 +2225,8 @@ class CorrelationManager:
         """ดึงสถานะการแก้ไม้ทั้งหมด"""
         try:
             return {
-                'hedged_pairs': list(self.hedged_pairs),
-                'hedged_positions_count': len(self.hedged_positions),
-                'hedged_groups_count': len(self.hedged_groups),
-                'hedged_positions': self.hedged_positions,
+                'group_hedge_tracking': self.group_hedge_tracking,
+                'tracking_groups_count': len(self.group_hedge_tracking),
                 'hedged_groups': self.hedged_groups
             }
         except Exception as e:
@@ -2080,7 +2255,7 @@ class CorrelationManager:
             self.logger.info(f"Total Recovery Positions: {len(self.recovery_positions)}")
             self.logger.info(f"Active Positions: {active_count}")
             self.logger.info(f"Closed Positions: {closed_count}")
-            self.logger.info(f"Hedged Pairs: {len(self.hedged_pairs)}")
+            self.logger.info(f"Group Hedge Tracking: {len(self.group_hedge_tracking)}")
             self.logger.info("=" * 60)
             
         except Exception as e:
