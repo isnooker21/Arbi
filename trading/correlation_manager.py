@@ -192,7 +192,7 @@ class CorrelationManager:
             self._update_recovery_data()
             
             # เลือกคู่ที่เหมาะสมที่สุดสำหรับ recovery (แค่คู่เดียว)
-            best_pair = self._select_best_pair_for_recovery(losing_pairs)
+            best_pair = self._select_best_pair_for_recovery(losing_pairs, group_id)
             if best_pair:
                 self.logger.info(f"🎯 Selected best pair for recovery: {best_pair['symbol']} (Order: {best_pair['order_id']})")
                 self._start_pair_recovery(group_id, best_pair)
@@ -202,7 +202,7 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"Error starting chain recovery: {e}")
     
-    def _select_best_pair_for_recovery(self, losing_pairs: List[Dict]) -> Dict:
+    def _select_best_pair_for_recovery(self, losing_pairs: List[Dict], group_id: str = None) -> Dict:
         """เลือกคู่ที่เหมาะสมที่สุดสำหรับ recovery (แค่คู่เดียว)"""
         try:
             if not losing_pairs:
@@ -216,8 +216,9 @@ class CorrelationManager:
                 order_id = pair.get('order_id', '')
                 pnl = pair.get('pnl', 0)
                 
-                # ตรวจสอบว่าไม้นี้แก้แล้วหรือยัง
-                if self._is_position_hedged(pair):
+                # ตรวจสอบว่าไม้นี้แก้แล้วหรือยัง - ส่ง group_id ไปด้วย
+                if self._is_position_hedged(pair, group_id):
+                    self.logger.info(f"⏭️ Skipping {symbol} - already hedged")
                     continue
                 
                 # ตรวจสอบเงื่อนไขการแก้ไม้
@@ -329,6 +330,9 @@ class CorrelationManager:
                         
                         self.logger.info(f"      Risk: {risk_per_lot:.2%} (info only)")
                         self.logger.info(f"      Distance: {price_distance:.1f} pips (≥10) {distance_status}")
+                    else:
+                        # แสดงข้อมูล recovery position ที่แก้ไม้แล้ว
+                        self.logger.info(f"      🔗 Already hedged with recovery position")
             else:
                 self.logger.info("🔴 LOSING ARBITRAGE POSITIONS: None")
             
@@ -462,11 +466,18 @@ class CorrelationManager:
                 else:
                     group_number = 'X'
                 
-                if magic == magic_number and f'RECOVERY_G{group_number}_{symbol}_TO_' in comment:
-                    # เช็คว่า position ยังเปิดอยู่หรือไม่
-                    if pos.get('profit') is not None:  # position ยังเปิดอยู่
-                        self.logger.debug(f"✅ Found active recovery position for {symbol}: {comment}")
-                        return True
+                # เช็คทั้งรูปแบบ RECOVERY_G{group_number}_{symbol}_TO_ และ RECOVERY_G{group_number}_{symbol}
+                recovery_patterns = [
+                    f'RECOVERY_G{group_number}_{symbol}_TO_',
+                    f'RECOVERY_G{group_number}_{symbol}'
+                ]
+                
+                for pattern in recovery_patterns:
+                    if magic == magic_number and pattern in comment:
+                        # เช็คว่า position ยังเปิดอยู่หรือไม่
+                        if pos.get('profit') is not None:  # position ยังเปิดอยู่
+                            self.logger.debug(f"✅ Found active recovery position for {symbol}: {comment}")
+                            return True
             
             return False
             
