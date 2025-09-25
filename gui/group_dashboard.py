@@ -137,7 +137,7 @@ class GroupDashboard:
         name_label = tk.Label(
             header_frame,
             text=config['name'],
-            font=TradingTheme.FONTS['subtitle'],
+            font=TradingTheme.FONTS['title'],
             bg=config['color'],
             fg='white'
         )
