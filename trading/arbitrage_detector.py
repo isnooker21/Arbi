@@ -555,12 +555,18 @@ class TriangleArbitrageDetector:
             orders_sent = 0
             order_results = []
             
-            # สร้างข้อมูลออเดอร์ทั้ง 3 คู่ พร้อม lot sizes
-            orders_to_send = [
-                {'symbol': 'EURUSD', 'direction': 'BUY', 'group_id': group_id, 'index': 0, 'lot_size': lot_sizes.get('EURUSD', 0.01)},
-                {'symbol': 'GBPUSD', 'direction': 'SELL', 'group_id': group_id, 'index': 1, 'lot_size': lot_sizes.get('GBPUSD', 0.01)},
-                {'symbol': 'EURGBP', 'direction': 'BUY', 'group_id': group_id, 'index': 2, 'lot_size': lot_sizes.get('EURGBP', 0.01)}
-            ]
+            # สร้างข้อมูลออเดอร์ทั้ง 3 คู่ พร้อม lot sizes (ใช้ triangle parameter)
+            orders_to_send = []
+            for i, symbol in enumerate(triangle):
+                # กำหนดทิศทางตามลำดับ: คู่แรก BUY, คู่ที่สอง SELL, คู่ที่สาม BUY
+                direction = 'BUY' if i % 2 == 0 else 'SELL'
+                orders_to_send.append({
+                    'symbol': symbol,
+                    'direction': direction,
+                    'group_id': group_id,
+                    'index': i,
+                    'lot_size': lot_sizes.get(symbol, 0.01)
+                })
             
             # ส่งออเดอร์พร้อมกันด้วย threading
             self.logger.info("🔍 Setting up threading for order execution...")

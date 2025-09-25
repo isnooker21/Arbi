@@ -24,23 +24,6 @@ import threading
 from utils.calculations import TradingCalculations
 
 class CorrelationManager:
-    def __init__(self, broker_api, ai_engine=None):
-        self.broker = broker_api
-        # self.ai = ai_engine  # DISABLED for simple trading system
-        self.correlation_matrix = {}
-        self.recovery_positions = {}
-        self.is_running = False
-        self.logger = logging.getLogger(__name__)
-        
-        # Magic numbers สำหรับแต่ละสามเหลี่ยม (เหมือนกับ arbitrage_detector)
-        self.triangle_magic_numbers = {
-            'triangle_1': 234001,  # EURUSD, GBPUSD, EURGBP
-            'triangle_2': 234002,  # USDJPY, EURUSD, EURJPY
-            'triangle_3': 234003,  # USDJPY, GBPUSD, GBPJPY
-            'triangle_4': 234004,  # AUDUSD, EURUSD, EURAUD
-            'triangle_5': 234005,  # USDCAD, EURUSD, EURCAD
-            'triangle_6': 234006   # AUDUSD, GBPUSD, GBPAUD
-        }
     
     def _get_magic_number_from_group_id(self, group_id: str) -> int:
         """หา magic number จาก group_id"""
@@ -62,6 +45,24 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"Error getting magic number from group_id {group_id}: {e}")
             return 234000
+    
+    def __init__(self, broker_api, ai_engine=None):
+        self.broker = broker_api
+        # self.ai = ai_engine  # DISABLED for simple trading system
+        self.correlation_matrix = {}
+        self.recovery_positions = {}
+        self.is_running = False
+        self.logger = logging.getLogger(__name__)
+        
+        # Magic numbers สำหรับแต่ละสามเหลี่ยม (เหมือนกับ arbitrage_detector)
+        self.triangle_magic_numbers = {
+            'triangle_1': 234001,  # EURUSD, GBPUSD, EURGBP
+            'triangle_2': 234002,  # USDJPY, EURUSD, EURJPY
+            'triangle_3': 234003,  # USDJPY, GBPUSD, GBPJPY
+            'triangle_4': 234004,  # AUDUSD, EURUSD, EURAUD
+            'triangle_5': 234005,  # USDCAD, EURUSD, EURCAD
+            'triangle_6': 234006   # AUDUSD, GBPUSD, GBPAUD
+        }
         
         # Active Recovery Engine parameters
         self.recovery_mode = 'active'  # active, passive, disabled
@@ -761,10 +762,29 @@ class CorrelationManager:
     def update_recovery_parameters(self, params: Dict):
         """อัพเดทพารามิเตอร์ recovery"""
         try:
+            # ตรวจสอบว่า recovery_thresholds มีอยู่หรือไม่
+            if not hasattr(self, 'recovery_thresholds'):
+                self.logger.warning("recovery_thresholds not initialized, creating default values")
+                self.recovery_thresholds = {
+                    'min_correlation': 0.5,
+                    'max_correlation': 0.95,
+                    'min_loss_threshold': -0.005,
+                    'max_recovery_time_hours': 24,
+                    'hedge_ratio_range': (0.3, 2.5),
+                    'wait_time_minutes': 5,
+                    'base_lot_size': 0.1
+                }
+            
             for key, value in params.items():
                 if key in self.recovery_thresholds:
                     self.recovery_thresholds[key] = value
-                    self.logger.info(f"Updated {key} to {value}")
+                    self.logger.info(f"Updated recovery_thresholds[{key}] to {value}")
+                elif key in ['account_balance', 'account_equity', 'free_margin', 'target_pip_value', 'balance_multiplier']:
+                    # เก็บข้อมูลบัญชีไว้ใน attribute แยก
+                    setattr(self, key, value)
+                    self.logger.debug(f"Updated {key} to {value}")
+                else:
+                    self.logger.debug(f"Parameter {key} not found in recovery_thresholds or account info")
                     
         except Exception as e:
             self.logger.error(f"Error updating recovery parameters: {e}")

@@ -1,0 +1,347 @@
+{
+  "active_groups": {
+    "group_triangle_1_2": {
+      "group_id": "group_triangle_1_2",
+      "triangle": [
+        "EURUSD",
+        "GBPUSD",
+        "EURGBP"
+      ],
+      "triangle_type": "triangle_1",
+      "created_at": "2025-09-25 10:56:45.277469",
+      "positions": [
+        {
+          "symbol": "EURUSD",
+          "direction": "BUY",
+          "lot_size": 1.0,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_EURUSD"
+        },
+        {
+          "symbol": "GBPUSD",
+          "direction": "SELL",
+          "lot_size": 1.0,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_GBPUSD"
+        },
+        {
+          "symbol": "EURGBP",
+          "direction": "BUY",
+          "lot_size": 1.0,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_EURGBP"
+        }
+      ],
+      "status": "active",
+      "total_pnl": 0.0,
+      "recovery_chain": [],
+      "lot_sizes": {
+        "EURUSD": 1.0,
+        "GBPUSD": 1.0,
+        "EURGBP": 1.0
+      }
+    },
+    "group_triangle_2_2": {
+      "group_id": "group_triangle_2_2",
+      "triangle": [
+        "USDJPY",
+        "EURUSD",
+        "EURJPY"
+      ],
+      "triangle_type": "triangle_2",
+      "created_at": "2025-09-25 10:56:45.278215",
+      "positions": [
+        {
+          "symbol": "USDJPY",
+          "direction": "BUY",
+          "lot_size": 0.1,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_USDJPY"
+        },
+        {
+          "symbol": "EURUSD",
+          "direction": "SELL",
+          "lot_size": 1.0,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_EURUSD"
+        },
+        {
+          "symbol": "EURJPY",
+          "direction": "BUY",
+          "lot_size": 0.1,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_EURJPY"
+        }
+      ],
+      "status": "active",
+      "total_pnl": 0.0,
+      "recovery_chain": [],
+      "lot_sizes": {
+        "USDJPY": 0.1,
+        "EURUSD": 1.0,
+        "EURJPY": 0.1
+      }
+    },
+    "group_triangle_3_2": {
+      "group_id": "group_triangle_3_2",
+      "triangle": [
+        "USDJPY",
+        "GBPUSD",
+        "GBPJPY"
+      ],
+      "triangle_type": "triangle_3",
+      "created_at": "2025-09-25 10:56:45.278547",
+      "positions": [
+        {
+          "symbol": "USDJPY",
+          "direction": "BUY",
+          "lot_size": 0.1,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_USDJPY"
+        },
+        {
+          "symbol": "GBPUSD",
+          "direction": "SELL",
+          "lot_size": 1.0,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_GBPUSD"
+        },
+        {
+          "symbol": "GBPJPY",
+          "direction": "BUY",
+          "lot_size": 0.1,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_GBPJPY"
+        }
+      ],
+      "status": "active",
+      "total_pnl": 0.0,
+      "recovery_chain": [],
+      "lot_sizes": {
+        "USDJPY": 0.1,
+        "GBPUSD": 1.0,
+        "GBPJPY": 0.1
+      }
+    },
+    "group_triangle_4_2": {
+      "group_id": "group_triangle_4_2",
+      "triangle": [
+        "AUDUSD",
+        "EURUSD",
+        "EURAUD"
+      ],
+      "triangle_type": "triangle_4",
+      "created_at": "2025-09-25 10:56:45.278892",
+      "positions": [
+        {
+          "symbol": "AUDUSD",
+          "direction": "BUY",
+          "lot_size": 1.0,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_AUDUSD"
+        },
+        {
+          "symbol": "EURUSD",
+          "direction": "SELL",
+          "lot_size": 1.0,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_EURUSD"
+        },
+        {
+          "symbol": "EURAUD",
+          "direction": "BUY",
+          "lot_size": 1.0,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_EURAUD"
+        }
+      ],
+      "status": "active",
+      "total_pnl": 0.0,
+      "recovery_chain": [],
+      "lot_sizes": {
+        "AUDUSD": 1.0,
+        "EURUSD": 1.0,
+        "EURAUD": 1.0
+      }
+    },
+    "group_triangle_5_2": {
+      "group_id": "group_triangle_5_2",
+      "triangle": [
+        "USDCAD",
+        "EURUSD",
+        "EURCAD"
+      ],
+      "triangle_type": "triangle_5",
+      "created_at": "2025-09-25 10:56:45.279266",
+      "positions": [
+        {
+          "symbol": "USDCAD",
+          "direction": "BUY",
+          "lot_size": 1.0,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_USDCAD"
+        },
+        {
+          "symbol": "EURUSD",
+          "direction": "SELL",
+          "lot_size": 1.0,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_EURUSD"
+        },
+        {
+          "symbol": "EURCAD",
+          "direction": "BUY",
+          "lot_size": 1.0,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_EURCAD"
+        }
+      ],
+      "status": "active",
+      "total_pnl": 0.0,
+      "recovery_chain": [],
+      "lot_sizes": {
+        "USDCAD": 1.0,
+        "EURUSD": 1.0,
+        "EURCAD": 1.0
+      }
+    },
+    "group_triangle_6_2": {
+      "group_id": "group_triangle_6_2",
+      "triangle": [
+        "AUDUSD",
+        "GBPUSD",
+        "GBPAUD"
+      ],
+      "triangle_type": "triangle_6",
+      "created_at": "2025-09-25 10:56:45.279680",
+      "positions": [
+        {
+          "symbol": "AUDUSD",
+          "direction": "BUY",
+          "lot_size": 1.0,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_AUDUSD"
+        },
+        {
+          "symbol": "GBPUSD",
+          "direction": "SELL",
+          "lot_size": 1.0,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_GBPUSD"
+        },
+        {
+          "symbol": "GBPAUD",
+          "direction": "BUY",
+          "lot_size": 1.0,
+          "entry_price": 1.0,
+          "status": "active",
+          "order_id": 99999,
+          "comment": "G2_GBPAUD"
+        }
+      ],
+      "status": "active",
+      "total_pnl": 0.0,
+      "recovery_chain": [],
+      "lot_sizes": {
+        "AUDUSD": 1.0,
+        "GBPUSD": 1.0,
+        "GBPAUD": 1.0
+      }
+    }
+  },
+  "recovery_in_progress": [],
+  "group_counters": {
+    "triangle_1": 2,
+    "triangle_2": 2,
+    "triangle_3": 2,
+    "triangle_4": 2,
+    "triangle_5": 2,
+    "triangle_6": 2
+  },
+  "is_arbitrage_paused": {
+    "triangle_1": false,
+    "triangle_2": false,
+    "triangle_3": false,
+    "triangle_4": false,
+    "triangle_5": false,
+    "triangle_6": false
+  },
+  "used_currency_pairs": {
+    "triangle_1": [
+      "GBPUSD",
+      "EURGBP",
+      "EURUSD"
+    ],
+    "triangle_2": [
+      "EURUSD",
+      "USDJPY",
+      "GBPUSD",
+      "EURJPY",
+      "EURGBP"
+    ],
+    "triangle_3": [
+      "GBPJPY",
+      "EURUSD",
+      "USDJPY",
+      "GBPUSD",
+      "EURGBP"
+    ],
+    "triangle_4": [
+      "EURAUD",
+      "EURUSD",
+      "AUDUSD",
+      "GBPUSD",
+      "EURGBP"
+    ],
+    "triangle_5": [
+      "EURUSD",
+      "EURCAD",
+      "GBPUSD",
+      "USDCAD",
+      "EURGBP"
+    ],
+    "triangle_6": [
+      "EURUSD",
+      "AUDUSD",
+      "GBPUSD",
+      "GBPAUD",
+      "EURGBP"
+    ]
+  },
+  "group_currency_mapping": {},
+  "saved_at": "2025-09-25T10:56:45.279800"
+}
