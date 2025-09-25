@@ -44,7 +44,29 @@ class CorrelationManager:
                 return 234000  # default
         except Exception as e:
             self.logger.error(f"Error getting magic number from group_id {group_id}: {e}")
-            return 234000
+    
+    def _get_group_pairs_from_mt5(self, group_id: str) -> List[str]:
+        """ดึงคู่เงินในกลุ่มจาก MT5 โดยใช้ magic number"""
+        try:
+            group_pairs = []
+            magic_number = self._get_magic_number_from_group_id(group_id)
+            
+            # ดึงข้อมูลจาก MT5 จริงๆ
+            all_positions = self.broker.get_all_positions()
+            
+            for pos in all_positions:
+                magic = pos.get('magic', 0)
+                if magic == magic_number:
+                    symbol = pos['symbol']
+                    if symbol not in group_pairs:
+                        group_pairs.append(symbol)
+            
+            self.logger.debug(f"📊 Group {group_id} pairs from MT5: {group_pairs}")
+            return group_pairs
+            
+        except Exception as e:
+            self.logger.error(f"Error getting group pairs from MT5: {e}")
+            return []
     
     def __init__(self, broker_api, ai_engine=None):
         self.broker = broker_api
@@ -479,8 +501,9 @@ class CorrelationManager:
             
             self.logger.info(f"✅ {symbol}: All conditions met - starting recovery")
             
-            # หาคู่เงินที่เหมาะสมสำหรับ recovery
-            correlation_candidates = self._find_optimal_correlation_pairs(symbol)
+            # หาคู่เงินที่เหมาะสมสำหรับ recovery (ไม่ซ้ำกับคู่ในกลุ่ม)
+            group_pairs = self._get_group_pairs_from_mt5(group_id)
+            correlation_candidates = self._find_optimal_correlation_pairs(symbol, group_pairs)
             
             if not correlation_candidates:
                 self.logger.warning(f"   No correlation candidates found for {symbol}")
@@ -488,7 +511,8 @@ class CorrelationManager:
             
             # เลือกคู่เงินที่ดีที่สุด
             best_correlation = correlation_candidates[0]
-            self.logger.info(f"   Best correlation: {best_correlation['symbol']} (correlation: {best_correlation['correlation']:.2f})")
+            group_number = group_id.split('_')[-1] if '_' in group_id else 'X'
+            self.logger.info(f"   Best correlation for G{group_number}: {best_correlation['symbol']} (correlation: {best_correlation['correlation']:.2f})")
             
             # ส่งออเดอร์ recovery
             success = self._execute_correlation_position(losing_pair, best_correlation, group_id)
@@ -582,12 +606,15 @@ class CorrelationManager:
             self.logger.error(f"Error calculating hedge lot size: {e}")
             return original_lot
     
-    def _send_hedge_order(self, symbol: str, lot_size: float, group_id: str, recovery_level: int = 1) -> bool:
+    def _send_hedge_order(self, symbol: str, lot_size: float, group_id: str, recovery_level: int = 1, original_symbol: str = None) -> bool:
         """ส่งออเดอร์ hedge"""
         try:
-            # สร้าง comment
+            # สร้าง comment - ใส่คู่เงินที่แก้และคู่เงินที่แก้ไม้
             group_number = group_id.split('_')[-1]
-            comment = f"RECOVERY_G{group_number}_{symbol}_L{recovery_level}"
+            if original_symbol:
+                comment = f"RECOVERY_G{group_number}_{original_symbol}_TO_{symbol}_L{recovery_level}"
+            else:
+                comment = f"RECOVERY_G{group_number}_{symbol}_L{recovery_level}"
             
             # ส่งออเดอร์
             result = self.broker.place_order(
@@ -733,9 +760,10 @@ class CorrelationManager:
             
             self.logger.info(f"✅ {symbol}: All conditions met - continuing recovery")
             
-            # หาคู่เงินใหม่สำหรับ recovery
+            # หาคู่เงินใหม่สำหรับ recovery (ไม่ซ้ำกับคู่ในกลุ่ม)
             self.logger.info(f"🔍 Searching for correlation candidates for {symbol}")
-            correlation_candidates = self._find_optimal_correlation_pairs(symbol)
+            group_pairs = self._get_group_pairs_from_mt5(group_id)
+            correlation_candidates = self._find_optimal_correlation_pairs(symbol, group_pairs)
             
             if not correlation_candidates:
                 self.logger.warning(f"❌ No correlation candidates found for {symbol}")
@@ -743,7 +771,8 @@ class CorrelationManager:
             
             # เลือกคู่เงินที่ดีที่สุด
             best_correlation = correlation_candidates[0]
-            self.logger.info(f"🎯 Best correlation: {best_correlation['symbol']} (correlation: {best_correlation['correlation']:.2f})")
+            group_number = group_id.split('_')[-1] if '_' in group_id else 'X'
+            self.logger.info(f"🎯 Best correlation for G{group_number}: {best_correlation['symbol']} (correlation: {best_correlation['correlation']:.2f})")
             
             # ส่งออเดอร์ recovery ใหม่
             self.logger.info(f"📤 Sending new recovery order for {symbol} -> {best_correlation['symbol']}")
@@ -808,8 +837,9 @@ class CorrelationManager:
             symbol = losing_position['symbol']
             self.logger.info(f"🔄 Starting correlation recovery for {symbol}")
             
-            # หาคู่เงินที่เหมาะสมสำหรับ recovery
-            correlation_candidates = self._find_optimal_correlation_pairs(symbol)
+            # หาคู่เงินที่เหมาะสมสำหรับ recovery (ไม่ซ้ำกับคู่ในกลุ่ม)
+            group_pairs = self._get_group_pairs_from_mt5(losing_position.get('group_id', 'unknown'))
+            correlation_candidates = self._find_optimal_correlation_pairs(symbol, group_pairs)
             
             if not correlation_candidates:
                 self.logger.warning(f"   No correlation candidates found for {symbol}")
@@ -817,7 +847,8 @@ class CorrelationManager:
             
             # เลือกคู่เงินที่ดีที่สุด
             best_correlation = correlation_candidates[0]
-            self.logger.info(f"   Best correlation: {best_correlation['symbol']} (correlation: {best_correlation['correlation']:.2f})")
+            group_number = losing_position.get('group_id', 'unknown').split('_')[-1] if '_' in losing_position.get('group_id', 'unknown') else 'X'
+            self.logger.info(f"   Best correlation for G{group_number}: {best_correlation['symbol']} (correlation: {best_correlation['correlation']:.2f})")
             
             # ส่งออเดอร์ recovery
             success = self._execute_correlation_position(losing_position, best_correlation, losing_position.get('group_id', 'unknown'))
@@ -830,21 +861,14 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"Error initiating correlation recovery: {e}")
     
-    def _find_optimal_correlation_pairs(self, base_symbol: str) -> List[Dict]:
+    def _find_optimal_correlation_pairs(self, base_symbol: str, group_pairs: List[str] = None) -> List[Dict]:
         """
         ⚡ CRITICAL: Find optimal correlation pairs for recovery
-        หาคู่เงินที่มี correlation กับคู่ที่กำหนด (EURUSD, GBPUSD, EURGBP)
+        หาคู่เงินที่มี correlation กับคู่ที่กำหนด (ไม่ซ้ำกับคู่ในกลุ่ม)
         """
         try:
-            correlation_candidates = []
-            
-            # คู่เงินที่กำหนดสำหรับ arbitrage (ใช้ magic number แทน)
-            # ไม่ใช้ hardcode arbitrage_pairs แล้ว เพราะแต่ละกลุ่มมีคู่เงินต่างกัน
-            
-            # ตรวจสอบว่า base_symbol เป็นคู่ที่กำหนดหรือไม่ (ใช้ magic number แทน)
-            # ไม่ต้องตรวจสอบ arbitrage_pairs แล้ว เพราะแต่ละกลุ่มมีคู่เงินต่างกัน
-            # ใช้ฟังก์ชันสำหรับคู่เงินใดๆ แทน
-            return self._find_correlation_pairs_for_any_symbol(base_symbol)
+            # ใช้ฟังก์ชันสำหรับคู่เงินใดๆ แทน (ไม่ซ้ำกับคู่ในกลุ่ม)
+            return self._find_correlation_pairs_for_any_symbol(base_symbol, group_pairs)
             
             # ใช้เฉพาะคู่เงินเท่านั้น (ไม่รวม Ukoil, Gold, Silver, etc.)
             all_pairs = [
@@ -1271,8 +1295,8 @@ class CorrelationManager:
             self.logger.error(f"Error determining recovery direction: {e}")
             return 'BUY'  # Default to BUY
     
-    def _find_correlation_pairs_for_any_symbol(self, base_symbol: str) -> List[Dict]:
-        """หาคู่เงินที่มี correlation กับคู่เงินใดๆ (ไม่ใช่คู่ arbitrage)"""
+    def _find_correlation_pairs_for_any_symbol(self, base_symbol: str, group_pairs: List[str] = None) -> List[Dict]:
+        """หาคู่เงินที่มี correlation กับคู่เงินใดๆ (ไม่ซ้ำกับคู่ในกลุ่ม)"""
         try:
             correlation_candidates = []
             
@@ -1288,16 +1312,20 @@ class CorrelationManager:
             
             self.logger.info(f"🔍 Using predefined currency pairs only (excluding commodities like Ukoil)")
             
-            # คู่เงินที่กำหนดสำหรับ arbitrage (ใช้ magic number แทน)
-            # ไม่ใช้ hardcode arbitrage_pairs แล้ว เพราะแต่ละกลุ่มมีคู่เงินต่างกัน
+            # กำหนดคู่เงินที่ห้ามซ้ำ (คู่ในกลุ่ม arbitrage)
+            if group_pairs is None:
+                group_pairs = []
+            
+            self.logger.info(f"🚫 Excluding group pairs: {group_pairs}")
             
             for symbol in all_pairs:
                 if symbol == base_symbol:
                     continue
                 
-                # ตรวจสอบว่าเป็นคู่ arbitrage หรือไม่ (ไม่ให้ซ้ำ) - ไม่ใช้แล้ว
-                # if symbol in arbitrage_pairs:
-                #     continue
+                # ตรวจสอบว่าเป็นคู่ในกลุ่ม arbitrage หรือไม่ (ไม่ให้ซ้ำ)
+                if symbol in group_pairs:
+                    self.logger.debug(f"   ❌ Skipping {symbol} (already in group)")
+                    continue
                 
                 # ตรวจสอบว่าเป็นคู่เงินจริงๆ (ไม่ใช่ Ukoil, Gold, Silver, etc.)
                 if not self._is_currency_pair(symbol):
@@ -1316,6 +1344,16 @@ class CorrelationManager:
                         'recovery_strength': correlation,
                         'direction': direction
                     })
+            
+            # Sort by recovery strength (highest first) - CRITICAL FIX
+            correlation_candidates.sort(key=lambda x: x['recovery_strength'], reverse=True)
+            
+            if not correlation_candidates:
+                self.logger.error(f"❌ No correlation candidates created for {base_symbol}")
+            else:
+                self.logger.info(f"🎯 Final correlation candidates for {base_symbol}: {len(correlation_candidates)} pairs")
+                for i, candidate in enumerate(correlation_candidates[:5]):  # แสดง 5 อันดับแรก
+                    self.logger.info(f"   {i+1}. {candidate['symbol']}: {candidate['correlation']:.2f} ({candidate['direction']})")
             
             return correlation_candidates
             
@@ -1347,8 +1385,7 @@ class CorrelationManager:
             )
             
             # Send correlation order
-            original_symbol = original_position.get('symbol', '')
-            order_result = self._send_correlation_order(symbol, correlation_lot_size, group_id, original_symbol)
+            order_result = self._send_correlation_order(symbol, correlation_lot_size, group_id, original_position)
             
             if order_result and order_result.get('success'):
                 # ดึงราคาปัจจุบันเป็น entry price
@@ -1403,20 +1440,24 @@ class CorrelationManager:
             hedge_symbol = correlation_position['symbol']
             correlation = correlation_candidate['correlation']
             
+            # แสดงข้อมูลการแก้ไม้ที่ถูกต้อง
+            group_number = group_id.split('_')[-1] if '_' in group_id else 'X'
             self.logger.info("=" * 60)
-            self.logger.info(f"🎯 HEDGING ACTION COMPLETED")
+            self.logger.info(f"🎯 HEDGING ACTION COMPLETED - GROUP G{group_number}")
             self.logger.info("=" * 60)
             self.logger.info(f"📉 Original Position: {original_symbol}")
             self.logger.info(f"   Order ID: {original_position.get('order_id', 'N/A')}")
             self.logger.info(f"   Lot Size: {original_position.get('lot_size', 0.1)}")
             self.logger.info(f"   Entry Price: {original_position.get('entry_price', 0.0):.5f}")
             
-            self.logger.info(f"🛡️ Hedge Position: {hedge_symbol}")
+            self.logger.info(f"🛡️ Recovery Position: {hedge_symbol}")
             self.logger.info(f"   Lot Size: {correlation_position['lot_size']}")
             self.logger.info(f"   Entry Price: {correlation_position['entry_price']:.5f}")
             self.logger.info(f"   Direction: {correlation_position['direction']}")
             
-            self.logger.info(f"📊 Correlation Details:")
+            self.logger.info(f"📊 Recovery Details:")
+            self.logger.info(f"   Group: G{group_number}")
+            self.logger.info(f"   Hedging: {original_symbol} → {hedge_symbol}")
             self.logger.info(f"   Correlation: {correlation:.2f}")
             self.logger.info(f"   Recovery Strength: {correlation_candidate.get('recovery_strength', correlation):.2f}")
             
@@ -1446,12 +1487,13 @@ class CorrelationManager:
             self.logger.error(f"Error calculating hedge volume: {e}")
             return 0.1
     
-    def _send_correlation_order(self, symbol: str, lot_size: float, group_id: str, original_symbol: str = None) -> Dict:
+    def _send_correlation_order(self, symbol: str, lot_size: float, group_id: str, original_position: Dict = None) -> Dict:
         """ส่งออเดอร์ correlation recovery"""
         try:
-            # สร้าง comment - ใส่คู่เงินที่แก้
+            # สร้าง comment - ใส่คู่เงินที่แก้และคู่เงินที่แก้ไม้
             group_number = group_id.split('_')[-1]
-            comment = f"RECOVERY_G{group_number}_{symbol}"
+            original_symbol = original_position.get('symbol', 'UNKNOWN') if original_position else 'UNKNOWN'
+            comment = f"RECOVERY_G{group_number}_{original_symbol}_TO_{symbol}"
             
             # หา magic number จาก group_id
             magic_number = self._get_magic_number_from_group_id(group_id)
@@ -1466,7 +1508,8 @@ class CorrelationManager:
             )
             
             if result and result.get('retcode') == 10009:
-                self.logger.info(f"✅ Correlation recovery order sent: {symbol} {lot_size} lot")
+                group_number = group_id.split('_')[-1] if '_' in group_id else 'X'
+                self.logger.info(f"✅ G{group_number} Recovery order sent: {symbol} {lot_size} lot")
                 return {
                     'success': True,
                     'order_id': result.get('order_id'),
