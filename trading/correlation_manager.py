@@ -167,10 +167,103 @@ class CorrelationManager:
         
         # Load existing recovery data on startup
         self._load_recovery_data()
+    
+    def _log_all_groups_status(self):
+        """แสดงสถานะทุก Group ในระบบ"""
+        try:
+            self.logger.info("🌐 ALL GROUPS STATUS OVERVIEW:")
+            self.logger.info("=" * 80)
+            
+            # ดึงข้อมูลจาก MT5 จริงๆ
+            all_positions = self.broker.get_all_positions()
+            
+            # จัดกลุ่มตาม magic number
+            groups_data = {}
+            for pos in all_positions:
+                magic = pos.get('magic', 0)
+                comment = pos.get('comment', '')
+                
+                # ข้าม recovery positions
+                if comment.startswith('RECOVERY_'):
+                    continue
+                
+                if magic not in groups_data:
+                    groups_data[magic] = {
+                        'positions': [],
+                        'total_pnl': 0,
+                        'group_name': f'Group_{magic}'
+                    }
+                
+                groups_data[magic]['positions'].append(pos)
+                groups_data[magic]['total_pnl'] += pos.get('profit', 0)
+            
+            # แสดงสถานะแต่ละ Group
+            for magic, data in groups_data.items():
+                total_pnl = data['total_pnl']
+                positions = data['positions']
+                
+                # กำหนดชื่อ Group
+                if magic == 1001:
+                    group_name = "G1 (Triangle 1)"
+                elif magic == 1002:
+                    group_name = "G2 (Triangle 2)"
+                elif magic == 1003:
+                    group_name = "G3 (Triangle 3)"
+                elif magic == 1004:
+                    group_name = "G4 (Triangle 4)"
+                elif magic == 1005:
+                    group_name = "G5 (Triangle 5)"
+                elif magic == 1006:
+                    group_name = "G6 (Triangle 6)"
+                else:
+                    group_name = f"Group_{magic}"
+                
+                # สถานะ Group
+                if total_pnl > 0:
+                    status = f"💰 PROFIT: ${total_pnl:.2f}"
+                else:
+                    status = f"🔴 LOSS: ${total_pnl:.2f}"
+                
+                self.logger.info(f"📊 {group_name}: {status}")
+                
+                # แสดงไม้ที่ขาดทุน
+                losing_count = 0
+                for pos in positions:
+                    if pos.get('profit', 0) < 0:
+                        losing_count += 1
+                        symbol = pos['symbol']
+                        pnl = pos['profit']
+                        self.logger.info(f"   📉 {symbol}: ${pnl:.2f}")
+                
+                if losing_count == 0:
+                    self.logger.info(f"   🟢 All positions profitable")
+                
+                # แสดง recovery positions
+                recovery_count = 0
+                for pos in all_positions:
+                    if pos.get('magic', 0) == magic and pos.get('comment', '').startswith('RECOVERY_'):
+                        recovery_count += 1
+                        symbol = pos['symbol']
+                        pnl = pos['profit']
+                        comment = pos['comment']
+                        self.logger.info(f"   🔗 Recovery: {symbol} (${pnl:.2f}) - {comment}")
+                
+                if recovery_count == 0:
+                    self.logger.info(f"   ⚪ No recovery positions")
+                
+                self.logger.info("")
+            
+            self.logger.info("=" * 80)
+            
+        except Exception as e:
+            self.logger.error(f"Error logging all groups status: {e}")
         
     def start_chain_recovery(self, group_id: str, losing_pairs: List[Dict]):
         """เริ่ม chain recovery สำหรับกลุ่มที่ขาดทุน"""
         try:
+            # แสดงสถานะทุก Group ก่อน
+            self._log_all_groups_status()
+            
             self.logger.info("=" * 80)
             self.logger.info(f"🔗 STARTING CHAIN RECOVERY FOR GROUP {group_id}")
             self.logger.info("=" * 80)
@@ -384,7 +477,22 @@ class CorrelationManager:
                     else:
                         group_number = 'X'
                     
-                    if f'RECOVERY_G{group_number}_' in comment:
+                    # เช็คทั้งรูปแบบ RECOVERY_G{group_number}_{symbol}_TO_ และ RECOVERY_G{group_number}_{symbol}
+                    # และรูปแบบเก่า RECOVERY_G{group_number}_EURA (สำหรับ EURAUD)
+                    # และรูปแบบย่อ RECOVERY_G{group_number}_GBPA (สำหรับ GBPAUD)
+                    recovery_patterns = [
+                        f'RECOVERY_G{group_number}_',
+                        f'RECOVERY_G{group_number}_EURA',  # สำหรับ EURAUD ที่ใช้ comment แบบเก่า
+                        f'RECOVERY_G{group_number}_GBPA'   # สำหรับ GBPAUD ที่ใช้ comment แบบย่อ
+                    ]
+                    
+                    is_recovery = False
+                    for pattern in recovery_patterns:
+                        if pattern in comment:
+                            is_recovery = True
+                            break
+                    
+                    if is_recovery:
                         correlation_pos = {
                             'symbol': pos['symbol'],
                             'order_id': pos['ticket'],
@@ -498,10 +606,12 @@ class CorrelationManager:
                 
                 # เช็คทั้งรูปแบบ RECOVERY_G{group_number}_{symbol}_TO_ และ RECOVERY_G{group_number}_{symbol}
                 # และรูปแบบเก่า RECOVERY_G{group_number}_EURA (สำหรับ EURAUD)
+                # และรูปแบบย่อ RECOVERY_G{group_number}_GBPA (สำหรับ GBPAUD)
                 recovery_patterns = [
                     f'RECOVERY_G{group_number}_{symbol}_TO_',
                     f'RECOVERY_G{group_number}_{symbol}',
-                    f'RECOVERY_G{group_number}_EURA'  # สำหรับ EURAUD ที่ใช้ comment แบบเก่า
+                    f'RECOVERY_G{group_number}_EURA',  # สำหรับ EURAUD ที่ใช้ comment แบบเก่า
+                    f'RECOVERY_G{group_number}_GBPA'   # สำหรับ GBPAUD ที่ใช้ comment แบบย่อ
                 ]
                 
                 for pattern in recovery_patterns:
@@ -712,8 +822,8 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"Error marking position as hedged: {e}")
     
-    def _calculate_hedge_lot_size(self, original_lot: float, correlation: float, loss_percent: float, original_symbol: str = None) -> float:
-        """คำนวณขนาด lot สำหรับ hedge position - ใช้ uniform pip value"""
+    def _calculate_hedge_lot_size(self, original_lot: float, correlation: float, loss_percent: float, original_symbol: str = None, hedge_symbol: str = None) -> float:
+        """คำนวณขนาด lot สำหรับ hedge position - ใช้ pip value ของคู่เงินที่แก้"""
         try:
             # ดึง balance จาก broker
             balance = self.broker.get_account_balance()
@@ -722,7 +832,7 @@ class CorrelationManager:
                 return original_lot
             
             # คำนวณ pip value ของ original position
-            if original_symbol:
+            if original_symbol and hedge_symbol:
                 original_pip_value = TradingCalculations.calculate_pip_value(original_symbol, original_lot, self.broker)
                 
                 # คำนวณ target pip value ตาม balance (base $10K = $10 pip value)
@@ -732,12 +842,16 @@ class CorrelationManager:
                 
                 # คำนวณ lot size ที่ให้ pip value เท่ากับ target
                 # ใช้ correlation เพื่อปรับขนาด hedge
-                hedge_pip_value = target_pip_value * correlation
+                hedge_pip_value = target_pip_value * abs(correlation)  # ใช้ absolute value
                 
                 # หา lot size ที่ให้ pip value ตาม target
-                # ใช้คู่เงินเดิมเป็น base (สมมติว่า hedge ใช้คู่เงินเดียวกัน)
-                pip_value_per_001 = TradingCalculations.calculate_pip_value(original_symbol, 0.01, self.broker)
-                hedge_lot = (hedge_pip_value * 0.01) / pip_value_per_001
+                # ใช้คู่เงินที่แก้เป็น base
+                pip_value_per_001 = TradingCalculations.calculate_pip_value(hedge_symbol, 0.01, self.broker)
+                if pip_value_per_001 > 0:
+                    hedge_lot = (hedge_pip_value * 0.01) / pip_value_per_001
+                else:
+                    # Fallback: ใช้ lot size เดียวกันกับไม้เดิม
+                    hedge_lot = original_lot
                 
                 # Round to valid lot size
                 hedge_lot = TradingCalculations.round_to_valid_lot_size(hedge_lot)
@@ -747,6 +861,8 @@ class CorrelationManager:
                 hedge_lot = max(hedge_lot, 0.1)  # ต่ำสุด 0.1 lot
                 
                 self.logger.info(f"📊 Hedge lot calculation: Original={original_lot:.4f}, Target Pip=${target_pip_value:.2f}, Hedge Lot={hedge_lot:.4f}")
+                self.logger.info(f"   Original pip value: ${original_pip_value:.2f}, Hedge pip value: ${hedge_pip_value:.2f}")
+                self.logger.info(f"   Hedge symbol: {hedge_symbol}, Pip value per 0.01: ${pip_value_per_001:.2f}")
                 
                 return float(hedge_lot)
             else:
@@ -1403,7 +1519,8 @@ class CorrelationManager:
                 original_lot=original_lot,
                 correlation=correlation,
                 loss_percent=0.0,  # ไม่ใช้ loss_percent ในระบบใหม่
-                original_symbol=original_symbol
+                original_symbol=original_symbol,
+                hedge_symbol=symbol
             )
             
             # Send correlation order
@@ -1499,13 +1616,15 @@ class CorrelationManager:
             # ดึงข้อมูลจาก original position
             original_lot = original_position.get('lot_size', original_position.get('volume', 0.1))
             original_symbol = original_position.get('symbol', '')
+            hedge_symbol = correlation_candidate.get('symbol', '')
             
             # ใช้ balance-based lot sizing
             volume = self._calculate_hedge_lot_size(
                 original_lot=original_lot,
                 correlation=correlation_candidate.get('correlation', 0.5),
                 loss_percent=0.0,
-                original_symbol=original_symbol
+                original_symbol=original_symbol,
+                hedge_symbol=hedge_symbol
             )
             
             return float(volume)
