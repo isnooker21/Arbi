@@ -13,6 +13,7 @@ import logging
 from datetime import datetime
 import json
 from .theme import TradingTheme
+from .group_dashboard import GroupDashboard
 
 class MainWindow:
     def __init__(self, auto_setup=True):
@@ -134,11 +135,12 @@ class MainWindow:
         # Left Panel - Trading Control
         self.create_trading_control_panel(content_frame)
         
-        # Right Panel - Live Positions
-        self.create_positions_panel(content_frame)
+        # Right Panel - Group Dashboard
+        right_panel = tk.Frame(content_frame, bg=TradingTheme.COLORS['primary_bg'])
+        right_panel.pack(side='right', fill='both', expand=True)
         
-        # Bottom Panel - Charts and Analysis
-        self.create_analysis_panel(content_frame)
+        # Group Dashboard
+        self.group_dashboard = GroupDashboard(right_panel)
     
     def create_trading_control_panel(self, parent):
         """Create trading control panel"""
@@ -558,6 +560,9 @@ class MainWindow:
         self.is_trading = True
         self.update_connection_status("connected")
         self.log_message("✅ Trading system started")
+        
+        # Start Group Dashboard update loop
+        self.start_group_dashboard_update_loop()
     
     def _on_trading_started_failed(self):
         """Called when trading system failed to start"""
@@ -624,6 +629,60 @@ class MainWindow:
         self.log_text.config(state=tk.NORMAL)
         self.log_text.delete(1.0, tk.END)
         self.log_text.config(state=tk.DISABLED)
+    
+    def update_group_dashboard(self):
+        """Update Group Dashboard with current data"""
+        try:
+            if (self.trading_system and 
+                hasattr(self.trading_system, 'arbitrage_detector') and
+                hasattr(self.trading_system.arbitrage_detector, 'active_groups')):
+                
+                # Get active groups data
+                active_groups = self.trading_system.arbitrage_detector.active_groups
+                
+                # Update each triangle
+                for triangle_id in self.group_dashboard.triangle_configs.keys():
+                    # Find group data for this triangle
+                    group_data = None
+                    for group_id, group_info in active_groups.items():
+                        if group_info.get('triangle_type') == triangle_id:
+                            group_data = group_info
+                            break
+                    
+                    if group_data:
+                        # Update group status
+                        self.group_dashboard.update_group_status(triangle_id, group_data)
+                    else:
+                        # No active group for this triangle
+                        empty_data = {
+                            'status': 'inactive',
+                            'group_id': 'None',
+                            'total_pnl': 0.0,
+                            'positions': [],
+                            'recovery_chain': []
+                        }
+                        self.group_dashboard.update_group_status(triangle_id, empty_data)
+                
+                # Update summary
+                self.group_dashboard.update_summary(active_groups)
+                
+        except Exception as e:
+            self.log_message(f"Error updating group dashboard: {e}", "ERROR")
+    
+    def start_group_dashboard_update_loop(self):
+        """Start Group Dashboard update loop"""
+        def update_loop():
+            if self.is_trading:
+                try:
+                    self.update_group_dashboard()
+                except Exception as e:
+                    self.log_message(f"Error in group dashboard update: {e}")
+                
+                # Schedule next update
+                self.root.after(30000, update_loop)  # Update every 30 seconds
+        
+        # Start the update loop
+        update_loop()
     
     def log_message(self, message):
         """Add message to log"""
