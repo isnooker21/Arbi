@@ -284,93 +284,84 @@ class TriangleArbitrageDetector:
                 loop_count += 1
                 # self.logger.info(f"🔄 Trading loop #{loop_count} - Checking system status...")  # DISABLED - ไม่จำเป็น
                 
-                # ตรวจสอบว่ามีกลุ่มที่เปิดอยู่จริงหรือไม่
-                self.logger.info(f"🔍 Checking active groups: {len(self.active_groups)} groups found")
+                # เช็คจาก MT5 จริงๆ ไม่ใช่จาก memory
+                all_positions = self.broker.get_all_positions()
+                active_magic_numbers = set()
+                
+                # หา magic numbers ที่มี positions อยู่จริงใน MT5
+                for pos in all_positions:
+                    magic = pos.get('magic', 0)
+                    if 234001 <= magic <= 234006:  # magic numbers ของ arbitrage groups
+                        active_magic_numbers.add(magic)
+                
+                # ลบ groups ที่ไม่มี positions ใน MT5 ออกจาก memory
+                groups_to_remove = []
                 for group_id, group_data in list(self.active_groups.items()):
                     triangle_type = group_data.get('triangle_type', 'unknown')
-                    self.logger.info(f"   - {group_id} (triangle_type: {triangle_type})")
+                    triangle_magic = self.triangle_magic_numbers.get(triangle_type, 234000)
+                    
+                    if triangle_magic not in active_magic_numbers:
+                        groups_to_remove.append(group_id)
                 
-                if len(self.active_groups) > 0:
-                    # ตรวจสอบว่า Group ยังเปิดอยู่จริงใน broker หรือไม่ (ใช้ magic number)
-                    has_valid_groups = False
-                    all_positions = self.broker.get_all_positions()
+                # ลบ groups ที่ปิดแล้ว
+                for group_id in groups_to_remove:
+                    self.logger.info(f"🗑️ Group {group_id} closed in MT5 - removing from memory")
+                    del self.active_groups[group_id]
+                    self._save_active_groups()
+                    self._reset_group_data_after_close(group_id)
+                
+                # ถ้ามี groups ที่ยังเปิดอยู่จริงใน MT5
+                if active_magic_numbers:
+                    self.logger.info(f"📊 Found {len(active_magic_numbers)} active groups in MT5")
                     
-                    for group_id, group_data in list(self.active_groups.items()):
-                        triangle_type = group_data.get('triangle_type', 'unknown')
-                        triangle_magic = self.triangle_magic_numbers.get(triangle_type, 234000)
+                    # ตรวจสอบแต่ละ group ที่ยังเปิดอยู่
+                    for magic_num in active_magic_numbers:
+                        # หา triangle_type จาก magic number
+                        triangle_type = None
+                        for t_type, t_magic in self.triangle_magic_numbers.items():
+                            if t_magic == magic_num:
+                                triangle_type = t_type
+                                break
                         
-                        valid_positions = 0
-                        for pos in all_positions:
-                            magic = pos.get('magic', 0)
-                            if magic == triangle_magic:
-                                valid_positions += 1
-                        
-                        if valid_positions > 0:
-                            has_valid_groups = True
-                            self.logger.info(f"✅ Group {group_id} has {valid_positions} valid positions (Magic: {triangle_magic})")
-                        else:
-                            # ลบ Group ที่ไม่มี valid positions
-                            self.logger.info(f"🗑️ Group {group_id} has no valid positions (Magic: {triangle_magic}) - removing from active groups")
-                            del self.active_groups[group_id]
-                            # บันทึกการเปลี่ยนแปลง
-                            self._save_active_groups()
-                    
-                    if has_valid_groups:
-                        self.logger.info(f"📊 Found {len(self.active_groups)} active groups - monitoring positions...")
-                        
-                        # ตรวจสอบและปิด Group ที่มีกำไร
-                        for group_id, group_data in list(self.active_groups.items()):
-                            self.logger.info(f"🔍 Checking group {group_id} for closing conditions...")
+                        if triangle_type:
+                            group_id = f"group_{triangle_type}_1"  # สร้าง group_id
                             
                             # ตรวจสอบว่าควรปิด Group หรือไม่
-                            if self._should_close_group(group_id, group_data):
+                            if self._should_close_group_from_mt5(magic_num, triangle_type):
                                 self.logger.info(f"✅ Group {group_id} meets closing criteria - closing group")
-                                self._close_group(group_id)
-                                continue  # ข้ามไป Group ถัดไป
+                                self._close_group_by_magic(magic_num, group_id)
+                                continue
                             
                             # ตรวจสอบว่าควรเริ่ม recovery หรือไม่
-                            if self._should_start_recovery(group_id, group_data, 0, 0):
+                            if self._should_start_recovery_from_mt5(magic_num, triangle_type):
                                 self.logger.info(f"🔍 Checking group {group_id} for recovery conditions...")
-                                # เรียก correlation manager เพื่อตรวจสอบพร้อมแสดงสถานะ
+                                # เรียก correlation manager
                                 if self.correlation_manager:
-                                    # ดึงข้อมูล losing pairs จาก MT5 โดยใช้ magic number
-                                    triangle_type = group_data.get('triangle_type', 'unknown')
-                                    triangle_magic = self.triangle_magic_numbers.get(triangle_type, 234000)
-                                    
                                     losing_pairs = []
                                     for pos in all_positions:
-                                        magic = pos.get('magic', 0)
-                                        if magic == triangle_magic:
+                                        if pos.get('magic', 0) == magic_num:
                                             losing_pairs.append({
                                                 'symbol': pos.get('symbol', ''),
                                                 'order_id': pos.get('ticket'),
                                                 'lot_size': pos.get('volume', 0.1),
                                                 'entry_price': pos.get('price', 0.0),
-                                                'magic': magic
+                                                'magic': magic_num
                                             })
                                     
-                                    # เรียกฟังก์ชันที่แสดงสถานะการแก้ไม้
                                     self.correlation_manager.check_recovery_positions_with_status(group_id, losing_pairs)
-                        
-                        time.sleep(30.0)  # รอ 30 วินาที (ลด log ที่ไม่จำเป็น)
-                        continue
-                    else:
-                        # ถ้าไม่มี Group ที่เปิดอยู่จริง ให้ reset ข้อมูล
-                        self.logger.info("🔄 No valid groups found - resetting group data")
-                        self._reset_group_data()
+                    
+                    time.sleep(30.0)  # รอ 30 วินาที
+                    continue
+                else:
+                    # ถ้าไม่มี groups ที่เปิดอยู่จริงใน MT5
+                    self.logger.info("🔄 No active groups in MT5 - resetting data")
+                    self._reset_group_data()
                 
                 # ออกไม้ทันทีตามคู่เงินที่กำหนด
-                self.logger.info("🎯 No active groups - attempting to send new orders...")
-                self.logger.info(f"🔍 Triangle combinations available: {len(self.triangle_combinations)}")
-                for i, triangle in enumerate(self.triangle_combinations, 1):
-                    triangle_name = f"triangle_{i}"
-                    is_paused = self.is_arbitrage_paused.get(triangle_name, False)
-                    self.logger.info(f"   - {triangle_name}: {triangle} (paused: {is_paused})")
-                
+                self.logger.info("🎯 No active groups in MT5 - attempting to send new orders...")
                 self._send_simple_orders()
                 
-                # รอ 30 วินาทีก่อนตรวจสอบอีกครั้ง (ลด log ที่ไม่จำเป็น)
-                self.logger.info("⏰ Waiting 30 seconds before next check...")
+                # รอ 30 วินาทีก่อนตรวจสอบอีกครั้ง
                 time.sleep(30.0)
                     
             except Exception as e:
@@ -384,52 +375,31 @@ class TriangleArbitrageDetector:
     def _send_simple_orders(self):
         """ส่งออเดอร์ง่ายๆ สำหรับทุกสามเหลี่ยม arbitrage - ใช้ balance-based lot sizing"""
         try:
-            self.logger.info("🔍 Starting _send_simple_orders for all triangles...")
-            
             # ดึง balance จาก broker
-            self.logger.info("🔍 Getting account balance...")
             balance = self.broker.get_account_balance()
             if not balance:
                 self.logger.error("❌ Cannot get account balance - using default lot size")
                 balance = 10000  # Fallback balance
             
-            self.logger.info(f"💰 Account Balance: {balance:.2f} USD")
-            
             # ตรวจสอบไม้จาก MT5 ก่อน
-            self.logger.info("🔍 Checking existing positions from MT5...")
             all_positions = self.broker.get_all_positions()
-            self.logger.info(f"📊 Found {len(all_positions)} positions in MT5")
             
             # ตรวจสอบว่ามีไม้ arbitrage อยู่หรือไม่ (ใช้ magic number)
             arbitrage_positions = []
             for pos in all_positions:
                 magic = pos.get('magic', 0)
-                comment = pos.get('comment', '')
-                # ตรวจสอบ magic number ที่อยู่ในช่วง 234001-234006
                 if 234001 <= magic <= 234006:
                     arbitrage_positions.append(pos)
-                    self.logger.info(f"   - {pos.get('symbol')} {pos.get('type')} (Magic: {magic}, Comment: {comment})")
-            
-            self.logger.info(f"📊 Found {len(arbitrage_positions)} arbitrage positions in MT5")
             
             # ซิงค์ข้อมูลจาก MT5 กับ memory
             self._sync_active_groups_from_mt5(arbitrage_positions)
-            
-            # แสดงข้อมูล active groups ปัจจุบัน
-            self.logger.info(f"📊 Current active groups in memory: {len(self.active_groups)}")
-            for group_id, group_data in list(self.active_groups.items()):
-                triangle_type = group_data.get('triangle_type', 'unknown')
-                self.logger.info(f"   - {group_id} (triangle_type: {triangle_type})")
             
             # ตรวจสอบแต่ละสามเหลี่ยมว่าสามารถส่งออเดอร์ได้หรือไม่
             for i, triangle in enumerate(self.triangle_combinations, 1):
                 triangle_name = f"triangle_{i}"
                 
-                self.logger.info(f"🔍 Checking {triangle_name}: {triangle}")
-                
                 # ตรวจสอบว่าสามเหลี่ยมนี้ถูก pause หรือไม่
                 if self.is_arbitrage_paused.get(triangle_name, False):
-                    self.logger.info(f"⏸️ {triangle_name} is paused - skipping")
                     continue
                 
                 # ตรวจสอบว่ามีไม้ arbitrage สำหรับสามเหลี่ยมนี้อยู่แล้วหรือไม่ใน MT5 (ใช้ magic number)
@@ -440,13 +410,9 @@ class TriangleArbitrageDetector:
                     magic = pos.get('magic', 0)
                     if magic == triangle_magic:
                         has_arbitrage_positions = True
-                        symbol = pos.get('symbol', '')
-                        comment = pos.get('comment', '')
-                        self.logger.info(f"🚫 {triangle_name} has arbitrage position: {symbol} (Magic: {magic}, Comment: {comment})")
                         break
                 
                 if has_arbitrage_positions:
-                    self.logger.info(f"⏭️ {triangle_name} has arbitrage positions in MT5 - skipping")
                     continue  # ข้ามไปสามเหลี่ยมถัดไป
                 
                 # ส่งออเดอร์สำหรับสามเหลี่ยมนี้
@@ -933,6 +899,147 @@ class TriangleArbitrageDetector:
                 
         except Exception as e:
             self.logger.error(f"Error checking group status: {e}")
+    
+    def _should_close_group_from_mt5(self, magic_num: int, triangle_type: str) -> bool:
+        """ตรวจสอบว่าควรปิด Group หรือไม่ - เช็คจาก MT5 จริงๆ"""
+        try:
+            all_positions = self.broker.get_all_positions()
+            group_positions = []
+            total_pnl = 0.0
+            
+            for pos in all_positions:
+                if pos.get('magic', 0) == magic_num:
+                    group_positions.append(pos)
+                    total_pnl += pos.get('profit', 0)
+            
+            if not group_positions:
+                return True  # ปิด Group ที่ไม่มี positions
+            
+            # ตรวจสอบว่ามีกำไรรวมหรือไม่
+            if total_pnl > 0:
+                self.logger.info(f"💰 Group {triangle_type} has profit: ${total_pnl:.2f} - Ready to close")
+                return True
+            
+            # ตรวจสอบ price distance สำหรับการปิด Group
+            max_price_distance = 0
+            for pos in group_positions:
+                symbol = pos.get('symbol', '')
+                entry_price = pos.get('price', 0)
+                
+                try:
+                    current_price = self.broker.get_current_price(symbol)
+                    if entry_price > 0 and current_price > 0:
+                        if 'JPY' in symbol:
+                            price_distance = abs(current_price - entry_price) * 100
+                        else:
+                            price_distance = abs(current_price - entry_price) * 10000
+                        
+                        max_price_distance = max(max_price_distance, price_distance)
+                except Exception as e:
+                    continue
+            
+            # ถ้าระยะห่างมากกว่า 10 pips และมีกำไร ให้ปิด Group
+            if max_price_distance >= 10 and total_pnl > 0:
+                self.logger.info(f"✅ Group {triangle_type} meets closing criteria - Distance: {max_price_distance:.1f} pips, PnL: ${total_pnl:.2f}")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Error checking if should close group from MT5: {e}")
+            return False
+    
+    def _should_start_recovery_from_mt5(self, magic_num: int, triangle_type: str) -> bool:
+        """ตรวจสอบว่าควรเริ่ม recovery หรือไม่ - เช็คจาก MT5 จริงๆ"""
+        try:
+            all_positions = self.broker.get_all_positions()
+            group_positions = []
+            total_pnl = 0.0
+            
+            for pos in all_positions:
+                if pos.get('magic', 0) == magic_num:
+                    group_positions.append(pos)
+                    total_pnl += pos.get('profit', 0)
+            
+            if not group_positions:
+                return False
+            
+            # ตรวจสอบว่ามีการขาดทุนหรือไม่
+            if total_pnl >= 0:
+                return False
+            
+            # คำนวณ risk per lot
+            total_lot_size = sum(pos.get('volume', 0.1) for pos in group_positions)
+            if total_lot_size <= 0:
+                return False
+                
+            risk_per_lot = abs(total_pnl) / total_lot_size
+            
+            if risk_per_lot < 0.015:  # risk น้อยกว่า 1.5%
+                return False
+            
+            # ตรวจสอบระยะห่างราคา
+            max_price_distance = 0
+            for pos in group_positions:
+                symbol = pos.get('symbol', '')
+                entry_price = pos.get('price', 0)
+                
+                try:
+                    current_price = self.broker.get_current_price(symbol)
+                    if entry_price > 0 and current_price > 0:
+                        if 'JPY' in symbol:
+                            price_distance = abs(current_price - entry_price) * 100
+                        else:
+                            price_distance = abs(current_price - entry_price) * 10000
+                        
+                        max_price_distance = max(max_price_distance, price_distance)
+                except Exception as e:
+                    continue
+            
+            if max_price_distance < 10:  # ระยะห่างน้อยกว่า 10 จุด
+                return False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error checking if should start recovery from MT5: {e}")
+            return False
+    
+    def _close_group_by_magic(self, magic_num: int, group_id: str):
+        """ปิด Group โดยใช้ magic number"""
+        try:
+            all_positions = self.broker.get_all_positions()
+            positions_to_close = []
+            
+            for pos in all_positions:
+                if pos.get('magic', 0) == magic_num:
+                    positions_to_close.append(pos)
+            
+            if not positions_to_close:
+                self.logger.warning(f"No positions found for magic {magic_num}")
+                return
+            
+            # ปิด positions ทั้งหมด
+            for pos in positions_to_close:
+                try:
+                    result = self.broker.close_position(pos.get('ticket'))
+                    if result and result.get('success'):
+                        self.logger.info(f"✅ Closed: {pos.get('symbol')} {pos.get('type')} (Order: {pos.get('ticket')})")
+                    else:
+                        self.logger.warning(f"❌ Failed to close: {pos.get('symbol')} {pos.get('type')}")
+                except Exception as e:
+                    self.logger.error(f"Error closing position {pos.get('ticket')}: {e}")
+            
+            # ลบจาก memory และ reset ข้อมูล
+            if group_id in self.active_groups:
+                del self.active_groups[group_id]
+            self._save_active_groups()
+            self._reset_group_data_after_close(group_id)
+            
+            self.logger.info(f"✅ Group {group_id} closed successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Error closing group by magic: {e}")
     
     def _should_close_group(self, group_id: str, group_data: Dict) -> bool:
         """ตรวจสอบว่าควรปิด Group หรือไม่ - ตรวจสอบกำไรรวม"""
