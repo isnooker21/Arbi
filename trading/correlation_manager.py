@@ -906,6 +906,10 @@ class CorrelationManager:
                     else:
                         pass  # Invalid recovery comment format
             
+            # ทำความสะอาด tracking ของไม้ที่ปิดแล้ว
+            for group_id in list(self.group_hedge_tracking.keys()):
+                self._cleanup_closed_hedge_tracking(group_id)
+            
             # self.logger.debug(f"🔍 Total recovery positions found: {recovery_count}")
             # self.logger.debug(f"🔍 Current tracking data: {self.group_hedge_tracking}")
             
@@ -967,6 +971,7 @@ class CorrelationManager:
             # ลบข้อมูลของไม้ที่ปิดแล้ว
             for symbol in closed_symbols:
                 self._remove_hedge_tracking(group_id, symbol)
+                self.logger.info(f"🧹 Cleaned up closed hedge tracking: {group_id} - {symbol}")
             
         except Exception as e:
             self.logger.error(f"Error cleaning up closed hedge tracking: {e}")
