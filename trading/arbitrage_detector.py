@@ -318,29 +318,39 @@ class TriangleArbitrageDetector:
                     if has_valid_groups:
                         self.logger.info(f"📊 Found {len(self.active_groups)} active groups - monitoring positions...")
                         
-                        # แสดงสถานะไม้ทุกครั้งที่ตรวจสอบ
+                        # ตรวจสอบและปิด Group ที่มีกำไร
                         for group_id, group_data in list(self.active_groups.items()):
-                            self.logger.info(f"🔍 Checking group {group_id} for recovery conditions...")
-                            # เรียก correlation manager เพื่อตรวจสอบพร้อมแสดงสถานะ
-                            if self.correlation_manager:
-                                # ดึงข้อมูล losing pairs จาก MT5 โดยใช้ magic number
-                                triangle_type = group_data.get('triangle_type', 'unknown')
-                                triangle_magic = self.triangle_magic_numbers.get(triangle_type, 234000)
-                                
-                                losing_pairs = []
-                                for pos in all_positions:
-                                    magic = pos.get('magic', 0)
-                                    if magic == triangle_magic:
-                                        losing_pairs.append({
-                                            'symbol': pos.get('symbol', ''),
-                                            'order_id': pos.get('ticket'),
-                                            'lot_size': pos.get('volume', 0.1),
-                                            'entry_price': pos.get('price', 0.0),
-                                            'magic': magic
-                                        })
-                                
-                                # เรียกฟังก์ชันที่แสดงสถานะการแก้ไม้
-                                self.correlation_manager.check_recovery_positions_with_status(group_id, losing_pairs)
+                            self.logger.info(f"🔍 Checking group {group_id} for closing conditions...")
+                            
+                            # ตรวจสอบว่าควรปิด Group หรือไม่
+                            if self._should_close_group(group_id, group_data):
+                                self.logger.info(f"✅ Group {group_id} meets closing criteria - closing group")
+                                self._close_group(group_id)
+                                continue  # ข้ามไป Group ถัดไป
+                            
+                            # ตรวจสอบว่าควรเริ่ม recovery หรือไม่
+                            if self._should_start_recovery(group_id, group_data, 0, 0):
+                                self.logger.info(f"🔍 Checking group {group_id} for recovery conditions...")
+                                # เรียก correlation manager เพื่อตรวจสอบพร้อมแสดงสถานะ
+                                if self.correlation_manager:
+                                    # ดึงข้อมูล losing pairs จาก MT5 โดยใช้ magic number
+                                    triangle_type = group_data.get('triangle_type', 'unknown')
+                                    triangle_magic = self.triangle_magic_numbers.get(triangle_type, 234000)
+                                    
+                                    losing_pairs = []
+                                    for pos in all_positions:
+                                        magic = pos.get('magic', 0)
+                                        if magic == triangle_magic:
+                                            losing_pairs.append({
+                                                'symbol': pos.get('symbol', ''),
+                                                'order_id': pos.get('ticket'),
+                                                'lot_size': pos.get('volume', 0.1),
+                                                'entry_price': pos.get('price', 0.0),
+                                                'magic': magic
+                                            })
+                                    
+                                    # เรียกฟังก์ชันที่แสดงสถานะการแก้ไม้
+                                    self.correlation_manager.check_recovery_positions_with_status(group_id, losing_pairs)
                         
                         time.sleep(30.0)  # รอ 30 วินาที (ลด log ที่ไม่จำเป็น)
                         continue
@@ -924,6 +934,65 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error checking group status: {e}")
     
+    def _should_close_group(self, group_id: str, group_data: Dict) -> bool:
+        """ตรวจสอบว่าควรปิด Group หรือไม่ - ตรวจสอบกำไรรวม"""
+        try:
+            # ดึงข้อมูล positions จาก MT5 โดยใช้ magic number
+            triangle_type = group_data.get('triangle_type', 'unknown')
+            triangle_magic = self.triangle_magic_numbers.get(triangle_type, 234000)
+            
+            all_positions = self.broker.get_all_positions()
+            group_positions = []
+            total_pnl = 0.0
+            
+            for pos in all_positions:
+                magic = pos.get('magic', 0)
+                if magic == triangle_magic:
+                    group_positions.append(pos)
+                    total_pnl += pos.get('profit', 0)
+            
+            if not group_positions:
+                self.logger.warning(f"⚠️ No positions found for group {group_id} (Magic: {triangle_magic})")
+                return True  # ปิด Group ที่ไม่มี positions
+            
+            # ตรวจสอบว่ามีกำไรรวมหรือไม่
+            if total_pnl > 0:
+                self.logger.info(f"💰 Group {group_id} has profit: ${total_pnl:.2f} - Ready to close")
+                return True
+            
+            # ตรวจสอบ price distance สำหรับการปิด Group
+            max_price_distance = 0
+            for pos in group_positions:
+                symbol = pos.get('symbol', '')
+                entry_price = pos.get('price', 0)
+                
+                try:
+                    current_price = self.broker.get_current_price(symbol)
+                    if entry_price > 0 and current_price > 0:
+                        if 'JPY' in symbol:
+                            price_distance = abs(current_price - entry_price) * 100
+                        else:
+                            price_distance = abs(current_price - entry_price) * 10000
+                        
+                        max_price_distance = max(max_price_distance, price_distance)
+                        self.logger.info(f"📊 {symbol}: Entry {entry_price:.5f}, Current {current_price:.5f}, Distance {price_distance:.1f} pips")
+                except Exception as e:
+                    self.logger.warning(f"Could not get price for {symbol}: {e}")
+                    continue
+            
+            self.logger.info(f"🔍 Max price distance: {max_price_distance:.1f} pips (required: 10 pips)")
+            
+            # ถ้าระยะห่างมากกว่า 10 pips และมีกำไร ให้ปิด Group
+            if max_price_distance >= 10 and total_pnl > 0:
+                self.logger.info(f"✅ Group {group_id} meets closing criteria - Distance: {max_price_distance:.1f} pips, PnL: ${total_pnl:.2f}")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Error checking if should close group: {e}")
+            return False
+    
     def _should_start_recovery(self, group_id: str, group_data: Dict, total_pnl: float, profit_percentage: float) -> bool:
         """ตรวจสอบว่าควรเริ่ม recovery หรือไม่ - เงื่อนไข 2 ชั้น"""
         try:
@@ -936,25 +1005,47 @@ class TriangleArbitrageDetector:
             if not self.correlation_manager:
                 return False
             
-            # เงื่อนไข 2: คำนวณ risk per lot (ชั้นที่ 1)
-            total_lot_size = sum(pos.get('lot_size', pos.get('volume', 0)) for pos in group_data['positions'])
+            # ดึงข้อมูล positions จาก MT5 โดยใช้ magic number
+            triangle_type = group_data.get('triangle_type', 'unknown')
+            triangle_magic = self.triangle_magic_numbers.get(triangle_type, 234000)
+            
+            all_positions = self.broker.get_all_positions()
+            group_positions = []
+            total_pnl = 0.0
+            
+            for pos in all_positions:
+                magic = pos.get('magic', 0)
+                if magic == triangle_magic:
+                    group_positions.append(pos)
+                    total_pnl += pos.get('profit', 0)
+            
+            if not group_positions:
+                return False
+            
+            # เงื่อนไข 2: ตรวจสอบว่ามีการขาดทุนหรือไม่
+            if total_pnl >= 0:
+                self.logger.info(f"💰 Group {group_id} has profit: ${total_pnl:.2f} - No recovery needed")
+                return False
+            
+            # เงื่อนไข 3: คำนวณ risk per lot (ชั้นที่ 1)
+            total_lot_size = sum(pos.get('volume', 0.1) for pos in group_positions)
             if total_lot_size <= 0:
                 return False
                 
             risk_per_lot = abs(total_pnl) / total_lot_size
             self.logger.info(f"🔍 Recovery check for {group_id}: PnL={total_pnl:.2f}, Lot size={total_lot_size:.1f}, Risk per lot={risk_per_lot:.2%}")
             
-            if risk_per_lot < 0.05:  # risk น้อยกว่า 5%
-                self.logger.info(f"⏳ Group {group_id} risk too low ({risk_per_lot:.2%}) - Waiting for 5%")
+            if risk_per_lot < 0.015:  # risk น้อยกว่า 1.5%
+                self.logger.info(f"⏳ Group {group_id} risk too low ({risk_per_lot:.2%}) - Waiting for 1.5%")
                 return False
             
-            # เงื่อนไข 3: ตรวจสอบระยะห่างราคา (ชั้นที่ 2)
+            # เงื่อนไข 4: ตรวจสอบระยะห่างราคา (ชั้นที่ 2)
             max_price_distance = 0
             self.logger.info(f"🔍 Checking price distance for {group_id}...")
             
-            for position in group_data['positions']:
-                symbol = position['symbol']
-                entry_price = position.get('entry_price', 0)
+            for pos in group_positions:
+                symbol = pos.get('symbol', '')
+                entry_price = pos.get('price', 0)
                 
                 # ดึงราคาปัจจุบัน
                 try:
@@ -1247,6 +1338,9 @@ class TriangleArbitrageDetector:
             
             # ลบกลุ่มออกจาก active_groups
             self._remove_group_data(group_id)
+            
+            # Reset ข้อมูลหลังจากปิด Group เพื่อให้สามารถส่งไม้ใหม่ได้
+            self._reset_group_data_after_close(group_id)
             
             # Reset arbitrage_sent เพื่อให้สามารถส่งออเดอร์ใหม่ได้ (สำหรับระบบเก่า - ไม่ใช้แล้ว)
             # self.arbitrage_sent = False
@@ -1749,24 +1843,57 @@ class TriangleArbitrageDetector:
     
     def get_triangle_performance(self) -> Dict:
         """Get performance statistics for triangles"""
-        total_triangles = len(self.active_triangles)
-        active_triangles = sum(1 for t in self.active_triangles.values() if t['status'] == 'active')
-        closed_triangles = sum(1 for t in self.active_triangles.values() if t['status'] == 'closed')
-        
-        return {
-            'total_triangles': total_triangles,
-            'active_triangles': active_triangles,
-            'closed_triangles': closed_triangles,
-            # 'market_regime': self.market_regime,  # DISABLED - not used in simple trading
-            'adaptive_threshold': self.volatility_threshold,
-            'avg_execution_time_ms': self.performance_metrics['avg_execution_time'],
-            'total_opportunities': self.performance_metrics['total_opportunities'],
-            'successful_trades': self.performance_metrics['successful_trades'],
-            # 'market_regime_changes': self.performance_metrics['market_regime_changes'],  # DISABLED - not used in simple trading
-            'used_currency_pairs': {k: list(v) for k, v in self.used_currency_pairs.items()},
-            'active_groups_count': len(self.active_groups),
-            'group_currency_mapping': self.group_currency_mapping
-        }
+        try:
+            # Ensure active_triangles is a dict
+            if not isinstance(self.active_triangles, dict):
+                self.logger.warning(f"active_triangles is not dict: {type(self.active_triangles)}")
+                return {
+                    'total_triangles': 0,
+                    'active_triangles': 0,
+                    'closed_triangles': 0,
+                    'adaptive_threshold': self.volatility_threshold,
+                    'avg_execution_time_ms': 0,
+                    'total_opportunities': 0,
+                    'successful_trades': 0
+                }
+            
+            total_triangles = len(self.active_triangles)
+            active_triangles = 0
+            closed_triangles = 0
+            
+            # Count triangles by status
+            for t in self.active_triangles.values():
+                if isinstance(t, dict):
+                    status = t.get('status', 'unknown')
+                    if status == 'active':
+                        active_triangles += 1
+                    elif status == 'closed':
+                        closed_triangles += 1
+                else:
+                    # If t is not a dict, assume it's active
+                    active_triangles += 1
+            
+            return {
+                'total_triangles': total_triangles,
+                'active_triangles': active_triangles,
+                'closed_triangles': closed_triangles,
+                'adaptive_threshold': self.volatility_threshold,
+                'avg_execution_time_ms': self.performance_metrics.get('avg_execution_time', 0),
+                'total_opportunities': self.performance_metrics.get('total_opportunities', 0),
+                'successful_trades': self.performance_metrics.get('successful_trades', 0)
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error in get_triangle_performance: {e}")
+            return {
+                'total_triangles': 0,
+                'active_triangles': 0,
+                'closed_triangles': 0,
+                'adaptive_threshold': 0,
+                'avg_execution_time_ms': 0,
+                'total_opportunities': 0,
+                'successful_trades': 0
+            }
     
     def get_adaptive_parameters(self) -> Dict:
         """Get current adaptive parameters"""
@@ -1989,6 +2116,54 @@ class TriangleArbitrageDetector:
             self._save_active_groups()
         except Exception as e:
             self.logger.error(f"Error removing group data: {e}")
+    
+    def _reset_group_data_after_close(self, group_id: str):
+        """Reset ข้อมูลหลังจากปิด Group เพื่อให้สามารถส่งไม้ใหม่ได้"""
+        try:
+            # ดึงข้อมูล triangle_type จาก group_id
+            triangle_type = None
+            for gid, gdata in list(self.active_groups.items()):
+                if gid == group_id:
+                    triangle_type = gdata.get('triangle_type', 'unknown')
+                    break
+            
+            # ถ้าไม่พบใน active_groups ให้ลองหาจาก group_id
+            if not triangle_type:
+                if 'triangle_1' in group_id:
+                    triangle_type = 'triangle_1'
+                elif 'triangle_2' in group_id:
+                    triangle_type = 'triangle_2'
+                elif 'triangle_3' in group_id:
+                    triangle_type = 'triangle_3'
+                elif 'triangle_4' in group_id:
+                    triangle_type = 'triangle_4'
+                elif 'triangle_5' in group_id:
+                    triangle_type = 'triangle_5'
+                elif 'triangle_6' in group_id:
+                    triangle_type = 'triangle_6'
+            
+            if triangle_type:
+                # ล้างข้อมูล used_currency_pairs สำหรับ triangle นี้
+                if triangle_type in self.used_currency_pairs:
+                    self.used_currency_pairs[triangle_type].clear()
+                    self.logger.info(f"🔄 Cleared used_currency_pairs for {triangle_type}")
+                
+                # Reset group counter สำหรับ triangle นี้
+                if triangle_type in self.group_counters:
+                    self.group_counters[triangle_type] = 0
+                    self.logger.info(f"🔄 Reset {triangle_type} counter to 0 - next group will be group_{triangle_type}_1")
+                
+                # ลบข้อมูล group_currency_mapping สำหรับ group นี้
+                if group_id in self.group_currency_mapping:
+                    del self.group_currency_mapping[group_id]
+                    self.logger.info(f"🔄 Removed group_currency_mapping for {group_id}")
+                
+                self.logger.info(f"✅ Reset data for {triangle_type} after closing {group_id}")
+            else:
+                self.logger.warning(f"⚠️ Could not determine triangle_type for {group_id}")
+                
+        except Exception as e:
+            self.logger.error(f"Error resetting group data after close: {e}")
     
     def set_profit_threshold_per_lot(self, threshold_per_lot: float):
         """ตั้งค่าเป้าหมายกำไรต่อ lot สำหรับการปิดกลุ่ม"""

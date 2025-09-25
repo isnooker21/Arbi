@@ -513,10 +513,21 @@ class AdaptiveEngine:
             arbitrage_performance = {}
             if hasattr(self.arbitrage_detector, 'get_triangle_performance'):
                 arbitrage_performance = self.arbitrage_detector.get_triangle_performance()
+                self.logger.debug(f"Arbitrage performance type: {type(arbitrage_performance)}")
             
             correlation_performance = {}
             if hasattr(self.correlation_manager, 'get_correlation_performance'):
                 correlation_performance = self.correlation_manager.get_correlation_performance()
+                self.logger.debug(f"Correlation performance type: {type(correlation_performance)}")
+            
+            # Ensure both are dictionaries
+            if not isinstance(arbitrage_performance, dict):
+                self.logger.warning(f"Arbitrage performance is not dict: {type(arbitrage_performance)}")
+                arbitrage_performance = {}
+            
+            if not isinstance(correlation_performance, dict):
+                self.logger.warning(f"Correlation performance is not dict: {type(correlation_performance)}")
+                correlation_performance = {}
             
             # Update metrics
             self.performance_metrics['total_trades'] = (
@@ -526,7 +537,7 @@ class AdaptiveEngine:
             
             self.performance_metrics['successful_trades'] = (
                 arbitrage_performance.get('closed_triangles', 0) + 
-                correlation_performance.get('closed_recoveries', 0)
+                correlation_performance.get('successful_recoveries', 0)
             )
             
             self.performance_metrics['recovery_trades'] = correlation_performance.get('total_recoveries', 0)
@@ -538,7 +549,9 @@ class AdaptiveEngine:
                 )
             
         except Exception as e:
+            import traceback
             self.logger.error(f"Error updating performance metrics: {e}")
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
     
     def get_adaptive_engine_status(self) -> Dict:
         """Get status of Adaptive Engine"""
