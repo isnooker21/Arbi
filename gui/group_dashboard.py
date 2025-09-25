@@ -144,7 +144,9 @@ class GroupDashboard:
         name_label.pack(side='left', padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['sm'])
         
         # Status indicator
-        self.status_indicators = {}
+        if not hasattr(self, 'status_indicators'):
+            self.status_indicators = {}
+        
         status_frame = tk.Frame(header_frame, bg=config['color'])
         status_frame.pack(side='right', padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['sm'])
         
@@ -183,7 +185,8 @@ class GroupDashboard:
         pairs_label.pack(anchor='w', pady=(TradingTheme.SPACING['xs'], 0))
         
         # Group ID
-        self.group_id_labels = {}
+        if not hasattr(self, 'group_id_labels'):
+            self.group_id_labels = {}
         group_id_label = tk.Label(
             content_frame,
             text="Group: None",
@@ -195,7 +198,8 @@ class GroupDashboard:
         self.group_id_labels[triangle_id] = group_id_label
         
         # PnL
-        self.pnl_labels = {}
+        if not hasattr(self, 'pnl_labels'):
+            self.pnl_labels = {}
         pnl_label = tk.Label(
             content_frame,
             text="PnL: $0.00",
@@ -207,7 +211,8 @@ class GroupDashboard:
         self.pnl_labels[triangle_id] = pnl_label
         
         # Positions count
-        self.positions_labels = {}
+        if not hasattr(self, 'positions_labels'):
+            self.positions_labels = {}
         positions_label = tk.Label(
             content_frame,
             text="Positions: 0",
@@ -219,7 +224,8 @@ class GroupDashboard:
         self.positions_labels[triangle_id] = positions_label
         
         # Recovery positions count
-        self.recovery_labels = {}
+        if not hasattr(self, 'recovery_labels'):
+            self.recovery_labels = {}
         recovery_label = tk.Label(
             content_frame,
             text="Recovery: 0",
@@ -231,7 +237,8 @@ class GroupDashboard:
         self.recovery_labels[triangle_id] = recovery_label
         
         # Last update
-        self.last_update_labels = {}
+        if not hasattr(self, 'last_update_labels'):
+            self.last_update_labels = {}
         last_update_label = tk.Label(
             content_frame,
             text="Last: Never",
@@ -310,31 +317,37 @@ class GroupDashboard:
             return
         
         # Update status indicator
-        if group_data.get('status') == 'active':
-            self.status_indicators[triangle_id].config(fg='#00FF00')  # Green
-        else:
-            self.status_indicators[triangle_id].config(fg='#FFD700')  # Gold
+        if triangle_id in self.status_indicators:
+            if group_data.get('status') == 'active':
+                self.status_indicators[triangle_id].config(fg='#00FF00')  # Green
+            else:
+                self.status_indicators[triangle_id].config(fg='#FFD700')  # Gold
         
         # Update group ID
-        group_id = group_data.get('group_id', 'None')
-        self.group_id_labels[triangle_id].config(text=f"Group: {group_id}")
+        if triangle_id in self.group_id_labels:
+            group_id = group_data.get('group_id', 'None')
+            self.group_id_labels[triangle_id].config(text=f"Group: {group_id}")
         
         # Update PnL
-        pnl = group_data.get('total_pnl', 0.0)
-        pnl_color = TradingTheme.COLORS['success'] if pnl > 0 else TradingTheme.COLORS['danger'] if pnl < 0 else TradingTheme.COLORS['text_primary']
-        self.pnl_labels[triangle_id].config(text=f"PnL: ${pnl:.2f}", fg=pnl_color)
+        if triangle_id in self.pnl_labels:
+            pnl = group_data.get('total_pnl', 0.0)
+            pnl_color = TradingTheme.COLORS['success'] if pnl > 0 else TradingTheme.COLORS['danger'] if pnl < 0 else TradingTheme.COLORS['text_primary']
+            self.pnl_labels[triangle_id].config(text=f"PnL: ${pnl:.2f}", fg=pnl_color)
         
         # Update positions count
-        positions_count = len(group_data.get('positions', []))
-        self.positions_labels[triangle_id].config(text=f"Positions: {positions_count}")
+        if triangle_id in self.positions_labels:
+            positions_count = len(group_data.get('positions', []))
+            self.positions_labels[triangle_id].config(text=f"Positions: {positions_count}")
         
         # Update recovery count
-        recovery_count = len(group_data.get('recovery_chain', []))
-        self.recovery_labels[triangle_id].config(text=f"Recovery: {recovery_count}")
+        if triangle_id in self.recovery_labels:
+            recovery_count = len(group_data.get('recovery_chain', []))
+            self.recovery_labels[triangle_id].config(text=f"Recovery: {recovery_count}")
         
         # Update last update time
-        last_update = datetime.now().strftime("%H:%M:%S")
-        self.last_update_labels[triangle_id].config(text=f"Last: {last_update}")
+        if triangle_id in self.last_update_labels:
+            last_update = datetime.now().strftime("%H:%M:%S")
+            self.last_update_labels[triangle_id].config(text=f"Last: {last_update}")
     
     def update_summary(self, groups_data):
         """อัปเดต summary"""
