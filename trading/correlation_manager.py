@@ -32,6 +32,37 @@ class CorrelationManager:
         self.is_running = False
         self.logger = logging.getLogger(__name__)
         
+        # Magic numbers สำหรับแต่ละสามเหลี่ยม (เหมือนกับ arbitrage_detector)
+        self.triangle_magic_numbers = {
+            'triangle_1': 234001,  # EURUSD, GBPUSD, EURGBP
+            'triangle_2': 234002,  # USDJPY, EURUSD, EURJPY
+            'triangle_3': 234003,  # USDJPY, GBPUSD, GBPJPY
+            'triangle_4': 234004,  # AUDUSD, EURUSD, EURAUD
+            'triangle_5': 234005,  # USDCAD, EURUSD, EURCAD
+            'triangle_6': 234006   # AUDUSD, GBPUSD, GBPAUD
+        }
+    
+    def _get_magic_number_from_group_id(self, group_id: str) -> int:
+        """หา magic number จาก group_id"""
+        try:
+            if 'triangle_1' in group_id:
+                return 234001
+            elif 'triangle_2' in group_id:
+                return 234002
+            elif 'triangle_3' in group_id:
+                return 234003
+            elif 'triangle_4' in group_id:
+                return 234004
+            elif 'triangle_5' in group_id:
+                return 234005
+            elif 'triangle_6' in group_id:
+                return 234006
+            else:
+                return 234000  # default
+        except Exception as e:
+            self.logger.error(f"Error getting magic number from group_id {group_id}: {e}")
+            return 234000
+        
         # Active Recovery Engine parameters
         self.recovery_mode = 'active'  # active, passive, disabled
         self.hedge_ratio_optimization = True
@@ -73,6 +104,9 @@ class CorrelationManager:
         self.hedged_pairs_by_group = {}  # เก็บคู่ที่แก้แล้วแยกตาม Group (group_id -> set of symbols)
         self.hedged_positions = {}  # เก็บข้อมูลไม้ที่แก้แล้ว (order_id -> position_info)
         self.hedged_groups = {}  # เก็บข้อมูลกลุ่มที่แก้แล้ว (group_id -> hedged_info)
+        
+        # Backward compatibility
+        self.hedged_pairs = set()  # เก็บคู่ที่แก้แล้ว (backward compatibility)
         
         # ระบบ Save/Load ข้อมูล
         self.persistence_file = "data/recovery_positions.json"
@@ -116,21 +150,25 @@ class CorrelationManager:
             self.logger.info("📊 GROUP HEDGING STATUS:")
             self.logger.info("-" * 50)
             
-            # ดึงข้อมูลจาก MT5 จริงๆ แทนการใช้ข้อมูลที่ส่งมา
+            # ดึงข้อมูลจาก MT5 จริงๆ แทนการใช้ข้อมูลที่ส่งมา (ใช้ magic number)
             all_positions = self.broker.get_all_positions()
             group_positions = []
             
-            # หาไม้ที่เกี่ยวข้องกับกลุ่มนี้จาก MT5
+            # หา magic number จาก group_id
+            magic_number = self._get_magic_number_from_group_id(group_id)
+            
+            # หาไม้ที่เกี่ยวข้องกับกลุ่มนี้จาก MT5 โดยใช้ magic number
             for pos in all_positions:
-                comment = pos.get('comment', '')
-                if f'G{group_id.split("_")[-1]}_' in comment:
+                magic = pos.get('magic', 0)
+                if magic == magic_number:
                     group_positions.append({
                         'symbol': pos['symbol'],
                         'order_id': pos['ticket'],
                         'lot_size': pos['volume'],
                         'entry_price': pos['price'],
                         'pnl': pos['profit'],
-                        'comment': comment
+                        'comment': pos.get('comment', ''),
+                        'magic': magic
                     })
             
             # แสดงไม้ arbitrage ทั้งหมด (แยกเป็นกำไรและขาดทุน)
@@ -1395,12 +1433,16 @@ class CorrelationManager:
             group_number = group_id.split('_')[-1]
             comment = f"RECOVERY_G{group_number}_{symbol}"
             
+            # หา magic number จาก group_id
+            magic_number = self._get_magic_number_from_group_id(group_id)
+            
             # ส่งออเดอร์
             result = self.broker.place_order(
                 symbol=symbol,
                 order_type='BUY',  # Default to BUY
                 volume=lot_size,
-                comment=comment
+                comment=comment,
+                magic=magic_number
             )
             
             if result and result.get('retcode') == 10009:
@@ -1496,7 +1538,7 @@ class CorrelationManager:
             symbol = position['symbol']
             order_id = position.get('order_id')
             
-            # ตรวจสอบว่าตำแหน่งยังเปิดอยู่จริงหรือไม่
+            # ตรวจสอบว่าตำแหน่งยังเปิดอยู่จริงหรือไม่ (ใช้ magic number)
             position_exists = False
             pnl = 0.0
             if order_id:
@@ -1505,6 +1547,8 @@ class CorrelationManager:
                     if pos['ticket'] == order_id:
                         position_exists = True
                         pnl = pos.get('profit', 0.0)
+                        magic = pos.get('magic', 0)
+                        self.logger.info(f"🔍 Found recovery position: {symbol} (Order: {order_id}, Magic: {magic}, PnL: {pnl:.2f})")
                         break
             
             if not position_exists:

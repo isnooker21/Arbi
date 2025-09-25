@@ -291,25 +291,26 @@ class TriangleArbitrageDetector:
                     self.logger.info(f"   - {group_id} (triangle_type: {triangle_type})")
                 
                 if len(self.active_groups) > 0:
-                    # ตรวจสอบว่า Group ยังเปิดอยู่จริงใน broker หรือไม่
+                    # ตรวจสอบว่า Group ยังเปิดอยู่จริงใน broker หรือไม่ (ใช้ magic number)
                     has_valid_groups = False
+                    all_positions = self.broker.get_all_positions()
+                    
                     for group_id, group_data in list(self.active_groups.items()):
+                        triangle_type = group_data.get('triangle_type', 'unknown')
+                        triangle_magic = self.triangle_magic_numbers.get(triangle_type, 234000)
+                        
                         valid_positions = 0
-                        for position in group_data['positions']:
-                            order_id = position.get('order_id')
-                            if order_id:
-                                all_positions = self.broker.get_all_positions()
-                                for pos in all_positions:
-                                    if pos['ticket'] == order_id:
-                                        valid_positions += 1
-                                        break
+                        for pos in all_positions:
+                            magic = pos.get('magic', 0)
+                            if magic == triangle_magic:
+                                valid_positions += 1
                         
                         if valid_positions > 0:
                             has_valid_groups = True
-                            break
+                            self.logger.info(f"✅ Group {group_id} has {valid_positions} valid positions (Magic: {triangle_magic})")
                         else:
                             # ลบ Group ที่ไม่มี valid positions
-                            self.logger.info(f"🗑️ Group {group_id} has no valid positions - removing from active groups")
+                            self.logger.info(f"🗑️ Group {group_id} has no valid positions (Magic: {triangle_magic}) - removing from active groups")
                             del self.active_groups[group_id]
                             # บันทึกการเปลี่ยนแปลง
                             self._save_active_groups()
@@ -322,18 +323,20 @@ class TriangleArbitrageDetector:
                             self.logger.info(f"🔍 Checking group {group_id} for recovery conditions...")
                             # เรียก correlation manager เพื่อตรวจสอบพร้อมแสดงสถานะ
                             if self.correlation_manager:
-                                # ดึงข้อมูล losing pairs จาก group_data
-                                losing_pairs = []
-                                positions_list = group_data.get('positions', [])
+                                # ดึงข้อมูล losing pairs จาก MT5 โดยใช้ magic number
+                                triangle_type = group_data.get('triangle_type', 'unknown')
+                                triangle_magic = self.triangle_magic_numbers.get(triangle_type, 234000)
                                 
-                                # positions เป็น list ของ position data
-                                for position_data in positions_list:
-                                    if position_data.get('order_id'):
+                                losing_pairs = []
+                                for pos in all_positions:
+                                    magic = pos.get('magic', 0)
+                                    if magic == triangle_magic:
                                         losing_pairs.append({
-                                            'symbol': position_data.get('symbol', ''),
-                                            'order_id': position_data.get('order_id'),
-                                            'lot_size': position_data.get('lot_size', 0.1),
-                                            'entry_price': position_data.get('entry_price', 0.0)
+                                            'symbol': pos.get('symbol', ''),
+                                            'order_id': pos.get('ticket'),
+                                            'lot_size': pos.get('volume', 0.1),
+                                            'entry_price': pos.get('price', 0.0),
+                                            'magic': magic
                                         })
                                 
                                 # เรียกฟังก์ชันที่แสดงสถานะการแก้ไม้
@@ -1040,8 +1043,18 @@ class TriangleArbitrageDetector:
             self.logger.info(f"🔄 Closing arbitrage group {group_id}")
             self.logger.info(f"   🚀 Closing orders simultaneously...")
             
-            # ปิดออเดอร์พร้อมกันทั้งกลุ่มด้วย threading
-            positions_to_close = group_data['positions']
+            # ปิดออเดอร์พร้อมกันทั้งกลุ่มด้วย threading (ใช้ magic number)
+            triangle_type = group_data.get('triangle_type', 'unknown')
+            triangle_magic = self.triangle_magic_numbers.get(triangle_type, 234000)
+            
+            # ดึงข้อมูล positions จาก MT5 โดยใช้ magic number
+            all_positions = self.broker.get_all_positions()
+            positions_to_close = []
+            for pos in all_positions:
+                magic = pos.get('magic', 0)
+                if magic == triangle_magic:
+                    positions_to_close.append(pos)
+            
             orders_closed = 0
             close_results = []
             
@@ -1049,11 +1062,12 @@ class TriangleArbitrageDetector:
             close_orders = []
             for i, position in enumerate(positions_to_close):
                 close_orders.append({
-                    'symbol': position['symbol'],
-                    'direction': position['direction'],
+                    'symbol': position.get('symbol', ''),
+                    'direction': position.get('type', 'BUY'),
                     'group_id': group_id,
-                    'order_id': position.get('order_id'),
-                    'comment': position.get('comment'),
+                    'order_id': position.get('ticket'),
+                    'comment': position.get('comment', ''),
+                    'magic': position.get('magic', 0),
                     'index': i
                 })
             
