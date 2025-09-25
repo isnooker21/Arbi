@@ -330,24 +330,7 @@ class TriangleArbitrageDetector:
                             closed_triangles.append(triangle_name)
                             continue
                         
-                        # ตรวจสอบว่าควรเริ่ม recovery หรือไม่
-                        if self._should_start_recovery_from_mt5(triangle_magic, triangle_name):
-                            self.logger.info(f"🔍 Checking group {triangle_name} for recovery conditions...")
-                            # เรียก correlation manager
-                            if self.correlation_manager:
-                                losing_pairs = []
-                                for pos in all_positions:
-                                    if pos.get('magic', 0) == triangle_magic:
-                                        losing_pairs.append({
-                                            'symbol': pos.get('symbol', ''),
-                                            'order_id': pos.get('ticket'),
-                                            'lot_size': pos.get('volume', 0.1),
-                                            'entry_price': pos.get('price', 0.0),
-                                            'magic': triangle_magic
-                                        })
-                                
-                                group_id = f"group_{triangle_name}_1"
-                                self.correlation_manager.check_recovery_positions_with_status(group_id, losing_pairs)
+                        # ตรวจสอบ recovery จะทำใน _check_and_close_groups
                     else:
                         # Triangle นี้ปิดแล้ว
                         closed_triangles.append(triangle_name)
@@ -357,6 +340,10 @@ class TriangleArbitrageDetector:
                     self.logger.info(f"📊 Active triangles: {active_triangles}")
                 if closed_triangles:
                     self.logger.info(f"📊 Closed triangles: {closed_triangles}")
+                
+                # ตรวจสอบและปิด groups ที่มีกำไร
+                if active_triangles:
+                    self._check_and_close_groups()
                 
                 # ส่งไม้ใหม่สำหรับ triangles ที่ปิดแล้ว
                 if closed_triangles:
@@ -918,11 +905,16 @@ class TriangleArbitrageDetector:
                 elif total_group_pnl > 0:
                     self.logger.info(f"💰 Group {group_id} profitable but below threshold - Total PnL: {total_group_pnl:.2f} USD")
                     self.logger.info(f"   🎯 Profit per single lot: {profit_per_single_lot:.2f} USD (Target: {self.profit_threshold_per_lot} USD)")
-                elif self._should_start_recovery(group_id, group_data, total_group_pnl, profit_percentage):
-                    # เริ่ม correlation recovery ตามเงื่อนไขที่กำหนด
-                    self.logger.info(f"🔄 Group {group_id} losing - Total PnL: {total_group_pnl:.2f} USD ({profit_percentage:.2f}%)")
-                    self.logger.info(f"🔄 Starting correlation recovery - Never cut loss")
-                    self._start_correlation_recovery(group_id, group_data, total_group_pnl)
+                else:
+                    # ตรวจสอบว่าควรเริ่ม recovery หรือไม่
+                    triangle_type = group_data.get('triangle_type', 'unknown')
+                    triangle_magic = self.triangle_magic_numbers.get(triangle_type, 234000)
+                    
+                    if self._should_start_recovery_from_mt5(triangle_magic, triangle_type):
+                        # เริ่ม correlation recovery ตามเงื่อนไขที่กำหนด
+                        self.logger.info(f"🔄 Group {group_id} losing - Total PnL: {total_group_pnl:.2f} USD ({profit_percentage:.2f}%)")
+                        self.logger.info(f"🔄 Starting correlation recovery - Never cut loss")
+                        self._start_correlation_recovery(group_id, group_data, total_group_pnl)
             
             # ปิดกลุ่มที่ครบเงื่อนไข
             if groups_to_close:
@@ -1147,93 +1139,6 @@ class TriangleArbitrageDetector:
             self.logger.error(f"Error checking if should close group: {e}")
             return False
     
-    def _should_start_recovery(self, group_id: str, group_data: Dict, total_pnl: float, profit_percentage: float) -> bool:
-        """ตรวจสอบว่าควรเริ่ม recovery หรือไม่ - เงื่อนไข 2 ชั้น"""
-        try:
-            # เงื่อนไข 0: ตรวจสอบว่าไม่มีการ recovery อยู่แล้ว
-            if group_id in self.recovery_in_progress:
-                self.logger.debug(f"⏳ Group {group_id} already in recovery - skipping")
-                return False
-            
-            # เงื่อนไข 1: ตรวจสอบ correlation manager
-            if not self.correlation_manager:
-                return False
-            
-            # ดึงข้อมูล positions จาก MT5 โดยใช้ magic number
-            triangle_type = group_data.get('triangle_type', 'unknown')
-            triangle_magic = self.triangle_magic_numbers.get(triangle_type, 234000)
-            
-            all_positions = self.broker.get_all_positions()
-            group_positions = []
-            total_pnl = 0.0
-            
-            for pos in all_positions:
-                magic = pos.get('magic', 0)
-                if magic == triangle_magic:
-                    group_positions.append(pos)
-                    total_pnl += pos.get('profit', 0)
-            
-            if not group_positions:
-                return False
-            
-            # เงื่อนไข 2: ตรวจสอบว่ามีการขาดทุนหรือไม่
-            if total_pnl >= 0:
-                self.logger.info(f"💰 Group {group_id} has profit: ${total_pnl:.2f} - No recovery needed")
-                return False
-            
-            # เงื่อนไข 3: คำนวณ risk per lot (ชั้นที่ 1)
-            total_lot_size = sum(pos.get('volume', 0.1) for pos in group_positions)
-            if total_lot_size <= 0:
-                return False
-                
-            risk_per_lot = abs(total_pnl) / total_lot_size
-            self.logger.info(f"🔍 Recovery check for {group_id}: PnL={total_pnl:.2f}, Lot size={total_lot_size:.1f}, Risk per lot={risk_per_lot:.2%}")
-            
-            if risk_per_lot < 0.015:  # risk น้อยกว่า 1.5%
-                self.logger.info(f"⏳ Group {group_id} risk too low ({risk_per_lot:.2%}) - Waiting for 1.5%")
-                return False
-            
-            # เงื่อนไข 4: ตรวจสอบระยะห่างราคา (ชั้นที่ 2)
-            max_price_distance = 0
-            self.logger.info(f"🔍 Checking price distance for {group_id}...")
-            
-            for pos in group_positions:
-                symbol = pos.get('symbol', '')
-                entry_price = pos.get('price', 0)
-                
-                # ดึงราคาปัจจุบัน
-                try:
-                    current_price = self.broker.get_current_price(symbol)
-                    if entry_price > 0 and current_price > 0:
-                        # คำนวณ price distance ตามประเภทคู่เงิน
-                        if 'JPY' in symbol:
-                            # คู่เงินที่มี JPY ใช้ 100 เป็นตัวคูณ
-                            price_distance = abs(current_price - entry_price) * 100
-                        else:
-                            # คู่เงินอื่นใช้ 10000 เป็นตัวคูณ
-                            price_distance = abs(current_price - entry_price) * 10000
-                        
-                        max_price_distance = max(max_price_distance, price_distance)
-                        self.logger.info(f"📊 {symbol}: Entry {entry_price:.5f}, Current {current_price:.5f}, Distance {price_distance:.1f} pips")
-                    else:
-                        self.logger.warning(f"⚠️ {symbol}: Entry price {entry_price}, Current price {current_price}")
-                except Exception as e:
-                    self.logger.warning(f"Could not get price for {symbol}: {e}")
-                    continue
-            
-            self.logger.info(f"🔍 Max price distance: {max_price_distance:.1f} pips (required: 10 pips)")
-            
-            if max_price_distance < 10:  # ระยะห่างน้อยกว่า 10 จุด
-                self.logger.info(f"⏳ Group {group_id} price distance too small ({max_price_distance:.1f} pips) - Waiting for 10 pips")
-                return False
-            
-            # ผ่านเงื่อนไขทั้งหมด - แก้ไม้ทันที
-            self.logger.info(f"✅ Group {group_id} meets recovery conditions - Risk: {risk_per_lot:.2%}, Distance: {max_price_distance:.1f} pips")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Error checking recovery conditions: {e}")
-            return False
     
     def _start_correlation_recovery(self, group_id: str, group_data: Dict, total_pnl: float):
         """เริ่ม correlation recovery สำหรับกลุ่มที่ขาดทุน"""
