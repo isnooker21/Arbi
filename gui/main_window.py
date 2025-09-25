@@ -387,9 +387,10 @@ class MainWindow:
                 self.text_widget.after(0, append)
         
         # Add handler to root logger
-        gui_handler = GUILogHandler(self.log_text)
-        gui_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-        logging.getLogger().addHandler(gui_handler)
+        if hasattr(self, 'log_text') and self.log_text:
+            gui_handler = GUILogHandler(self.log_text)
+            gui_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+            logging.getLogger().addHandler(gui_handler)
     
     def connect_broker(self):
         """Connect to broker manually"""
@@ -635,9 +636,10 @@ class MainWindow:
     
     def clear_logs(self):
         """Clear log display"""
-        self.log_text.config(state=tk.NORMAL)
-        self.log_text.delete(1.0, tk.END)
-        self.log_text.config(state=tk.DISABLED)
+        if hasattr(self, 'log_text') and self.log_text:
+            self.log_text.config(state=tk.NORMAL)
+            self.log_text.delete(1.0, tk.END)
+            self.log_text.config(state=tk.DISABLED)
     
     def update_group_dashboard(self):
         """Update Group Dashboard with current data"""
@@ -727,10 +729,15 @@ class MainWindow:
         timestamp = datetime.now().strftime("%H:%M:%S")
         log_entry = f"[{timestamp}] {message}"
         
-        self.log_text.config(state=tk.NORMAL)
-        self.log_text.insert(tk.END, log_entry + '\n')
-        self.log_text.see(tk.END)
-        self.log_text.config(state=tk.DISABLED)
+        # Check if log_text exists
+        if hasattr(self, 'log_text') and self.log_text:
+            self.log_text.config(state=tk.NORMAL)
+            self.log_text.insert(tk.END, log_entry + '\n')
+            self.log_text.see(tk.END)
+            self.log_text.config(state=tk.DISABLED)
+        else:
+            # Fallback: print to console
+            print(log_entry)
     
     def run(self):
         """Run the GUI"""
