@@ -477,20 +477,12 @@ class CorrelationManager:
                     else:
                         group_number = 'X'
                     
-                    # เช็คทั้งรูปแบบ RECOVERY_G{group_number}_{symbol}_TO_ และ RECOVERY_G{group_number}_{symbol}
-                    # และรูปแบบเก่า RECOVERY_G{group_number}_EURA (สำหรับ EURAUD)
-                    # และรูปแบบย่อ RECOVERY_G{group_number}_GBPA (สำหรับ GBPAUD)
-                    recovery_patterns = [
-                        f'RECOVERY_G{group_number}_',
-                        f'RECOVERY_G{group_number}_EURA',  # สำหรับ EURAUD ที่ใช้ comment แบบเก่า
-                        f'RECOVERY_G{group_number}_GBPA'   # สำหรับ GBPAUD ที่ใช้ comment แบบย่อ
-                    ]
-                    
+                    # เช็คว่าเป็น recovery position ของกลุ่มนี้หรือไม่
+                    # ใช้ magic number และ comment pattern ที่มี RECOVERY_
                     is_recovery = False
-                    for pattern in recovery_patterns:
-                        if pattern in comment:
-                            is_recovery = True
-                            break
+                    
+                    if magic == magic_number and 'RECOVERY_' in comment:
+                        is_recovery = True
                     
                     if is_recovery:
                         correlation_pos = {
@@ -579,7 +571,7 @@ class CorrelationManager:
             return 0.0
     
     def _is_position_hedged(self, position: Dict, group_id: str = None) -> bool:
-        """ตรวจสอบว่าตำแหน่งนี้แก้ไม้แล้วหรือยัง - เช็คจาก MT5 จริงๆ"""
+        """ตรวจสอบว่าตำแหน่งนี้แก้ไม้แล้วหรือยัง - ใช้ magic number และ symbol"""
         try:
             order_id = position.get('order_id')
             symbol = position.get('symbol')
@@ -592,39 +584,65 @@ class CorrelationManager:
             all_positions = self.broker.get_all_positions()
             
             # หา recovery positions ที่เกี่ยวข้องกับคู่เงินนี้
+            # ใช้ magic number และ comment pattern ที่มี RECOVERY_
             for pos in all_positions:
                 comment = pos.get('comment', '')
                 magic = pos.get('magic', 0)
+                recovery_symbol = pos.get('symbol', '')
                 
                 # เช็คว่าเป็น recovery position ของกลุ่มนี้หรือไม่
-                # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
-                if group_id and 'triangle_' in group_id:
-                    triangle_part = group_id.split('triangle_')[1].split('_')[0]
-                    group_number = triangle_part
-                else:
-                    group_number = 'X'
-                
-                # เช็คทั้งรูปแบบ RECOVERY_G{group_number}_{symbol}_TO_ และ RECOVERY_G{group_number}_{symbol}
-                # และรูปแบบเก่า RECOVERY_G{group_number}_EURA (สำหรับ EURAUD)
-                # และรูปแบบย่อ RECOVERY_G{group_number}_GBPA (สำหรับ GBPAUD)
-                recovery_patterns = [
-                    f'RECOVERY_G{group_number}_{symbol}_TO_',
-                    f'RECOVERY_G{group_number}_{symbol}',
-                    f'RECOVERY_G{group_number}_EURA',  # สำหรับ EURAUD ที่ใช้ comment แบบเก่า
-                    f'RECOVERY_G{group_number}_GBPA'   # สำหรับ GBPAUD ที่ใช้ comment แบบย่อ
-                ]
-                
-                for pattern in recovery_patterns:
-                    if magic == magic_number and pattern in comment:
-                        # เช็คว่า position ยังเปิดอยู่หรือไม่
-                        if pos.get('profit') is not None:  # position ยังเปิดอยู่
-                            self.logger.info(f"✅ Found active recovery position for {symbol}: {comment}")
+                if magic == magic_number and 'RECOVERY_' in comment:
+                    # เช็คว่า position ยังเปิดอยู่หรือไม่
+                    if pos.get('profit') is not None:  # position ยังเปิดอยู่
+                        # ตรวจสอบว่า recovery position นี้เหมาะสมสำหรับ symbol นี้หรือไม่
+                        if self._is_recovery_suitable_for_symbol(symbol, recovery_symbol, comment):
+                            self.logger.info(f"✅ Found active recovery position for {symbol}: {recovery_symbol} ({comment})")
                             return True
             
             return False
             
         except Exception as e:
             self.logger.error(f"Error checking if position is hedged: {e}")
+            return False
+    
+    def _is_recovery_suitable_for_symbol(self, original_symbol: str, recovery_symbol: str, comment: str) -> bool:
+        """ตรวจสอบว่า recovery position นี้เหมาะสมสำหรับ original symbol หรือไม่"""
+        try:
+            # วิธีที่ 1: ตรวจสอบจาก comment pattern
+            if original_symbol in comment:
+                return True
+            
+            # วิธีที่ 2: ตรวจสอบจาก symbol mapping
+            # EURAUD -> USDCAD, USDJPY (USD-based pairs)
+            if original_symbol == 'EURAUD':
+                if recovery_symbol in ['USDCAD', 'USDJPY', 'USDCHF', 'USDNZD']:
+                    return True
+            
+            # GBPAUD -> USDCAD, USDJPY (USD-based pairs)
+            elif original_symbol == 'GBPAUD':
+                if recovery_symbol in ['USDCAD', 'USDJPY', 'USDCHF', 'USDNZD']:
+                    return True
+            
+            # GBPUSD -> EURUSD, AUDUSD (non-USD pairs)
+            elif original_symbol == 'GBPUSD':
+                if recovery_symbol in ['EURUSD', 'AUDUSD', 'NZDUSD', 'EURJPY', 'AUDJPY']:
+                    return True
+            
+            # EURUSD -> GBPUSD, AUDUSD (non-USD pairs)
+            elif original_symbol == 'EURUSD':
+                if recovery_symbol in ['GBPUSD', 'AUDUSD', 'NZDUSD', 'GBPJPY', 'AUDJPY']:
+                    return True
+            
+            # วิธีที่ 3: ตรวจสอบจาก comment pattern ที่ย่อ
+            if original_symbol == 'EURAUD' and 'EURA' in comment:
+                return True
+            elif original_symbol == 'GBPAUD' and 'GBPA' in comment:
+                return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Error checking recovery suitability: {e}")
             return False
     
     def _calculate_risk_per_lot(self, position: Dict) -> float:
