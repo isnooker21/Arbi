@@ -838,13 +838,13 @@ class CorrelationManager:
         try:
             correlation_candidates = []
             
-            # คู่เงินที่กำหนดสำหรับ arbitrage
-            arbitrage_pairs = ['EURUSD', 'GBPUSD', 'EURGBP']
+            # คู่เงินที่กำหนดสำหรับ arbitrage (ใช้ magic number แทน)
+            # ไม่ใช้ hardcode arbitrage_pairs แล้ว เพราะแต่ละกลุ่มมีคู่เงินต่างกัน
             
-            # ตรวจสอบว่า base_symbol เป็นคู่ที่กำหนดหรือไม่
-            if base_symbol not in arbitrage_pairs:
-                self.logger.warning(f"⚠️ {base_symbol} is not in arbitrage pairs, using all available pairs")
-                return self._find_correlation_pairs_for_any_symbol(base_symbol)
+            # ตรวจสอบว่า base_symbol เป็นคู่ที่กำหนดหรือไม่ (ใช้ magic number แทน)
+            # ไม่ต้องตรวจสอบ arbitrage_pairs แล้ว เพราะแต่ละกลุ่มมีคู่เงินต่างกัน
+            # ใช้ฟังก์ชันสำหรับคู่เงินใดๆ แทน
+            return self._find_correlation_pairs_for_any_symbol(base_symbol)
             
             # ใช้เฉพาะคู่เงินเท่านั้น (ไม่รวม Ukoil, Gold, Silver, etc.)
             all_pairs = [
@@ -867,9 +867,9 @@ class CorrelationManager:
                 if symbol == base_symbol:
                     continue
                 
-                # ตรวจสอบว่าเป็นคู่ arbitrage หรือไม่ (ไม่ให้ซ้ำ)
-                if symbol in arbitrage_pairs:
-                    continue
+                # ตรวจสอบว่าเป็นคู่ arbitrage หรือไม่ (ไม่ให้ซ้ำ) - ไม่ใช้แล้ว
+                # if symbol in arbitrage_pairs:
+                #     continue
                 
                 # ตรวจสอบว่าเป็นคู่เงินจริงๆ (ไม่ใช่ Ukoil, Gold, Silver, etc.)
                 if not self._is_currency_pair(symbol):
@@ -1288,16 +1288,16 @@ class CorrelationManager:
             
             self.logger.info(f"🔍 Using predefined currency pairs only (excluding commodities like Ukoil)")
             
-            # คู่เงินที่กำหนดสำหรับ arbitrage
-            arbitrage_pairs = ['EURUSD', 'GBPUSD', 'EURGBP']
+            # คู่เงินที่กำหนดสำหรับ arbitrage (ใช้ magic number แทน)
+            # ไม่ใช้ hardcode arbitrage_pairs แล้ว เพราะแต่ละกลุ่มมีคู่เงินต่างกัน
             
             for symbol in all_pairs:
                 if symbol == base_symbol:
                     continue
                 
-                # ตรวจสอบว่าเป็นคู่ arbitrage หรือไม่ (ไม่ให้ซ้ำ)
-                if symbol in arbitrage_pairs:
-                    continue
+                # ตรวจสอบว่าเป็นคู่ arbitrage หรือไม่ (ไม่ให้ซ้ำ) - ไม่ใช้แล้ว
+                # if symbol in arbitrage_pairs:
+                #     continue
                 
                 # ตรวจสอบว่าเป็นคู่เงินจริงๆ (ไม่ใช่ Ukoil, Gold, Silver, etc.)
                 if not self._is_currency_pair(symbol):

@@ -578,9 +578,9 @@ class TriangleArbitrageDetector:
                 try:
                     self.logger.info(f"🔍 Thread {result_index}: Starting order for {order_data['symbol']}")
                     
-                    # สร้าง comment
-                    group_number = group_id.split('_')[-1]
-                    comment = f"G{group_number}_{order_data['symbol']}"
+                    # สร้าง comment ตามหมายเลขสามเหลี่ยม (1-6)
+                    triangle_number = triangle_name.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
+                    comment = f"G{triangle_number}_{order_data['symbol']}"
                     
                     # ใช้ lot size ที่คำนวณแล้ว
                     lot_size = order_data.get('lot_size', 0.01)
@@ -677,10 +677,10 @@ class TriangleArbitrageDetector:
             # ตรวจสอบว่าส่งออเดอร์สำเร็จครบ 3 คู่
             if orders_sent == 3:
                 # เก็บ comment ใน used_currency_pairs เพื่อให้ reset ได้
-                group_number = group_id.split('_')[-1]
+                triangle_number = triangle_name.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
                 for result in results:
                     if result and result.get('success'):
-                        comment = f"G{group_number}_{result['symbol']}"
+                        comment = f"G{triangle_number}_{result['symbol']}"
                         # เก็บคู่เงินใน used_currency_pairs สำหรับสามเหลี่ยมนี้
                         if triangle_name not in self.used_currency_pairs:
                             self.used_currency_pairs[triangle_name] = set()
@@ -709,7 +709,7 @@ class TriangleArbitrageDetector:
         self.logger.debug("🔍 _create_arbitrage_group called (legacy method - not used)")
         return False
     
-    def _send_arbitrage_order(self, symbol: str, direction: str, group_id: str) -> bool:
+    def _send_arbitrage_order(self, symbol: str, direction: str, group_id: str, triangle_name: str = None) -> bool:
         """ส่งออเดอร์ arbitrage"""
         try:
             # ตรวจสอบว่าส่งออเดอร์ arbitrage แล้วหรือไม่ (สำหรับระบบเก่า - ไม่ใช้แล้ว)
@@ -735,8 +735,12 @@ class TriangleArbitrageDetector:
             #     }
             
             # สร้าง comment ที่แสดงกลุ่มและลำดับ
-            group_number = group_id.split('_')[-1]  # เอาเฉพาะหมายเลขกลุ่ม
-            comment = f"ARB_G{group_number}_{symbol}"
+            if triangle_name:
+                triangle_number = triangle_name.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
+            else:
+                # Fallback: ใช้ group_id
+                triangle_number = group_id.split('_')[-1]
+            comment = f"ARB_G{triangle_number}_{symbol}"
             
             # เริ่มส่งออเดอร์พร้อมกัน
             start_time = datetime.now()
@@ -1117,8 +1121,9 @@ class TriangleArbitrageDetector:
                         found_order_id = None
                         
                         # หา order ที่ตรงกับ symbol และ comment
-                        group_number = group_id.split('_')[-1]
-                        expected_comment = f"ARB_G{group_number}_{order_data['symbol']}"
+                        triangle_type = group_data.get('triangle_type', 'unknown')
+                        triangle_number = triangle_type.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
+                        expected_comment = f"ARB_G{triangle_number}_{order_data['symbol']}"
                         
                         for pos in all_positions:
                             if (pos['symbol'] == order_data['symbol'] and 
@@ -1220,10 +1225,11 @@ class TriangleArbitrageDetector:
                 self.logger.info(f"   📊 คู่เงินที่ปลดล็อค: {group_pairs}")
             
             # ลบ comment ออกจาก used_currency_pairs (สำหรับระบบเก่า - ไม่ใช้แล้ว)
-            # group_number = group_id.split('_')[-1]
+            # triangle_type = group_data.get('triangle_type', 'unknown')
+            # triangle_number = triangle_type.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
             # comments_to_remove = []
             # for comment in list(self.used_currency_pairs):
-            #     if comment.startswith(f"G{group_number}_"):
+            #     if comment.startswith(f"G{triangle_number}_"):
             #         comments_to_remove.append(comment)
             # 
             # for comment in comments_to_remove:
@@ -1360,16 +1366,17 @@ class TriangleArbitrageDetector:
     def _reset_comments_for_group(self, group_id: str):
         """Reset comment สำหรับกลุ่มที่ปิดแล้ว"""
         try:
-            # ดึงหมายเลขกลุ่ม
-            group_number = group_id.split('_')[-1]
+            # ดึงหมายเลขสามเหลี่ยม
+            triangle_type = self.active_groups.get(group_id, {}).get('triangle_type', 'unknown')
+            triangle_number = triangle_type.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
             
             # สร้าง comment patterns ที่ต้อง reset
             comment_patterns = [
-                f"G{group_number}_EURUSD",
-                f"G{group_number}_GBPUSD", 
-                f"G{group_number}_EURGBP",
-                f"RECOVERY_G{group_number}_",
-                f"ARB_G{group_number}_"
+                f"G{triangle_number}_EURUSD",
+                f"G{triangle_number}_GBPUSD", 
+                f"G{triangle_number}_EURGBP",
+                f"RECOVERY_G{triangle_number}_",
+                f"ARB_G{triangle_number}_"
             ]
             
             # Debug: แสดง used_currency_pairs ปัจจุบัน (สำหรับระบบเก่า - ไม่ใช้แล้ว)
