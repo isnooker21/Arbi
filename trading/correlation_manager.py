@@ -531,6 +531,9 @@ class CorrelationManager:
                                 self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} {pnl_icon}")
                                 self.logger.info(f"   - HG แล้ว")
                                 
+                                # Debug: แสดงจำนวน recovery orders
+                                self.logger.debug(f"🔍 {symbol}: Found {len(recovery_orders)} recovery orders")
+                                
                                 # แสดง recovery orders แบบ recursive (chain recovery)
                                 self._display_recovery_chain(recovery_orders, indent_level=1)
                         else:
@@ -2023,6 +2026,9 @@ class CorrelationManager:
         """Display recovery chain recursively"""
         try:
             indent = "   " + "  " * indent_level  # เพิ่ม indent ตาม level
+            
+            # Debug: แสดงจำนวน recovery orders
+            self.logger.debug(f"🔍 _display_recovery_chain: Processing {len(recovery_orders)} recovery orders")
             
             for recovery_key in recovery_orders:
                 if recovery_key in self.order_tracker.order_tracking:

@@ -393,7 +393,18 @@ class IndividualOrderTracker:
         with self._lock:
             order_count = len(self.order_tracking)
             self.order_tracking.clear()
-            self.logger.warning(f"🚨 FORCE RESET: Cleared {order_count} tracked orders")
+            
+            # Reset statistics
+            self.stats = {
+                'original_orders_registered': 0,
+                'recovery_orders_registered': 0,
+                'orders_hedged': 0,
+                'orders_removed': 0,
+                'sync_operations': 0,
+                'last_sync': None
+            }
+            
+            self.logger.warning(f"🚨 FORCE RESET: Cleared {order_count} tracked orders and reset statistics")
             
             # Save to file after clearing
             self._save_to_file()
