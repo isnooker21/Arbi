@@ -182,6 +182,10 @@ class CorrelationManager:
         
         # Initialize tracker with existing MT5 recovery positions
         self._initialize_tracker_from_mt5()
+        
+        # Log startup completion
+        self.logger.info("🚀 Hedge tracker initialized with ProfessionalHedgeTracker")
+        self.hedge_tracker.log_status_summary()
     
     def _initialize_tracker_from_mt5(self):
         """Initialize tracker with existing recovery positions from MT5"""
@@ -195,28 +199,31 @@ class CorrelationManager:
                     # Parse comment: RECOVERY_G{X}_{original_symbol}_TO_{recovery_symbol}
                     parts = comment.split('_')
                     if len(parts) >= 5:
-                        group_num = parts[1][1:]  # Remove 'G' prefix
-                        original_symbol = parts[2]
-                        recovery_symbol = pos.get('symbol', '')
-                        order_id = pos.get('ticket', '')
-                        
-                        group_id = f"group_triangle_{group_num}_1"
-                        
-                        # Add to tracker if not already present
-                        if self.hedge_tracker.get_position_status(group_id, original_symbol) == "AVAILABLE":
-                            success = self.hedge_tracker.lock_position(group_id, original_symbol)
-                            if success:
-                                self.hedge_tracker.activate_position(group_id, original_symbol, order_id, recovery_symbol)
-                                initialized_count += 1
-                                self.logger.debug(f"🔄 Initialized tracker: {group_id}:{original_symbol} -> {recovery_symbol} (Order: {order_id})")
+                        try:
+                            group_num = parts[1][1:]  # Remove 'G' prefix
+                            original_symbol = parts[2]
+                            recovery_symbol = pos.get('symbol', '')
+                            order_id = str(pos.get('ticket', ''))
+                            
+                            group_id = f"group_triangle_{group_num}_1"
+                            
+                            # Add to tracker if position is still open
+                            if pos.get('profit') is not None:  # Position is open
+                                if self.hedge_tracker.get_position_status(group_id, original_symbol) == "AVAILABLE":
+                                    if self.hedge_tracker.lock_position(group_id, original_symbol):
+                                        if self.hedge_tracker.activate_position(group_id, original_symbol, order_id, recovery_symbol):
+                                            initialized_count += 1
+                                            self.logger.debug(f"🔄 Initialized: {group_id}:{original_symbol} -> {recovery_symbol}")
+                        except Exception as e:
+                            self.logger.error(f"Error parsing recovery position {comment}: {e}")
             
             if initialized_count > 0:
                 self.logger.info(f"🔄 Initialized tracker with {initialized_count} existing recovery positions")
             else:
-                self.logger.debug("🔄 No existing recovery positions found in MT5")
+                self.logger.info("🔄 No existing recovery positions found to initialize")
                 
         except Exception as e:
-            self.logger.debug(f"Error initializing tracker from MT5: {e}")
+            self.logger.error(f"Error initializing tracker from MT5: {e}")
     
     def _debug_hedge_status(self, group_id: str, symbol: str):
         """Debug hedge status checking"""
@@ -224,12 +231,13 @@ class CorrelationManager:
             tracker_status = self.hedge_tracker.get_position_status(group_id, symbol)
             mt5_status = self._is_position_hedged_from_mt5(group_id, symbol)
             
-            # Only log debug info if there's an issue
-            if tracker_status != "ACTIVE" and not mt5_status:
-                self.logger.debug(f"🔍 DEBUG {group_id}:{symbol} - Tracker: {tracker_status}, MT5: {'HEDGED' if mt5_status else 'NOT_HEDGED'}")
+            self.logger.debug(f"🔍 DEBUG {group_id}:{symbol}")
+            self.logger.debug(f"   Tracker Status: {tracker_status}")
+            self.logger.debug(f"   MT5 Status: {'HEDGED' if mt5_status else 'NOT_HEDGED'}")
+            self.logger.debug(f"   Final Result: {'HEDGED' if (tracker_status == 'ACTIVE' or mt5_status) else 'NOT_HEDGED'}")
             
         except Exception as e:
-            self.logger.debug(f"Error in debug hedge status: {e}")
+            self.logger.error(f"Error in debug hedge status: {e}")
     
     def _log_all_groups_status(self):
         """แสดงสถานะทุก Group ในระบบ"""
@@ -642,7 +650,7 @@ class CorrelationManager:
             # Use ProfessionalHedgeTracker first
             status = self.hedge_tracker.get_position_status(group_id, symbol)
             if status == "ACTIVE":
-                return True
+                            return True
             
             # Fallback: Check MT5 directly for existing recovery positions
             mt5_hedged = self._is_position_hedged_from_mt5(group_id, symbol)
@@ -2015,7 +2023,9 @@ class CorrelationManager:
         """ตรวจสอบ recovery positions - เฉพาะกลุ่มที่ยังเปิดอยู่"""
         try:
             # 🔄 STEP 1: Sync hedge tracker with MT5
-            self.hedge_tracker.sync_with_mt5()
+            sync_results = self.hedge_tracker.sync_with_mt5()
+            if sync_results.get('positions_reset', 0) > 0:
+                self.logger.debug(f"🔄 Synced: {sync_results['positions_reset']} positions reset")
             
             # ตรวจสอบว่ามี recovery positions หรือไม่
             if not self.recovery_positions:
@@ -2121,7 +2131,7 @@ class CorrelationManager:
                 self.logger.debug(f"✅ Recovery position {symbol} was already closed - updated status")
                 return 0.0
                 
-            # ปิดออเดอร์
+                # ปิดออเดอร์
             success = self.broker.close_position(symbol)
                 
             if success:
