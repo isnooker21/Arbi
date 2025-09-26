@@ -431,8 +431,8 @@ class CorrelationManager:
             
             # Debug: แสดงข้อมูลใน hedge tracker
             self.logger.info("🔍 HEDGE TRACKER DEBUG:")
-            for group_id, positions in self.hedge_tracker.group_hedge_tracking.items():
-                self.logger.info(f"  Group {group_id}: {positions}")
+            for position_key, position_info in self.hedge_tracker.positions.items():
+                self.logger.info(f"  Position {position_key}: {position_info}")
             
             # ดึงข้อมูลจาก MT5 จริงๆ
             all_positions = self.broker.get_all_positions()
@@ -599,16 +599,10 @@ class CorrelationManager:
     def _check_hedge_status_from_tracking(self, group_id: str, original_symbol: str) -> bool:
         """ตรวจสอบสถานะการแก้ไม้จากระบบ tracking ใหม่"""
         try:
-            # ใช้ Professional Hedge Tracker
-            status = self.hedge_tracker.get_position_status(group_id, original_symbol)
-            self.logger.info(f"🔍 Hedge status for {group_id}:{original_symbol} = {status}")
-            
-            # ถ้า tracker บอกว่า ACTIVE ให้ตรวจสอบจาก MT5 อีกครั้ง
-            if status == 'ACTIVE':
-                # ตรวจสอบจาก MT5 โดยตรง
-                return self._is_position_hedged_from_mt5(group_id, original_symbol)
-            
-            return status in ['HEDGING', 'ACTIVE']
+            # ใช้ MT5 โดยตรงในการตรวจสอบ hedge status
+            is_hedged = self._is_position_hedged_from_mt5(group_id, original_symbol)
+            self.logger.info(f"🔍 Hedge status for {group_id}:{original_symbol} = {'HEDGED' if is_hedged else 'NOT_HEDGED'}")
+            return is_hedged
             
         except Exception as e:
             self.logger.error(f"Error checking hedge status from tracking: {e}")
