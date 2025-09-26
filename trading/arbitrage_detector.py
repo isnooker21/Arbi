@@ -609,7 +609,7 @@ class TriangleArbitrageDetector:
                         
                         # Track ไม้ arbitrage ใน hedge tracker
                         if hasattr(self, 'correlation_manager') and self.correlation_manager:
-                            group_id = f"group_{triangle_name}_{group_counter}"
+                            group_id = f"group_{triangle_name}_{self.group_counters[triangle_name]}"
                             self.correlation_manager.hedge_tracker.lock_position(group_id, order_data['symbol'])
                     else:
                         results[result_index] = {
@@ -1767,12 +1767,27 @@ class TriangleArbitrageDetector:
             self.logger.error(f"Error calculating arbitrage for {triangle}: {e}")
             return None
     
+    def _get_triangle_name(self, triangle: Tuple[str, str, str]) -> str:
+        """Get triangle name from triangle tuple"""
+        try:
+            # หา triangle name จาก triangle mapping
+            for i, triangle_data in enumerate(self.triangles):
+                if triangle_data == triangle:
+                    return f"triangle_{i+1}"
+            return "triangle_unknown"
+        except Exception as e:
+            self.logger.error(f"Error getting triangle name: {e}")
+            return "triangle_unknown"
+    
     def execute_triangle_entry(self, triangle: Tuple[str, str, str], ai_decision):
         """Execute triangle positions based on AI decision"""
         try:
             pair1, pair2, pair3 = triangle
             lot_size = ai_decision.position_size
             direction = ai_decision.direction
+            
+            # หา triangle_name จาก triangle
+            triangle_name = self._get_triangle_name(triangle)
             
             orders = []
             
@@ -1786,7 +1801,7 @@ class TriangleArbitrageDetector:
                     
                     # Track ไม้ arbitrage ใน hedge tracker
                     if hasattr(self, 'correlation_manager') and self.correlation_manager:
-                        group_id = f"group_{triangle_name}_{group_counter}"
+                        group_id = f"group_{triangle_name}_{self.group_counters[triangle_name]}"
                         self.correlation_manager.hedge_tracker.lock_position(group_id, pair)
                 else:
                     # If any order fails, cancel all previous orders
@@ -1820,6 +1835,9 @@ class TriangleArbitrageDetector:
             lot_size = ai_decision.position_size
             direction = ai_decision.direction
             
+            # หา triangle_name จาก triangle
+            triangle_name = self._get_triangle_name(triangle)
+            
             orders = []
             
             # Place orders for each pair in the triangle
@@ -1832,7 +1850,7 @@ class TriangleArbitrageDetector:
                     
                     # Track ไม้ arbitrage ใน hedge tracker
                     if hasattr(self, 'correlation_manager') and self.correlation_manager:
-                        group_id = f"group_{triangle_name}_{group_counter}"
+                        group_id = f"group_{triangle_name}_{self.group_counters[triangle_name]}"
                         self.correlation_manager.hedge_tracker.lock_position(group_id, pair)
                 else:
                     # If any order fails, cancel all previous orders
