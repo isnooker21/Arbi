@@ -408,7 +408,7 @@ class GroupDashboard:
             bg=TradingTheme.COLORS['primary_bg'],
             fg=TradingTheme.COLORS['text_primary'],
             insertbackground=TradingTheme.COLORS['text_primary'],
-            selectbackground=TradingTheme.COLORS['accent'],
+            selectbackground=TradingTheme.COLORS['accent_bg'],
             state='disabled',
             wrap='none'
         )
