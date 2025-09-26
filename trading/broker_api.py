@@ -568,7 +568,21 @@ class BrokerAPI:
                     error_desc = self._get_error_message(result.retcode)
                     self.logger.error(f"❌ ไม่สำเร็จ: RetCode {result.retcode} - {error_desc}")
                     self.logger.error(f"❌ Full result: {result}")
-                    return None
+                    # Return error result instead of None
+                    return {
+                        'order_id': None,
+                        'symbol': symbol,
+                        'type': order_type,
+                        'volume': volume,
+                        'price': price,
+                        'sl': sl,
+                        'tp': tp,
+                        'retcode': result.retcode,
+                        'comment': comment,
+                        'deal': None,
+                        'success': False,
+                        'error': error_desc
+                    }
             
             return None
             

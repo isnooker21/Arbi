@@ -147,6 +147,7 @@ class ProfessionalHedgeTracker:
             
             self.stats['total_activations'] += 1
             self.logger.info(f"✅ Position activated: {position_key} -> {hedge_symbol} (Order: {order_id})")
+            self.logger.info(f"🔍 DEBUG: All positions after activation: {self.positions}")
             return True
     
     def reset_position(self, group_id: str, symbol: str) -> bool:
@@ -215,9 +216,12 @@ class ProfessionalHedgeTracker:
             position_key = f"{group_id}:{symbol}"
             
             if position_key not in self.positions:
+                self.logger.info(f"🔍 Position {position_key} not found in tracker - returning AVAILABLE")
                 return PositionStatus.AVAILABLE.value
             
-            return self.positions[position_key].get('status', PositionStatus.AVAILABLE.value)
+            status = self.positions[position_key].get('status', PositionStatus.AVAILABLE.value)
+            self.logger.info(f"🔍 Position {position_key} status: {status}")
+            return status
     
     def get_position_info(self, group_id: str, symbol: str) -> Optional[Dict]:
         """
@@ -290,6 +294,9 @@ class ProfessionalHedgeTracker:
                         # Position is closed - mark for reset
                         positions_to_reset.append(position_key)
                         sync_results['positions_reset'] += 1
+                        self.logger.info(f"🔄 Position {position_key} (Order: {order_id}) not found in MT5 - will reset")
+                    else:
+                        self.logger.info(f"✅ Position {position_key} (Order: {order_id}) still active in MT5")
                 
                 # Reset closed positions
                 for position_key in positions_to_reset:
