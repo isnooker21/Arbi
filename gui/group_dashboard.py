@@ -56,7 +56,7 @@ class GroupDashboard:
         """สร้าง grid สำหรับแสดงแต่ละ group"""
         # Container for groups
         self.groups_container = tk.Frame(self.main_frame, bg=TradingTheme.COLORS['secondary_bg'])
-        self.groups_container.pack(fill='both', expand=True, padx=TradingTheme.SPACING['md'])
+        self.groups_container.pack(fill='both', expand=True, padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['md'])
         
         # Create 6 group cards (2 rows x 3 columns)
         self.group_cards = {}
@@ -107,12 +107,12 @@ class GroupDashboard:
             col = i % 3
             
             card = self.create_group_card(triangle_id, config)
-            card.grid(row=row, column=col, padx=TradingTheme.SPACING['sm'], 
-                     pady=TradingTheme.SPACING['sm'], sticky='nsew')
+            card.grid(row=row, column=col, padx=TradingTheme.SPACING['md'], 
+                     pady=TradingTheme.SPACING['md'], sticky='nsew')
             
             self.group_cards[triangle_id] = card
         
-        # Configure grid weights
+        # Configure grid weights for full expansion
         for i in range(2):
             self.groups_container.grid_rowconfigure(i, weight=1)
         for i in range(3):

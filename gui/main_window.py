@@ -48,14 +48,8 @@ class MainWindow:
         # Header Bar
         self.create_header()
         
-        # Status Bar
-        self.create_status_bar()
-        
         # Main Content Area
         self.create_main_content()
-        
-        # Footer
-        self.create_footer()
     
     def create_header(self):
         """Create modern header bar"""
@@ -86,61 +80,26 @@ class MainWindow:
         )
         self.settings_btn.pack(side='right', padx=TradingTheme.SPACING['sm'])
         
+        # Connection Status
+        self.connection_indicator, self.connection_label = TradingTheme.create_status_indicator(
+            controls_frame, "Connection", self.connection_status
+        )
+        self.connection_indicator.pack(side='right', padx=TradingTheme.SPACING['sm'])
+        
         # Status Indicator
         self.status_indicator, self.status_label = TradingTheme.create_status_indicator(
-            controls_frame, "System", self.connection_status
+            controls_frame, "System", "active"
         )
         self.status_indicator.pack(side='right', padx=TradingTheme.SPACING['lg'])
     
-    def create_status_bar(self):
-        """Create status bar with key metrics"""
-        status_frame = tk.Frame(self.main_frame, bg=TradingTheme.COLORS['primary_bg'])
-        status_frame.pack(fill='x', pady=(0, TradingTheme.SPACING['md']))
-        
-        # Connection Status
-        self.connection_card, self.connection_value = TradingTheme.create_info_card(
-            status_frame, "Connection", "Disconnected", icon="🔴"
-        )
-        self.connection_card.pack(side='left', padx=(0, TradingTheme.SPACING['md']))
-        
-        # AI Engine Status
-        self.ai_card, self.ai_value = TradingTheme.create_info_card(
-            status_frame, "AI Engine", "Inactive", icon="⚫"
-        )
-        self.ai_card.pack(side='left', padx=(0, TradingTheme.SPACING['md']))
-        
-        # Total PnL
-        self.pnl_card, self.pnl_value = TradingTheme.create_info_card(
-            status_frame, "Total PnL", "$0.00", icon="💰"
-        )
-        self.pnl_card.pack(side='left', padx=(0, TradingTheme.SPACING['md']))
-        
-        # Win Rate
-        self.winrate_card, self.winrate_value = TradingTheme.create_info_card(
-            status_frame, "Win Rate", "0.00%", icon="📊"
-        )
-        self.winrate_card.pack(side='left', padx=(0, TradingTheme.SPACING['md']))
-        
-        # Active Positions
-        self.positions_card, self.positions_value = TradingTheme.create_info_card(
-            status_frame, "Positions", "0", icon="📈"
-        )
-        self.positions_card.pack(side='left', padx=(0, TradingTheme.SPACING['md']))
     
     def create_main_content(self):
         """Create main content area"""
         content_frame = tk.Frame(self.main_frame, bg=TradingTheme.COLORS['primary_bg'])
-        content_frame.pack(fill='both', expand=True, pady=(0, TradingTheme.SPACING['md']))
+        content_frame.pack(fill='both', expand=True)
         
-        # Left Panel - Trading Control
-        self.create_trading_control_panel(content_frame)
-        
-        # Right Panel - Group Dashboard
-        right_panel = tk.Frame(content_frame, bg=TradingTheme.COLORS['primary_bg'])
-        right_panel.pack(side='right', fill='both', expand=True)
-        
-        # Group Dashboard
-        self.group_dashboard = GroupDashboard(right_panel)
+        # Group Dashboard - ใช้พื้นที่เต็ม
+        self.group_dashboard = GroupDashboard(content_frame)
         
         # Initialize group dashboard with default status
         self.update_group_dashboard()
@@ -319,40 +278,6 @@ class MainWindow:
         )
         placeholder.place(relx=0.5, rely=0.5, anchor='center')
     
-    def create_footer(self):
-        """Create footer with logs"""
-        footer_frame = tk.Frame(self.main_frame, bg=TradingTheme.COLORS['secondary_bg'], height=200)
-        footer_frame.pack(fill='x')
-        footer_frame.pack_propagate(False)
-        
-        # Log header
-        log_header = tk.Frame(footer_frame, bg=TradingTheme.COLORS['secondary_bg'])
-        log_header.pack(fill='x', padx=TradingTheme.SPACING['md'], pady=(TradingTheme.SPACING['sm'], 0))
-        
-        tk.Label(
-            log_header,
-            text="📝 System Log",
-            font=TradingTheme.FONTS['title'],
-            bg=TradingTheme.COLORS['secondary_bg'],
-            fg=TradingTheme.COLORS['text_primary']
-        ).pack(side='left')
-        
-        clear_btn = TradingTheme.create_button_style(
-            log_header, "Clear", self.clear_logs, "secondary"
-        )
-        clear_btn.pack(side='right')
-        
-        # Log text area
-        self.log_text = scrolledtext.ScrolledText(
-            footer_frame,
-            bg=TradingTheme.COLORS['primary_bg'],
-            fg=TradingTheme.COLORS['text_primary'],
-            font=TradingTheme.FONTS['monospace'],
-            height=8,
-            wrap=tk.WORD,
-            state=tk.DISABLED
-        )
-        self.log_text.pack(fill='both', expand=True, padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['sm'])
     
     def switch_tab(self, tab_name):
         """Switch between chart tabs"""
@@ -473,15 +398,12 @@ class MainWindow:
         
         config = status_config.get(status, status_config['disconnected'])
         
-        self.status_label.config(
-            text=f"{config['icon']} System",
-            fg=config['color']
-        )
-        
-        self.connection_value.config(
-            text=config['text'],
-            fg=config['color']
-        )
+        # Update connection indicator
+        if hasattr(self, 'connection_label'):
+            self.connection_label.config(
+                text=f"{config['icon']} Connection",
+                fg=config['color']
+            )
     
     def update_positions(self):
         """Update positions display"""
