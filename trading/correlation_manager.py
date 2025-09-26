@@ -637,8 +637,9 @@ class CorrelationManager:
             is_hedged = self.order_tracker.is_order_hedged(ticket, symbol)
             
             # Debug logging for hedged orders
+            self.logger.info(f"🔍 Checking hedge status: {ticket}_{symbol} = {is_hedged}")
             if is_hedged:
-                self.logger.debug(f"🔍 {ticket}_{symbol}: Status = HEDGED")
+                self.logger.info(f"🔍 {ticket}_{symbol}: Status = HEDGED")
             
             return is_hedged
             
