@@ -22,6 +22,7 @@ import logging
 from typing import Dict, List, Tuple, Optional
 import threading
 from utils.calculations import TradingCalculations
+from trading.professional_hedge_tracker import ProfessionalHedgeTracker
 
 class CorrelationManager:
     
@@ -134,8 +135,8 @@ class CorrelationManager:
         # Active Recovery Engine parameters
         self.recovery_mode = 'active'  # active, passive, disabled
         
-        # Last hedged positions per group - ป้องกันการแก้ไม้ซ้ำ
-        self.last_hedged_positions = {}
+        # Legacy: Last hedged positions per group (replaced by hedge_tracker)
+        # self.last_hedged_positions = {}  # REMOVED - using hedge_tracker instead
         self.hedge_ratio_optimization = True
         self.portfolio_rebalancing = True
         self.multi_timeframe_analysis = True
@@ -166,14 +167,12 @@ class CorrelationManager:
             'total_recovered_amount': 0.0
         }
         
-        # Multi-timeframe correlation cache - แยกตาม Group
-        self.recovery_chains = {}  # เก็บข้อมูล recovery chain ของแต่ละกลุ่ม
-        self.recovery_positions_by_group = {}  # เก็บ recovery positions แยกตาม Group
-        self.hedged_positions_by_group = {}  # เก็บ hedged positions แยกตาม Group
+        # Professional Hedge Tracking System - Simple and Reliable
+        self.hedge_tracker = ProfessionalHedgeTracker(broker_api)
         
-        # ระบบ Tracking ใหม่ - ใช้ memory และ MT5 จริงๆ
-        self.group_hedge_tracking = {}  # เก็บข้อมูลการแก้ไม้แยกตาม Group
-        # Format: {group_id: {original_symbol: {recovery_symbol: recovery_info}}}
+        # Legacy recovery positions (will be phased out)
+        self.recovery_positions = {}
+        self.recovery_positions_by_group = {}  # Keep for backward compatibility
         
         # ระบบ Save/Load ข้อมูล
         self.persistence_file = "data/recovery_positions.json"
@@ -660,16 +659,12 @@ class CorrelationManager:
                         is_hedged = self._is_position_hedged(position_data, group_id)
                         hedge_status = "✅ HG" if is_hedged else "❌ NH"
                         
-                        # Debug: แสดงข้อมูล tracking (ลด log)
-                        # if group_id in self.group_hedge_tracking:
-                        #     tracking_info = self.group_hedge_tracking[group_id]
-                        #     if symbol in tracking_info:
-                        #         recovery_pairs = list(tracking_info[symbol].keys())
-                        #         self.logger.debug(f"     📝 Tracking: {symbol} -> {recovery_pairs}")
-                        #     else:
-                        #         self.logger.debug(f"     📝 No tracking for {symbol}")
-                        # else:
-                        #     self.logger.debug(f"     📝 No tracking for group {group_id}")
+                        # Debug: แสดงข้อมูล tracking จาก Professional Hedge Tracker
+                        position_info = self.hedge_tracker.get_position_info(group_id, symbol)
+                        if position_info:
+                            status = position_info.get('status', 'UNKNOWN')
+                            hedge_symbol = position_info.get('hedge_symbol', 'N/A')
+                            self.logger.debug(f"     📝 Tracker: {symbol} -> {hedge_symbol} ({status})")
                         
                         self.logger.info(f"     - {symbol:8s}: ${pnl:8.2f} [{hedge_status}]")
                 
@@ -801,18 +796,11 @@ class CorrelationManager:
             return False
     
     def _check_hedge_status_from_tracking(self, group_id: str, original_symbol: str) -> bool:
-        """ตรวจสอบสถานะการแก้ไม้จากระบบ tracking"""
+        """ตรวจสอบสถานะการแก้ไม้จากระบบ tracking ใหม่"""
         try:
-            # ตรวจสอบจาก memory tracking
-            if group_id in self.group_hedge_tracking:
-                if original_symbol in self.group_hedge_tracking[group_id]:
-                    # ตรวจสอบว่า recovery position ยังเปิดอยู่ใน MT5 หรือไม่
-                    recovery_info = self.group_hedge_tracking[group_id][original_symbol]
-                    for recovery_symbol, info in recovery_info.items():
-                        if self._is_recovery_position_active(info.get('recovery_order_id')):
-                            return True
-            
-            return False
+            # ใช้ Professional Hedge Tracker
+            status = self.hedge_tracker.get_position_status(group_id, original_symbol)
+            return status in ['HEDGING', 'ACTIVE']
             
         except Exception as e:
             self.logger.error(f"Error checking hedge status from tracking: {e}")
@@ -842,22 +830,14 @@ class CorrelationManager:
             return False
     
     def _add_hedge_tracking(self, group_id: str, original_symbol: str, recovery_symbol: str, recovery_order_id: str):
-        """เพิ่มข้อมูลการแก้ไม้ในระบบ tracking"""
+        """เพิ่มข้อมูลการแก้ไม้ในระบบ tracking ใหม่"""
         try:
-            if group_id not in self.group_hedge_tracking:
-                self.group_hedge_tracking[group_id] = {}
-            
-            if original_symbol not in self.group_hedge_tracking[group_id]:
-                self.group_hedge_tracking[group_id][original_symbol] = {}
-            
-            # บันทึกข้อมูล recovery
-            self.group_hedge_tracking[group_id][original_symbol][recovery_symbol] = {
-                'recovery_order_id': recovery_order_id,
-                'created_at': datetime.now(),
-                'status': 'active'
-            }
-            
-            self.logger.info(f"📝 Added hedge tracking: {group_id} - {original_symbol} -> {recovery_symbol} (Order: {recovery_order_id})")
+            # ใช้ Professional Hedge Tracker
+            success = self.hedge_tracker.activate_position(group_id, original_symbol, recovery_order_id, recovery_symbol)
+            if success:
+                self.logger.info(f"📝 Added hedge tracking: {group_id} - {original_symbol} -> {recovery_symbol} (Order: {recovery_order_id})")
+            else:
+                self.logger.error(f"❌ Failed to add hedge tracking: {group_id} - {original_symbol}")
             
         except Exception as e:
             self.logger.error(f"Error adding hedge tracking: {e}")
@@ -865,86 +845,25 @@ class CorrelationManager:
     def sync_tracking_from_mt5(self):
         """Sync ข้อมูล tracking จาก MT5 positions ที่มีอยู่"""
         try:
-            all_positions = self.broker.get_all_positions()
-            recovery_count = 0
+            # ใช้ Professional Hedge Tracker
+            sync_results = self.hedge_tracker.sync_with_mt5()
             
-            for pos in all_positions:
-                comment = pos.get('comment', '')
-                if comment.startswith('RECOVERY_'):
-                    recovery_count += 1
-                    # self.logger.debug(f"🔍 Found recovery position: {pos.get('symbol')} - {comment}")
-                    
-                    # แยกข้อมูลจาก comment
-                    # Format: RECOVERY_G{group_number}_{original_symbol}_TO_{recovery_symbol}
-                    parts = comment.split('_')
-                    if len(parts) >= 5 and parts[0] == 'RECOVERY':
-                        try:
-                            group_number = parts[1]  # G1, G2, etc.
-                            original_symbol = parts[2]  # GBPAUD, EURUSD, etc.
-                            recovery_symbol = pos.get('symbol', '')
-                            recovery_order_id = pos.get('ticket', '')
-                            
-                            # สร้าง group_id
-                            group_id = f"group_triangle_{group_number[1:]}_1"  # G1 -> group_triangle_1_1
-                            
-                            self.logger.debug(f"🔍 Parsed: group_id={group_id}, original={original_symbol}, recovery={recovery_symbol}")
-                            
-                            # เพิ่มเข้า tracking ถ้ายังไม่มี
-                            if group_id not in self.group_hedge_tracking:
-                                self.group_hedge_tracking[group_id] = {}
-                            
-                            if original_symbol not in self.group_hedge_tracking[group_id]:
-                                self.group_hedge_tracking[group_id][original_symbol] = {}
-                            
-                            if recovery_symbol not in self.group_hedge_tracking[group_id][original_symbol]:
-                                self.group_hedge_tracking[group_id][original_symbol][recovery_symbol] = {
-                                    'recovery_order_id': recovery_order_id,
-                                    'created_at': datetime.now(),
-                                    'status': 'active'
-                                }
-                                
-                                # self.logger.debug(f"🔄 Synced tracking from MT5: {group_id} - {original_symbol} -> {recovery_symbol} (Order: {recovery_order_id})")
-                            else:
-                                pass  # Already tracked
-                        
-                        except Exception as e:
-                            self.logger.error(f"Error parsing recovery comment: {comment} - {e}")
-                    else:
-                        pass  # Invalid recovery comment format
-            
-            # ทำความสะอาด tracking ของไม้ที่ปิดแล้ว
-            for group_id in list(self.group_hedge_tracking.keys()):
-                self._cleanup_closed_hedge_tracking(group_id)
-            
-            # self.logger.debug(f"🔍 Total recovery positions found: {recovery_count}")
-            # self.logger.debug(f"🔍 Current tracking data: {self.group_hedge_tracking}")
+            # Log sync results
+            if sync_results['positions_reset'] > 0:
+                self.logger.info(f"🔄 MT5 Sync: {sync_results['positions_checked']} checked, {sync_results['positions_reset']} reset")
             
         except Exception as e:
             self.logger.error(f"Error syncing tracking from MT5: {e}")
     
     def _remove_hedge_tracking(self, group_id: str, original_symbol: str, recovery_symbol: str = None):
-        """ลบข้อมูลการแก้ไม้จากระบบ tracking"""
+        """ลบข้อมูลการแก้ไม้จากระบบ tracking ใหม่"""
         try:
-            if group_id not in self.group_hedge_tracking:
-                return
-            
-            if original_symbol not in self.group_hedge_tracking[group_id]:
-                return
-            
-            if recovery_symbol:
-                # ลบเฉพาะ recovery symbol ที่ระบุ
-                if recovery_symbol in self.group_hedge_tracking[group_id][original_symbol]:
-                    del self.group_hedge_tracking[group_id][original_symbol][recovery_symbol]
-                    # self.logger.debug(f"🗑️ Removed hedge tracking: {group_id} - {original_symbol} -> {recovery_symbol}")
+            # ใช้ Professional Hedge Tracker
+            success = self.hedge_tracker.reset_position(group_id, original_symbol)
+            if success:
+                self.logger.debug(f"🗑️ Removed hedge tracking: {group_id} - {original_symbol}")
             else:
-                # ลบทั้งหมดของ original symbol
-                del self.group_hedge_tracking[group_id][original_symbol]
-                # self.logger.debug(f"🗑️ Removed all hedge tracking: {group_id} - {original_symbol}")
-            
-            # ลบ group ถ้าไม่มีข้อมูลแล้ว
-            if not self.group_hedge_tracking[group_id]:
-                del self.group_hedge_tracking[group_id]
-                # self.logger.debug(f"🗑️ Removed group tracking: {group_id}")
+                self.logger.debug(f"Position {group_id} - {original_symbol} not found in tracker")
             
         except Exception as e:
             self.logger.error(f"Error removing hedge tracking: {e}")
@@ -952,32 +871,8 @@ class CorrelationManager:
     def _cleanup_closed_hedge_tracking(self, group_id: str):
         """ลบข้อมูล tracking ของไม้ที่ปิดแล้ว"""
         try:
-            if group_id not in self.group_hedge_tracking:
-                return
-            
-            # ตรวจสอบไม้ที่ปิดแล้ว
-            closed_symbols = []
-            # สร้าง copy ของ dictionary keys เพื่อป้องกัน "dictionary changed size during iteration"
-            original_symbols = list(self.group_hedge_tracking[group_id].keys())
-            
-            for original_symbol in original_symbols:
-                if original_symbol not in self.group_hedge_tracking[group_id]:
-                    continue  # ถ้า symbol ถูกลบไปแล้วระหว่างการ iterate
-                    
-                recovery_info = self.group_hedge_tracking[group_id][original_symbol]
-                all_closed = True
-                for recovery_symbol, info in recovery_info.items():
-                    if self._is_recovery_position_active(info.get('recovery_order_id')):
-                        all_closed = False
-                        break
-                
-                if all_closed:
-                    closed_symbols.append(original_symbol)
-            
-            # ลบข้อมูลของไม้ที่ปิดแล้ว
-            for symbol in closed_symbols:
-                self._remove_hedge_tracking(group_id, symbol)
-                # self.logger.debug(f"🧹 Cleaned up closed hedge tracking: {group_id} - {symbol}")
+            # ใช้ Professional Hedge Tracker - sync จะจัดการ cleanup อัตโนมัติ
+            self.hedge_tracker.sync_with_mt5()
             
         except Exception as e:
             self.logger.error(f"Error cleaning up closed hedge tracking: {e}")
@@ -985,9 +880,20 @@ class CorrelationManager:
     def reset_group_hedge_tracking(self, group_id: str):
         """Reset ข้อมูล tracking ของ Group เมื่อปิด Group"""
         try:
-            if group_id in self.group_hedge_tracking:
-                del self.group_hedge_tracking[group_id]
-                self.logger.info(f"🔄 Reset hedge tracking for group: {group_id}")
+            # ใช้ Professional Hedge Tracker
+            all_positions = self.hedge_tracker.get_all_positions()
+            positions_to_reset = []
+            
+            for position_key, position_info in all_positions.items():
+                if position_info.get('group_id') == group_id:
+                    positions_to_reset.append(position_key)
+            
+            for position_key in positions_to_reset:
+                group_id_part, symbol = position_key.split(':', 1)
+                self.hedge_tracker.reset_position(group_id_part, symbol)
+            
+            if positions_to_reset:
+                self.logger.info(f"🔄 Reset {len(positions_to_reset)} hedge tracking positions for group: {group_id}")
             
         except Exception as e:
             self.logger.error(f"Error resetting group hedge tracking: {e}")
@@ -995,22 +901,20 @@ class CorrelationManager:
     def get_group_hedge_status(self, group_id: str) -> Dict:
         """ดึงสถานะการแก้ไม้ของ Group"""
         try:
-            if group_id not in self.group_hedge_tracking:
-                return {}
-            
+            # ใช้ Professional Hedge Tracker
+            all_positions = self.hedge_tracker.get_all_positions()
             status = {}
-            for original_symbol, recovery_info in self.group_hedge_tracking[group_id].items():
-                active_recoveries = []
-                for recovery_symbol, info in recovery_info.items():
-                    if self._is_recovery_position_active(info.get('recovery_order_id')):
-                        active_recoveries.append({
-                            'recovery_symbol': recovery_symbol,
-                            'recovery_order_id': info.get('recovery_order_id'),
-                            'created_at': info.get('created_at')
-                        })
-                
-                if active_recoveries:
-                    status[original_symbol] = active_recoveries
+            
+            for position_key, position_info in all_positions.items():
+                if position_info.get('group_id') == group_id and position_info.get('status') in ['HEDGING', 'ACTIVE']:
+                    symbol = position_info.get('symbol')
+                    if symbol:
+                        status[symbol] = {
+                            'status': position_info.get('status'),
+                            'hedge_symbol': position_info.get('hedge_symbol'),
+                            'order_id': position_info.get('order_id'),
+                            'activated_at': position_info.get('activated_at')
+                        }
             
             return status
             
@@ -1211,7 +1115,11 @@ class CorrelationManager:
         """บันทึกว่าตำแหน่งนี้แก้ไม้แล้ว - ใช้ระบบ tracking ใหม่"""
         try:
             # ระบบเก่าถูกลบออกแล้ว ใช้ระบบ tracking ใหม่แทน
-            self.logger.debug(f"📝 Position marking handled by new tracking system: {position.get('symbol')}")
+            # การ marking จะทำใน _execute_correlation_position แล้ว
+            symbol = position.get('symbol', '')
+            if group_id and symbol:
+                status = self.hedge_tracker.get_position_status(group_id, symbol)
+                self.logger.debug(f"📝 Position {group_id}:{symbol} status: {status}")
             
         except Exception as e:
             self.logger.error(f"Error marking position as hedged: {e}")
@@ -1941,6 +1849,12 @@ class CorrelationManager:
         try:
             symbol = correlation_candidate['symbol']
             correlation = correlation_candidate['correlation']
+            original_symbol = original_position.get('symbol', '')
+            
+            # 🔒 STEP 1: Lock position immediately to prevent duplicates
+            if not self.hedge_tracker.lock_position(group_id, original_symbol):
+                self.logger.warning(f"🚫 Position {group_id}:{original_symbol} already being hedged - skipping")
+                return False
             
             # กำหนดทิศทางที่ถูกต้อง (ใช้ทิศทางเดียวกันกับคู่เดิม)
             original_direction = original_position.get('type', 'SELL')
@@ -1956,7 +1870,6 @@ class CorrelationManager:
             
             # คำนวณ lot size ตาม balance-based sizing
             original_lot = original_position.get('lot_size', original_position.get('volume', 0.1))
-            original_symbol = original_position.get('symbol', '')
             
             correlation_lot_size = self._calculate_hedge_lot_size(
                 original_lot=original_lot,
@@ -1970,21 +1883,29 @@ class CorrelationManager:
             order_result = self._send_correlation_order(symbol, correlation_lot_size, group_id, original_position)
             
             if order_result and order_result.get('success'):
+                # ✅ STEP 2: Activate position after successful order
+                order_id = order_result.get('order_id')
+                if not self.hedge_tracker.activate_position(group_id, original_symbol, order_id, symbol):
+                    self.logger.error(f"❌ Failed to activate position {group_id}:{original_symbol}")
+                    # Reset position if activation failed
+                    self.hedge_tracker.reset_position(group_id, original_symbol)
+                    return False
+                
                 # ดึงราคาปัจจุบันเป็น entry price
                 entry_price = self.broker.get_current_price(symbol)
                 if not entry_price:
                     entry_price = 0.0
                 
-                # Store correlation position
+                # Store correlation position (legacy support)
                 correlation_position = {
                     'symbol': symbol,
                     'direction': direction,
                     'lot_size': correlation_lot_size,
                     'entry_price': entry_price,
-                    'order_id': order_result.get('order_id'),  # เพิ่ม order_id
+                    'order_id': order_id,
                     'correlation': correlation,
                     'correlation_ratio': 1.0,  # ใช้ lot size เดียวกัน
-                    'original_pair': original_position['symbol'],
+                    'original_pair': original_symbol,
                     'group_id': group_id,
                     'opened_at': datetime.now(),
                     'status': 'active'
@@ -1993,33 +1914,27 @@ class CorrelationManager:
                 recovery_id = f"recovery_{group_id}_{symbol}_{int(datetime.now().timestamp())}"
                 self.recovery_positions[recovery_id] = correlation_position
                 
-                # เก็บใน recovery_positions_by_group
+                # เก็บใน recovery_positions_by_group (legacy support)
                 if group_id not in self.recovery_positions_by_group:
                     self.recovery_positions_by_group[group_id] = {}
                 self.recovery_positions_by_group[group_id][recovery_id] = correlation_position
                 self._update_recovery_data()
                 
                 # บันทึกข้อมูลการแก้ไม้
-                self._log_hedging_action(original_position, correlation_position, correlation_candidate)
-                
-                # บันทึกในระบบ tracking ใหม่
-                self._add_hedge_tracking(
-                    group_id=group_id,
-                    original_symbol=original_position['symbol'],
-                    recovery_symbol=symbol,
-                    recovery_order_id=order_result.get('order_id')
-                )
-                
-                # บันทึกไม้ที่แก้ล่าสุด - ป้องกันการแก้ไม้ซ้ำ
-                self.last_hedged_positions[group_id] = original_position['symbol']
+                self._log_hedging_action(original_position, correlation_position, correlation_candidate, group_id)
                 
                 self.logger.info(f"✅ Correlation recovery position opened: {symbol}")
                 return True
             else:
+                # ❌ STEP 3: Reset position if order failed
+                self.hedge_tracker.reset_position(group_id, original_symbol)
                 self.logger.error(f"❌ Failed to open correlation recovery position: {symbol}")
                 return False
                 
         except Exception as e:
+            # ❌ STEP 4: Reset position on any error
+            original_symbol = original_position.get('symbol', '')
+            self.hedge_tracker.reset_position(group_id, original_symbol)
             self.logger.error(f"Error executing correlation position: {e}")
             return False
     
@@ -2153,6 +2068,9 @@ class CorrelationManager:
     def check_recovery_positions(self):
         """ตรวจสอบ recovery positions - เฉพาะกลุ่มที่ยังเปิดอยู่"""
         try:
+            # 🔄 STEP 1: Sync hedge tracker with MT5
+            self.hedge_tracker.sync_with_mt5()
+            
             # ตรวจสอบว่ามี recovery positions หรือไม่
             if not self.recovery_positions:
                 return
@@ -2198,6 +2116,15 @@ class CorrelationManager:
             # แสดง log เฉพาะเมื่อมี recovery positions และมีการเปลี่ยนแปลง
             if active_recovery_count > 0:
                 self.logger.debug(f"📊 Active recovery positions: {active_recovery_count}")
+            
+            # 🧹 STEP 2: Clean up stale positions (every 10th call)
+            if hasattr(self, '_cleanup_counter'):
+                self._cleanup_counter += 1
+            else:
+                self._cleanup_counter = 1
+            
+            if self._cleanup_counter % 10 == 0:
+                self.hedge_tracker.cleanup_stale_positions(max_age_hours=24)
                         
         except Exception as e:
             self.logger.error(f"Error checking recovery positions: {e}")
@@ -2426,6 +2353,9 @@ class CorrelationManager:
                 
             # แสดงสรุปสถานะ recovery positions หลังจากล้างข้อมูล
             self.log_recovery_positions_summary()
+            
+            # Log hedge tracker status
+            self.hedge_tracker.log_status_summary()
             
         except Exception as e:
             self.logger.error(f"Error clearing hedged data for group {group_id}: {e}")
