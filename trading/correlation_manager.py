@@ -173,6 +173,15 @@ class CorrelationManager:
         # Log startup completion
         self.logger.info("🚀 Individual Order Tracker initialized")
         self.order_tracker.log_status_summary()
+        
+        # Auto-register existing orders on startup
+        self.logger.info("🔧 Auto-registering existing MT5 positions...")
+        try:
+            self.register_existing_orders()
+        except Exception as e:
+            self.logger.error(f"❌ Error in auto-registration: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
     
     def _initialize_tracker_from_mt5(self):
         """Initialize tracker with existing positions from MT5"""
@@ -1688,15 +1697,11 @@ class CorrelationManager:
             correlation = correlation_candidate['correlation']
             original_symbol = original_position.get('symbol', '')
             
-            self.logger.info(f"🔍 EXECUTING CORRELATION: {original_symbol} -> {symbol} (correlation: {correlation:.2f})")
-            
             # 🔒 STEP 1: Check if original position is already hedged
             original_ticket = str(original_position.get('ticket', ''))
             if self.order_tracker.is_order_hedged(original_ticket, original_symbol):
                 self.logger.warning(f"🚫 Position {original_ticket}_{original_symbol} already hedged - skipping")
                 return False
-            
-            self.logger.info(f"✅ Position {original_ticket}_{original_symbol} not hedged - proceeding")
             
             # กำหนดทิศทางที่ถูกต้อง (ใช้ทิศทางเดียวกันกับคู่เดิม)
             original_direction = original_position.get('type', 'SELL')
@@ -1722,15 +1727,14 @@ class CorrelationManager:
             )
             
             # Send correlation order
-            self.logger.info(f"📤 Sending recovery order: {symbol} {correlation_lot_size} lot, direction: {direction}")
             order_result = self._send_correlation_order(symbol, correlation_lot_size, group_id, original_position)
-            self.logger.info(f"📤 Order result: {order_result}")
             
             if order_result and order_result.get('success'):
                 # ✅ STEP 2: Register recovery order in individual tracker
                 recovery_ticket = str(order_result.get('order_id', ''))
                 if recovery_ticket:
                     self._add_hedge_tracking(original_ticket, original_symbol, recovery_ticket, symbol)
+                    self.logger.info(f"✅ Recovery order executed: {recovery_ticket}_{symbol} for {original_ticket}_{original_symbol}")
                 else:
                     self.logger.error(f"❌ No order ID returned for recovery order")
                     return False
@@ -1764,17 +1768,13 @@ class CorrelationManager:
                 # บันทึกข้อมูลการแก้ไม้
                 self._log_hedging_action(original_position, correlation_position, correlation_candidate, group_id)
                 
-                self.logger.debug(f"✅ Correlation recovery position opened: {symbol}")
                 return True
             else:
-                # ❌ STEP 3: Order failed - individual tracker will handle cleanup on sync
-                self.logger.debug(f"❌ Failed to open correlation recovery position: {symbol}")
                 return False
                 
         except Exception as e:
-            # ❌ STEP 4: Error occurred - individual tracker will handle cleanup on sync
             original_symbol = original_position.get('symbol', '')
-            self.logger.debug(f"Error executing correlation position: {e}")
+            self.logger.error(f"Error executing correlation position: {e}")
             return False
     
     def _log_hedging_action(self, original_position: Dict, correlation_position: Dict, correlation_candidate: Dict, group_id: str = None):
@@ -1912,24 +1912,17 @@ class CorrelationManager:
             }
     
     def check_recovery_positions(self):
-        """Debug version with detailed logging - Check individual orders needing recovery"""
+        """Check individual orders needing recovery"""
         try:
-            self.logger.info("🔍 RECOVERY CHECK: Starting recovery position analysis")
-            
-            # Log recovery thresholds for debugging
-            self.log_recovery_thresholds()
-            
             # 🔄 STEP 1: Sync individual order tracker with MT5
             sync_results = self.order_tracker.sync_with_mt5()
             if sync_results.get('orders_removed', 0) > 0:
-                self.logger.info(f"🔄 Synced: {sync_results['orders_removed']} orders removed")
+                self.logger.debug(f"🔄 Synced: {sync_results['orders_removed']} orders removed")
             
             # Get orders needing recovery from individual order tracker
             orders_needing_recovery = self.order_tracker.get_orders_needing_recovery()
-            self.logger.info(f"🔍 Orders needing recovery: {len(orders_needing_recovery)}")
             
             if not orders_needing_recovery:
-                self.logger.warning("⚠️ No orders needing recovery found")
                 return
             
             recovery_candidates = []
@@ -1937,41 +1930,27 @@ class CorrelationManager:
             for order_info in orders_needing_recovery:
                 ticket = order_info.get('ticket')
                 symbol = order_info.get('symbol')
-                order_type = order_info.get('type', 'UNKNOWN')
                 
                 # Get actual position from MT5
                 position = self._get_position_by_ticket(ticket)
                 if not position:
-                    self.logger.warning(f"⚠️ Position {ticket}_{symbol} not found in MT5")
                     continue
-                
-                profit = position.get('profit', 0)
-                self.logger.info(f"🔍 Checking {ticket}_{symbol} ({order_type}): PnL=${profit:.2f}")
                 
                 # Check recovery conditions
                 meets_conditions = self._meets_recovery_conditions(position)
-                self.logger.info(f"🔍 Meets recovery conditions: {meets_conditions}")
                 
                 if meets_conditions:
                     recovery_candidates.append(position)
-                    self.logger.info(f"✅ Added to recovery candidates: {ticket}_{symbol}")
-                else:
-                    self.logger.info(f"❌ Skipped: {ticket}_{symbol} - conditions not met")
-            
-            self.logger.info(f"🔍 Total recovery candidates: {len(recovery_candidates)}")
             
             if recovery_candidates:
                 # Process recovery for best candidate (largest loss)
                 best_candidate = max(recovery_candidates, key=lambda x: abs(x.get('profit', 0)))
-                self.logger.info(f"🎯 Best candidate: {best_candidate.get('symbol')} (${best_candidate.get('profit', 0):.2f})")
                 
                 # Start recovery
                 self._start_individual_recovery(best_candidate)
-            else:
-                self.logger.warning("⚠️ No candidates meet recovery conditions")
                 
         except Exception as e:
-            self.logger.error(f"❌ Error in recovery check: {e}")
+            self.logger.error(f"Error in recovery check: {e}")
     
     def _get_position_by_ticket(self, ticket: str) -> Optional[Dict]:
         """Get position from MT5 by ticket number"""
@@ -1986,12 +1965,9 @@ class CorrelationManager:
             return None
     
     def _meets_recovery_conditions(self, position: Dict) -> bool:
-        """Debug version of recovery conditions check"""
+        """Check if position meets recovery conditions"""
         try:
             profit = position.get('profit', 0)
-            symbol = position.get('symbol', '')
-            
-            self.logger.debug(f"🔍 Checking conditions for {symbol}:")
             
             # Check loss threshold
             loss_threshold = self.recovery_thresholds.get('min_loss_threshold', -0.005)
@@ -1999,22 +1975,16 @@ class CorrelationManager:
             loss_percent = profit / balance
             
             meets_loss = loss_percent <= loss_threshold
-            self.logger.debug(f"   Loss check: {loss_percent:.4f} <= {loss_threshold:.4f} = {meets_loss}")
             
             # Check if position is losing money
             meets_profit_loss = profit < 0
-            self.logger.debug(f"   Profit loss check: {profit:.2f} < 0 = {meets_profit_loss}")
             
             # Check minimum loss amount (e.g., at least $10 loss)
             min_loss_amount = -10.0  # $10 minimum loss
             meets_min_loss = profit <= min_loss_amount
-            self.logger.debug(f"   Min loss amount check: {profit:.2f} <= {min_loss_amount} = {meets_min_loss}")
             
             # All conditions must be met
-            result = meets_loss and meets_profit_loss and meets_min_loss
-            self.logger.debug(f"   Final result: {result}")
-            
-            return result
+            return meets_loss and meets_profit_loss and meets_min_loss
             
         except Exception as e:
             self.logger.error(f"Error checking recovery conditions: {e}")
@@ -2027,26 +1997,27 @@ class CorrelationManager:
             symbol = position.get('symbol', '')
             profit = position.get('profit', 0)
             
-            self.logger.info(f"🚀 STARTING RECOVERY: {ticket}_{symbol} (${profit:.2f})")
+            self.logger.info(f"🚀 Starting recovery: {ticket}_{symbol} (${profit:.2f})")
             
             # Find correlation pairs
             correlation_candidates = self._find_correlation_pairs_for_symbol(symbol)
-            self.logger.info(f"🔍 Found {len(correlation_candidates)} correlation candidates")
             
             if correlation_candidates:
                 best_correlation = correlation_candidates[0]
-                self.logger.info(f"🎯 Best correlation: {best_correlation}")
                 
                 # Execute recovery - need to get proper group_id
                 # For now, use a default group_id since we're doing individual order recovery
                 group_id = f"recovery_{ticket}_{symbol}"
                 success = self._execute_correlation_position(position, best_correlation, group_id)
-                self.logger.info(f"🔄 Recovery result: {success}")
+                if success:
+                    self.logger.info(f"✅ Recovery executed successfully")
+                else:
+                    self.logger.warning(f"❌ Recovery execution failed")
             else:
                 self.logger.warning(f"⚠️ No correlation pairs found for {symbol}")
                 
         except Exception as e:
-            self.logger.error(f"❌ Error starting recovery: {e}")
+            self.logger.error(f"Error starting recovery: {e}")
     
     def _find_correlation_pairs_for_symbol(self, symbol: str) -> List[Dict]:
         """Find correlation pairs for a specific symbol"""
@@ -2105,73 +2076,24 @@ class CorrelationManager:
             self.logger.error(f"Error estimating correlation: {e}")
             return 0.0
     
-    def log_recovery_thresholds(self):
-        """Log current recovery thresholds for debugging"""
-        try:
-            self.logger.info("🔍 RECOVERY THRESHOLDS:")
-            self.logger.info(f"   Min Loss Threshold: {self.recovery_thresholds.get('min_loss_threshold', -0.005)} ({self.recovery_thresholds.get('min_loss_threshold', -0.005) * 100:.1f}%)")
-            self.logger.info(f"   Wait Time: {self.recovery_thresholds.get('wait_time_minutes', 5)} minutes")
-            self.logger.info(f"   Min Correlation: {self.recovery_thresholds.get('min_correlation', 0.5)} ({self.recovery_thresholds.get('min_correlation', 0.5) * 100:.0f}%)")
-            self.logger.info(f"   Max Recovery Time: {self.recovery_thresholds.get('max_recovery_time_hours', 24)} hours")
-            self.logger.info(f"   Base Lot Size: {self.recovery_thresholds.get('base_lot_size', 0.1)}")
-            
-            # Get account balance for context
-            balance = self.broker.get_account_balance() or 10000
-            self.logger.info(f"   Account Balance: ${balance:.2f}")
-            self.logger.info(f"   Min Loss Amount: ${abs(self.recovery_thresholds.get('min_loss_threshold', -0.005) * balance):.2f}")
-            
-        except Exception as e:
-            self.logger.error(f"Error logging recovery thresholds: {e}")
-    
-    def force_recovery_check(self):
-        """Force a recovery check for debugging purposes"""
-        try:
-            self.logger.info("🚨 FORCE RECOVERY CHECK: Manual trigger for debugging")
-            self.check_recovery_positions()
-        except Exception as e:
-            self.logger.error(f"Error in force recovery check: {e}")
-    
-    def fix_missing_orders(self):
-        """Fix missing orders in tracker - register all existing MT5 positions"""
-        try:
-            self.logger.info("🔧 FIXING MISSING ORDERS: Registering all existing MT5 positions")
-            self.register_existing_orders()
-            
-            # Now check recovery
-            self.logger.info("🔍 Checking recovery after fixing orders...")
-            self.check_recovery_positions()
-            
-        except Exception as e:
-            self.logger.error(f"Error fixing missing orders: {e}")
-    
-    def adjust_recovery_thresholds_for_testing(self):
-        """Adjust recovery thresholds to be more lenient for testing"""
-        try:
-            self.logger.info("🔧 ADJUSTING RECOVERY THRESHOLDS FOR TESTING")
-            
-            # Make thresholds more lenient
-            self.recovery_thresholds.update({
-                'min_loss_threshold': -0.001,  # -0.1% instead of -0.5%
-                'wait_time_minutes': 1,        # 1 minute instead of 5
-                'min_correlation': 0.3,        # 30% instead of 50%
-                'max_recovery_time_hours': 48, # 48 hours instead of 24
-                'base_lot_size': 0.01          # Smaller lot size for testing
-            })
-            
-            self.logger.info("✅ Recovery thresholds adjusted for testing:")
-            self.log_recovery_thresholds()
-            
-        except Exception as e:
-            self.logger.error(f"Error adjusting recovery thresholds: {e}")
     
     def register_existing_orders(self):
         """Register all existing MT5 positions as original orders in the tracker"""
         try:
             self.logger.info("🔧 REGISTERING EXISTING ORDERS IN TRACKER")
             
+            # Check broker connection
+            if not self.broker or not self.broker.is_connected():
+                self.logger.error("❌ Broker not connected - cannot register orders")
+                return
+            
             # Get all MT5 positions
             all_positions = self.broker.get_all_positions()
             self.logger.info(f"📊 Found {len(all_positions)} positions in MT5")
+            
+            if not all_positions:
+                self.logger.warning("⚠️ No positions found in MT5")
+                return
             
             registered_count = 0
             skipped_count = 0
