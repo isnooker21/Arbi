@@ -108,7 +108,6 @@ class ProfessionalHedgeTracker:
             }
             
             self.stats['total_locks'] += 1
-            self.logger.info(f"🔒 Position locked: {position_key}")
             return True
     
     def activate_position(self, group_id: str, symbol: str, order_id: str, hedge_symbol: str) -> bool:
@@ -146,8 +145,6 @@ class ProfessionalHedgeTracker:
             })
             
             self.stats['total_activations'] += 1
-            self.logger.info(f"✅ Position activated: {position_key} -> {hedge_symbol} (Order: {order_id})")
-            self.logger.debug(f"🔍 DEBUG: All positions after activation: {self.positions}")
             return True
     
     def reset_position(self, group_id: str, symbol: str) -> bool:
