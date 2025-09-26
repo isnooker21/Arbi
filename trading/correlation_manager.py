@@ -610,7 +610,7 @@ class CorrelationManager:
             return False
     
     def _is_position_hedged_from_mt5(self, group_id: str, original_symbol: str) -> bool:
-        """ตรวจสอบว่าตำแหน่งนี้แก้ไม้แล้วหรือยัง - ดูจาก MT5 โดยตรง"""
+        """ตรวจสอบว่าตำแหน่งนี้แก้ไม้แล้วหรือยัง - ใช้ ticket mapping"""
         try:
             # ดึงข้อมูลจาก MT5 จริงๆ
             all_positions = self.broker.get_all_positions()
@@ -620,21 +620,38 @@ class CorrelationManager:
             if not group_magic:
                 return False
             
-            # ตรวจสอบว่ามี recovery position ที่แก้ไม้ original_symbol หรือไม่
+            # หา ticket ของ original position
+            original_ticket = None
+            for pos in all_positions:
+                if (pos.get('magic', 0) == group_magic and 
+                    pos.get('symbol', '') == original_symbol):
+                    original_ticket = pos.get('ticket')
+                    break
+            
+            if not original_ticket:
+                self.logger.debug(f"❌ {original_symbol} not found in MT5 for {group_id}")
+                return False
+            
+            # ตรวจสอบว่ามี recovery position ที่แก้ไม้ original_ticket หรือไม่
+            self.logger.info(f"🔍 Checking hedge status for {original_symbol} (Ticket: {original_ticket}) in group {group_id} (Magic: {group_magic})")
+            
             for pos in all_positions:
                 magic = pos.get('magic', 0)
                 comment = pos.get('comment', '')
+                symbol = pos.get('symbol', '')
+                ticket = pos.get('ticket')
                 
                 # ตรวจสอบว่าเป็น recovery position ของ group นี้หรือไม่
                 if magic == group_magic and comment.startswith('RECOVERY_'):
+                    self.logger.info(f"🔍 Found recovery position: {symbol} (Ticket: {ticket}, Comment: {comment})")
                     # ตรวจสอบว่า recovery position นี้แก้ไม้ original_symbol หรือไม่
                     if self._is_recovery_suitable_for_symbol(original_symbol, pos.get('symbol', ''), comment):
                         # ตรวจสอบว่า recovery position ยังเปิดอยู่หรือไม่
                         if pos.get('profit') is not None:  # position ยังเปิดอยู่
-                            self.logger.debug(f"✅ {original_symbol} is hedged by {pos.get('symbol')} (Order: {pos.get('ticket')})")
+                            self.logger.info(f"✅ {original_symbol} (Ticket: {original_ticket}) is hedged by {pos.get('symbol')} (Ticket: {pos.get('ticket')})")
                             return True
             
-            self.logger.debug(f"❌ {original_symbol} is NOT hedged")
+            self.logger.info(f"❌ {original_symbol} (Ticket: {original_ticket}) is NOT hedged")
             return False
             
         except Exception as e:
@@ -791,15 +808,15 @@ class CorrelationManager:
                 if len(parts) == 2:
                     original_part = parts[0]  # RECOVERY_G6_EURUSD
                     if original_symbol in original_part:
-                        self.logger.debug(f"✅ Found suitable recovery: {original_symbol} -> {recovery_symbol} (new format)")
+                        self.logger.info(f"✅ Found suitable recovery: {original_symbol} -> {recovery_symbol} (new format)")
                         return True
             else:
                 # รูปแบบเก่า: RECOVERY_G6_EURUSD
                 if original_symbol in comment:
-                    self.logger.debug(f"✅ Found suitable recovery: {original_symbol} -> {recovery_symbol} (old format)")
+                    self.logger.info(f"✅ Found suitable recovery: {original_symbol} -> {recovery_symbol} (old format)")
                     return True
             
-            self.logger.debug(f"❌ No suitable recovery found: {original_symbol} -> {recovery_symbol} (comment: {comment})")
+            self.logger.info(f"❌ No suitable recovery found: {original_symbol} -> {recovery_symbol} (comment: {comment})")
             return False
             
         except Exception as e:
@@ -1744,11 +1761,13 @@ class CorrelationManager:
             )
             
             # Send correlation order
+            self.logger.info(f"🎯 Sending recovery order: {symbol} {direction} {correlation_lot_size} lot for {original_symbol} in {group_id}")
             order_result = self._send_correlation_order(symbol, correlation_lot_size, group_id, original_position)
             
             if order_result and order_result.get('success'):
                 # ✅ STEP 2: Activate position after successful order
                 order_id = order_result.get('order_id')
+                self.logger.info(f"🎯 Tracking recovery position: {symbol} (Ticket: {order_id}) for {original_symbol} in {group_id}")
                 if not self.hedge_tracker.activate_position(group_id, original_symbol, order_id, symbol):
                     self.logger.error(f"❌ Failed to activate position {group_id}:{original_symbol}")
                     # Reset position if activation failed
@@ -1889,6 +1908,7 @@ class CorrelationManager:
                 order_type = 'SELL'  # Default to SELL
             
             # ส่งออเดอร์
+            self.logger.info(f"🎯 Placing recovery order: {symbol} {order_type} {lot_size} lot (Comment: {comment}, Magic: {magic_number})")
             result = self.broker.place_order(
                 symbol=symbol,
                 order_type=order_type,  # ใช้ทิศทางที่ถูกต้อง
@@ -1898,6 +1918,7 @@ class CorrelationManager:
             )
             
             if result and (result.get('retcode') == 10009 or result.get('success')):
+                self.logger.info(f"✅ Recovery order successful: {symbol} (Ticket: {result.get('order_id')})")
                 # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
                 if 'triangle_' in group_id:
                     triangle_part = group_id.split('triangle_')[1].split('_')[0]

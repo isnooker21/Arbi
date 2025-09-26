@@ -611,6 +611,7 @@ class TriangleArbitrageDetector:
                         if hasattr(self, 'correlation_manager') and self.correlation_manager:
                             group_id = f"group_{triangle_name}_{self.group_counters[triangle_name]}"
                             self.correlation_manager.hedge_tracker.lock_position(group_id, order_data['symbol'])
+                            self.logger.info(f"🎯 Tracking arbitrage position: {order_data['symbol']} (Ticket: {result.get('order_id')}) in {group_id}")
                     else:
                         results[result_index] = {
                             'success': False,
@@ -767,6 +768,7 @@ class TriangleArbitrageDetector:
                 # Track ไม้ arbitrage ใน hedge tracker
                 if hasattr(self, 'correlation_manager') and self.correlation_manager:
                     self.correlation_manager.hedge_tracker.lock_position(group_id, symbol)
+                    self.logger.info(f"🎯 Tracking arbitrage position: {symbol} (Ticket: {order.get('order_id')}) in {group_id}")
                 
                 return {
                     'success': True,
@@ -1803,6 +1805,7 @@ class TriangleArbitrageDetector:
                     if hasattr(self, 'correlation_manager') and self.correlation_manager:
                         group_id = f"group_{triangle_name}_{self.group_counters[triangle_name]}"
                         self.correlation_manager.hedge_tracker.lock_position(group_id, pair)
+                        self.logger.info(f"🎯 Tracking arbitrage position: {pair} (Ticket: {order.get('order_id')}) in {group_id}")
                 else:
                     # If any order fails, cancel all previous orders
                     self.logger.error(f"Failed to place order for {pair}, cancelling triangle")
@@ -1852,6 +1855,7 @@ class TriangleArbitrageDetector:
                     if hasattr(self, 'correlation_manager') and self.correlation_manager:
                         group_id = f"group_{triangle_name}_{self.group_counters[triangle_name]}"
                         self.correlation_manager.hedge_tracker.lock_position(group_id, pair)
+                        self.logger.info(f"🎯 Tracking arbitrage position: {pair} (Ticket: {order.get('order_id')}) in {group_id}")
                 else:
                     # If any order fails, cancel all previous orders
                     self.logger.error(f"Failed to place order for {pair}, cancelling triangle")
