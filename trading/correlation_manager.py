@@ -133,6 +133,9 @@ class CorrelationManager:
         
         # Active Recovery Engine parameters
         self.recovery_mode = 'active'  # active, passive, disabled
+        
+        # Last hedged positions per group - ป้องกันการแก้ไม้ซ้ำ
+        self.last_hedged_positions = {}
         self.hedge_ratio_optimization = True
         self.portfolio_rebalancing = True
         self.multi_timeframe_analysis = True
@@ -357,7 +360,7 @@ class CorrelationManager:
                 risk_per_lot = self._calculate_risk_per_lot(pos)
                 price_distance = self._calculate_price_distance(pos)
                 
-                # ผ่านเงื่อนไข Distance ≥ 10 pips เท่านั้น
+                # ผ่านเงื่อนไข Distance ≥ 10 pips
                 if price_distance >= 10:
                     suitable_pairs.append({
                         'pair': pos,
@@ -375,6 +378,15 @@ class CorrelationManager:
             # เรียงตามคะแนน (สูงสุดก่อน) - คู่ที่ขาดทุนมาก + distance มาก
             suitable_pairs.sort(key=lambda x: x['score'], reverse=True)
             
+            # ป้องกันการแก้ไม้ซ้ำ - หลีกเลี่ยงไม้ที่แก้ล่าสุด
+            if group_id in self.last_hedged_positions:
+                last_hedged = self.last_hedged_positions[group_id]
+                # กรองไม้ที่แก้ล่าสุดออก
+                suitable_pairs = [p for p in suitable_pairs if p['symbol'] != last_hedged]
+                if not suitable_pairs:
+                    self.logger.warning(f"⚠️ All suitable pairs were recently hedged for {group_id}")
+                    return None
+            
             best_pair = suitable_pairs[0]['pair']
             best_info = suitable_pairs[0]
             
@@ -383,6 +395,13 @@ class CorrelationManager:
             self.logger.info(f"   Suitable pairs: {len(suitable_pairs)}")
             self.logger.info(f"   Selected: {best_info['symbol']} (Score: {best_info['score']:.2f})")
             self.logger.info(f"   PnL: ${best_info['pnl']:.2f}, Risk: {best_info['risk_per_lot']:.2%}, Distance: {best_info['price_distance']:.1f} pips")
+            
+            # แสดงรายการไม้ที่เหมาะสมทั้งหมด
+            if suitable_pairs:
+                self.logger.info(f"   Available pairs for recovery:")
+                for i, pair in enumerate(suitable_pairs[:5]):  # แสดงแค่ 5 อันแรก
+                    status = "✅ HEDGED" if self._is_position_hedged(pair['pair'], group_id) else "❌ NOT HEDGED"
+                    self.logger.info(f"     {i+1}. {pair['symbol']} - PnL: ${pair['pnl']:.2f}, Score: {pair['score']:.2f} - {status}")
             
             return best_pair
             
@@ -771,8 +790,10 @@ class CorrelationManager:
                     if self._is_recovery_suitable_for_symbol(symbol, pos.get('symbol', ''), comment):
                         # ตรวจสอบว่า recovery position ยังเปิดอยู่หรือไม่
                         if pos.get('profit') is not None:  # position ยังเปิดอยู่
+                            self.logger.debug(f"✅ {symbol} is hedged by {pos.get('symbol')} (Order: {pos.get('order_id')})")
                             return True
             
+            self.logger.debug(f"❌ {symbol} is NOT hedged")
             return False
             
         except Exception as e:
@@ -998,25 +1019,27 @@ class CorrelationManager:
             return {}
     
     def _is_recovery_suitable_for_symbol(self, original_symbol: str, recovery_symbol: str, comment: str) -> bool:
-        """ตรวจสอบว่า recovery position นี้เหมาะสมสำหรับ original symbol หรือไม่ - ใช้ระบบ tracking ใหม่"""
+        """ตรวจสอบว่า recovery position นี้เหมาะสมสำหรับ original symbol หรือไม่ - ใช้ comment pattern"""
         try:
-            # ใช้ระบบ tracking ใหม่แทน comment pattern
-            # ตรวจสอบจาก group_hedge_tracking
-            for group_id, group_data in self.group_hedge_tracking.items():
-                if original_symbol in group_data:
-                    for tracked_recovery_symbol, info in group_data[original_symbol].items():
-                        if tracked_recovery_symbol == recovery_symbol:
-                            # ตรวจสอบว่า recovery position ยังเปิดอยู่หรือไม่
-                            if self._is_recovery_position_active(info.get('recovery_order_id')):
-                                self.logger.debug(f"✅ Found suitable recovery: {original_symbol} -> {recovery_symbol} (from tracking)")
-                                return True
+            # ตรวจสอบ comment pattern: RECOVERY_G{group}_{original}_TO_{recovery}
+            # หรือ RECOVERY_G{group}_{original} (รูปแบบเก่า)
             
-            # ถ้าไม่เจอใน tracking ให้ตรวจสอบ comment pattern เป็น fallback
-            if original_symbol in comment:
-                self.logger.debug(f"✅ Found suitable recovery: {original_symbol} -> {recovery_symbol} (from comment fallback)")
-                return True
+            # แยก comment เพื่อหา original symbol
+            if '_TO_' in comment:
+                # รูปแบบใหม่: RECOVERY_G6_EURUSD_TO_GBPUSD
+                parts = comment.split('_TO_')
+                if len(parts) == 2:
+                    original_part = parts[0]  # RECOVERY_G6_EURUSD
+                    if original_symbol in original_part:
+                        self.logger.debug(f"✅ Found suitable recovery: {original_symbol} -> {recovery_symbol} (new format)")
+                        return True
+            else:
+                # รูปแบบเก่า: RECOVERY_G6_EURUSD
+                if original_symbol in comment:
+                    self.logger.debug(f"✅ Found suitable recovery: {original_symbol} -> {recovery_symbol} (old format)")
+                    return True
             
-            self.logger.debug(f"❌ No suitable recovery found: {original_symbol} -> {recovery_symbol}")
+            self.logger.debug(f"❌ No suitable recovery found: {original_symbol} -> {recovery_symbol} (comment: {comment})")
             return False
             
         except Exception as e:
@@ -1986,6 +2009,9 @@ class CorrelationManager:
                     recovery_symbol=symbol,
                     recovery_order_id=order_result.get('order_id')
                 )
+                
+                # บันทึกไม้ที่แก้ล่าสุด - ป้องกันการแก้ไม้ซ้ำ
+                self.last_hedged_positions[group_id] = original_position['symbol']
                 
                 self.logger.info(f"✅ Correlation recovery position opened: {symbol}")
                 return True

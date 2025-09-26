@@ -531,7 +531,8 @@ class BrokerAPI:
                 
                 # Simple validation - just check if connected
                 if not self._connected:
-                    self.logger.error(f"❌ Not connected to MT5")
+                    self.logger.error(f"❌ Not connected to MT5 - cannot send real orders")
+                    self.logger.error(f"❌ Please check MT5 connection and credentials")
                     return None
                 
                 # Send order
@@ -542,6 +543,8 @@ class BrokerAPI:
                 if result is None:
                     last_error = mt5.last_error()
                     self.logger.error(f"❌ ส่ง Order ไม่สำเร็จ: {last_error}")
+                    self.logger.error(f"❌ Error Code: {last_error[0] if last_error else 'Unknown'}")
+                    self.logger.error(f"❌ Error Description: {last_error[1] if last_error else 'Unknown'}")
                     return None
                 
                 # Log detailed result
@@ -564,6 +567,7 @@ class BrokerAPI:
                 else:
                     error_desc = self._get_error_message(result.retcode)
                     self.logger.error(f"❌ ไม่สำเร็จ: RetCode {result.retcode} - {error_desc}")
+                    self.logger.error(f"❌ Full result: {result}")
                     return None
             
             return None
