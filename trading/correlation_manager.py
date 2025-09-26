@@ -1993,6 +1993,16 @@ class CorrelationManager:
         """Check if position meets recovery conditions"""
         try:
             profit = position.get('profit', 0)
+            ticket = str(position.get('ticket', ''))
+            symbol = position.get('symbol', '')
+            
+            # Check if position already has recovery orders
+            order_info = self.order_tracker.get_order_info(ticket, symbol)
+            if order_info:
+                recovery_orders = order_info.get('recovery_orders', [])
+                if recovery_orders:
+                    # Position already has recovery orders - don't create new ones
+                    return False
             
             # Check loss threshold
             loss_threshold = self.recovery_thresholds.get('min_loss_threshold', -0.005)
