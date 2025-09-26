@@ -2027,6 +2027,11 @@ class CorrelationManager:
             if sync_results.get('positions_reset', 0) > 0:
                 self.logger.debug(f"🔄 Synced: {sync_results['positions_reset']} positions reset")
             
+            # 🔄 STEP 2: Sync arbitrage orders with MT5
+            arbitrage_sync_results = self.hedge_tracker.sync_arbitrage_orders_with_mt5()
+            if arbitrage_sync_results.get('arbitrage_orders_removed', 0) > 0:
+                self.logger.debug(f"🔄 Arbitrage sync: {arbitrage_sync_results['arbitrage_orders_removed']} orders removed")
+            
             # ตรวจสอบว่ามี recovery positions หรือไม่
             if not self.recovery_positions:
                 return

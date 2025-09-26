@@ -52,6 +52,10 @@ class ProfessionalHedgeTracker:
         # Key: f"{group_id}:{symbol}", Value: PositionState
         self.positions: Dict[str, Dict] = {}
         
+        # Arbitrage order tracking
+        # Key: f"{group_id}:{symbol}", Value: order_info
+        self.arbitrage_orders: Dict[str, Dict] = {}
+        
         # Thread safety
         self._lock = threading.RLock()
         
@@ -61,6 +65,8 @@ class ProfessionalHedgeTracker:
             'total_activations': 0,
             'total_resets': 0,
             'duplicate_prevented': 0,
+            'arbitrage_orders_registered': 0,
+            'arbitrage_orders_removed': 0,
             'sync_operations': 0,
             'last_sync': None
         }
@@ -353,7 +359,8 @@ class ProfessionalHedgeTracker:
                 'available_positions': len(self.get_positions_by_status(PositionStatus.AVAILABLE)),
                 'hedging_positions': len(self.get_positions_by_status(PositionStatus.HEDGING)),
                 'active_positions': len(self.get_positions_by_status(PositionStatus.ACTIVE)),
-                'error_positions': len(self.get_positions_by_status(PositionStatus.ERROR))
+                'error_positions': len(self.get_positions_by_status(PositionStatus.ERROR)),
+                'total_arbitrage_orders': len(self.arbitrage_orders)
             })
             return stats
     
@@ -367,6 +374,7 @@ class ProfessionalHedgeTracker:
             self.logger.info(f"   Active Hedges: {stats['active_positions']}")
             self.logger.info(f"   Currently Hedging: {stats['hedging_positions']}")
             self.logger.info(f"   Error States: {stats['error_positions']}")
+            self.logger.info(f"   Arbitrage Orders: {stats['total_arbitrage_orders']}")
             self.logger.info(f"   Duplicates Prevented: {stats['duplicate_prevented']}")
             self.logger.info(f"   Last Sync: {stats['last_sync']}")
             
@@ -416,7 +424,182 @@ class ProfessionalHedgeTracker:
             self.positions.clear()
             self.logger.warning(f"🚨 FORCE RESET: Cleared {position_count} tracked positions")
     
+    def register_arbitrage_order(self, group_id: str, symbol: str, order_id: str) -> bool:
+        """
+        Register an arbitrage order to prevent duplicates.
+        
+        Args:
+            group_id: Trading group identifier
+            symbol: Currency pair symbol
+            order_id: MT5 order ID
+            
+        Returns:
+            bool: True if order was successfully registered
+        """
+        with self._lock:
+            order_key = f"{group_id}:{symbol}"
+            
+            # Check if arbitrage order already exists
+            if order_key in self.arbitrage_orders:
+                self.logger.warning(f"🚫 Arbitrage order for {order_key} already exists - preventing duplicate")
+                return False
+            
+            # Register the arbitrage order
+            self.arbitrage_orders[order_key] = {
+                'order_id': order_id,
+                'group_id': group_id,
+                'symbol': symbol,
+                'registered_at': datetime.now(),
+                'last_sync': datetime.now()
+            }
+            
+            self.stats['arbitrage_orders_registered'] += 1
+            self.logger.info(f"📝 Arbitrage order registered: {order_key} (Order: {order_id})")
+            return True
+    
+    def is_arbitrage_order_exists(self, group_id: str, symbol: str) -> bool:
+        """
+        Check if arbitrage order already exists for this symbol.
+        
+        Args:
+            group_id: Trading group identifier
+            symbol: Currency pair symbol
+            
+        Returns:
+            bool: True if arbitrage order exists
+        """
+        with self._lock:
+            order_key = f"{group_id}:{symbol}"
+            return order_key in self.arbitrage_orders
+    
+    def remove_arbitrage_order(self, group_id: str, symbol: str) -> bool:
+        """
+        Remove arbitrage order when closed.
+        
+        Args:
+            group_id: Trading group identifier
+            symbol: Currency pair symbol
+            
+        Returns:
+            bool: True if order was successfully removed
+        """
+        with self._lock:
+            order_key = f"{group_id}:{symbol}"
+            
+            if order_key not in self.arbitrage_orders:
+                self.logger.debug(f"Arbitrage order {order_key} not found in tracker")
+                return True
+            
+            # Get order info before removal
+            order_info = self.arbitrage_orders[order_key]
+            order_id = order_info.get('order_id', 'Unknown')
+            
+            # Remove the arbitrage order
+            del self.arbitrage_orders[order_key]
+            
+            self.stats['arbitrage_orders_removed'] += 1
+            self.logger.debug(f"🗑️ Arbitrage order removed: {order_key} (Order: {order_id})")
+            return True
+    
+    def get_arbitrage_order_info(self, group_id: str, symbol: str) -> Optional[Dict]:
+        """
+        Get arbitrage order information.
+        
+        Args:
+            group_id: Trading group identifier
+            symbol: Currency pair symbol
+            
+        Returns:
+            Dict: Arbitrage order information or None if not found
+        """
+        with self._lock:
+            order_key = f"{group_id}:{symbol}"
+            return self.arbitrage_orders.get(order_key)
+    
+    def get_all_arbitrage_orders(self) -> Dict[str, Dict]:
+        """
+        Get all tracked arbitrage orders.
+        
+        Returns:
+            Dict: All tracked arbitrage orders
+        """
+        with self._lock:
+            return self.arbitrage_orders.copy()
+    
+    def sync_arbitrage_orders_with_mt5(self) -> Dict:
+        """
+        Sync arbitrage orders with MT5 and remove closed ones.
+        
+        Returns:
+            Dict: Sync operation results
+        """
+        with self._lock:
+            sync_results = {
+                'arbitrage_orders_checked': 0,
+                'arbitrage_orders_removed': 0,
+                'errors': 0,
+                'sync_time': datetime.now()
+            }
+            
+            try:
+                # Get all positions from MT5
+                all_positions = self.broker.get_all_positions()
+                if not all_positions:
+                    # If no positions in MT5, remove all tracked arbitrage orders
+                    if self.arbitrage_orders:
+                        self.logger.warning("⚠️ No positions returned from MT5 - removing all tracked arbitrage orders")
+                        for order_key in list(self.arbitrage_orders.keys()):
+                            group_id, symbol = order_key.split(':', 1)
+                            self.remove_arbitrage_order(group_id, symbol)
+                            sync_results['arbitrage_orders_removed'] += 1
+                            sync_results['arbitrage_orders_checked'] += 1
+                    return sync_results
+                
+                # Create set of active arbitrage order IDs for quick lookup
+                active_arbitrage_orders: Set[str] = set()
+                for pos in all_positions:
+                    order_id = str(pos.get('ticket', ''))
+                    magic = pos.get('magic', 0)
+                    comment = pos.get('comment', '')
+                    
+                    # If it's not a recovery order and has arbitrage magic number, it's an arbitrage order
+                    if (234001 <= magic <= 234006) and not comment.startswith('RECOVERY_'):
+                        if order_id:
+                            active_arbitrage_orders.add(order_id)
+                
+                # Check each tracked arbitrage order
+                orders_to_remove = []
+                for order_key, order_info in self.arbitrage_orders.items():
+                    sync_results['arbitrage_orders_checked'] += 1
+                    
+                    order_id = order_info.get('order_id')
+                    if not order_id:
+                        continue
+                    
+                    # Check if arbitrage order is still active in MT5
+                    if order_id not in active_arbitrage_orders:
+                        # Order is closed - mark for removal
+                        orders_to_remove.append(order_key)
+                        sync_results['arbitrage_orders_removed'] += 1
+                        self.logger.debug(f"🔄 Arbitrage order {order_key} (Order: {order_id}) not found in MT5 - will remove")
+                    else:
+                        self.logger.debug(f"✅ Arbitrage order {order_key} (Order: {order_id}) still active in MT5")
+                
+                # Remove closed arbitrage orders
+                for order_key in orders_to_remove:
+                    group_id, symbol = order_key.split(':', 1)
+                    self.remove_arbitrage_order(group_id, symbol)
+                
+                if sync_results['arbitrage_orders_removed'] > 0:
+                    self.logger.info(f"🔄 Arbitrage sync completed: {sync_results['arbitrage_orders_checked']} checked, {sync_results['arbitrage_orders_removed']} removed")
+                
+            except Exception as e:
+                sync_results['errors'] += 1
+                self.logger.error(f"❌ Error during arbitrage order sync: {e}")
+            
+            return sync_results
+    
     def __str__(self) -> str:
         """String representation of the tracker."""
         stats = self.get_statistics()
-        return f"ProfessionalHedgeTracker(positions={stats['total_tracked_positions']}, active={stats['active_positions']}, duplicates_prevented={stats['duplicate_prevented']})"
+        return f"ProfessionalHedgeTracker(positions={stats['total_tracked_positions']}, active={stats['active_positions']}, arbitrage_orders={len(self.arbitrage_orders)}, duplicates_prevented={stats['duplicate_prevented']})"

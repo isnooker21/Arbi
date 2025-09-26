@@ -284,6 +284,12 @@ class TriangleArbitrageDetector:
                 loop_count += 1
                 # self.logger.info(f"🔄 Trading loop #{loop_count} - Checking system status...")  # DISABLED - ไม่จำเป็น
                 
+                # Sync arbitrage orders with MT5
+                if hasattr(self, 'correlation_manager') and self.correlation_manager:
+                    sync_results = self.correlation_manager.hedge_tracker.sync_arbitrage_orders_with_mt5()
+                    if sync_results.get('arbitrage_orders_removed', 0) > 0:
+                        self.logger.debug(f"🔄 Arbitrage sync: {sync_results['arbitrage_orders_removed']} orders removed")
+                
                 # เช็คจาก MT5 จริงๆ ไม่ใช่จาก memory
                 all_positions = self.broker.get_all_positions()
                 active_magic_numbers = set()
@@ -579,6 +585,21 @@ class TriangleArbitrageDetector:
                 try:
                     self.logger.info(f"🔍 Thread {result_index}: Starting order for {order_data['symbol']}")
                     
+                    # Check if arbitrage order already exists for this symbol in this group
+                    if hasattr(self, 'correlation_manager') and self.correlation_manager:
+                        group_id = f"group_{triangle_name}_{self.group_counters[triangle_name]}"
+                        if self.correlation_manager.hedge_tracker.is_arbitrage_order_exists(group_id, order_data['symbol']):
+                            self.logger.warning(f"🚫 Arbitrage order for {order_data['symbol']} in {group_id} already exists - skipping")
+                            results[result_index] = {
+                                'success': False,
+                                'symbol': order_data['symbol'],
+                                'direction': order_data['direction'],
+                                'order_id': None,
+                                'index': result_index,
+                                'error': 'Duplicate order prevented'
+                            }
+                            return
+                    
                     # สร้าง comment ตามหมายเลขสามเหลี่ยม (1-6)
                     triangle_number = triangle_name.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
                     comment = f"G{triangle_number}_{order_data['symbol']}"
@@ -607,10 +628,16 @@ class TriangleArbitrageDetector:
                             'index': result_index
                         }
                         
-                        # Track ไม้ arbitrage ใน hedge tracker
+                        # Register arbitrage order in hedge tracker
                         if hasattr(self, 'correlation_manager') and self.correlation_manager:
                             group_id = f"group_{triangle_name}_{self.group_counters[triangle_name]}"
-                            self.correlation_manager.hedge_tracker.lock_position(group_id, order_data['symbol'])
+                            order_id = result.get('order_id')
+                            if order_id:
+                                success = self.correlation_manager.hedge_tracker.register_arbitrage_order(group_id, order_data['symbol'], str(order_id))
+                                if success:
+                                    self.logger.info(f"✅ Arbitrage order registered: {group_id}:{order_data['symbol']} (Order: {order_id})")
+                                else:
+                                    self.logger.warning(f"⚠️ Failed to register arbitrage order: {group_id}:{order_data['symbol']}")
                     else:
                         results[result_index] = {
                             'success': False,
