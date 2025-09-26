@@ -14,6 +14,10 @@ from datetime import datetime
 import json
 from .theme import TradingTheme
 from .group_dashboard import GroupDashboard
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from main import TradingSystem
 
 class MainWindow:
     def __init__(self, auto_setup=True):
@@ -28,6 +32,10 @@ class MainWindow:
         self.connection_status = "disconnected"
         self.auto_setup = auto_setup
         
+        # Initialize trading system
+        if auto_setup:
+            self._initialize_trading_system()
+        
         # Apply modern theme
         TradingTheme.apply_theme(self.root)
         
@@ -38,6 +46,16 @@ class MainWindow:
         self.setup_logging()
         
         # No auto-connect - user will click Connect button manually
+    
+    def _initialize_trading_system(self):
+        """Initialize trading system"""
+        try:
+            self.log_message("🔧 Initializing trading system...")
+            self.trading_system = TradingSystem()
+            self.log_message("✅ Trading system initialized successfully")
+        except Exception as e:
+            self.log_message(f"❌ Failed to initialize trading system: {e}")
+            self.trading_system = None
     
     def setup_ui(self):
         """Setup modern UI layout"""
@@ -598,6 +616,14 @@ class MainWindow:
             active_groups = self.trading_system.arbitrage_detector.active_groups
             self.log_message(f"📊 Found {len(active_groups)} active groups")
             
+            # เรียกใช้ correlation manager เพื่อแสดง log รายละเอียด
+            if hasattr(self.trading_system, 'correlation_manager') and self.trading_system.correlation_manager:
+                try:
+                    # เรียกใช้ correlation manager เพื่อแสดงสถานะการแก้ไม้
+                    self.trading_system.correlation_manager._log_all_groups_status()
+                except Exception as e:
+                    self.log_message(f"⚠️ Error calling correlation manager: {e}")
+            
             # Update each triangle
             if (hasattr(self, 'group_dashboard') and 
                 self.group_dashboard and 
@@ -817,34 +843,47 @@ class MainWindow:
         """Toggle MT5 connection"""
         if self.connection_status == 'connected':
             # Disconnect
+            if self.trading_system and self.trading_system.broker_api:
+                self.trading_system.broker_api.disconnect()
             self.update_connection_status('disconnected')
             self.connect_btn.config(text="🔌 Connect")
             self.log_message("🔴 Disconnected from MT5")
         else:
             # Connect
+            if not self.trading_system:
+                self.log_message("❌ Trading system not initialized")
+                return
+                
             self.update_connection_status('connecting')
             self.connect_btn.config(text="⏳ Connecting...")
             self.log_message("🟡 Connecting to MT5...")
             
-            # Simulate connection (replace with actual MT5 connection logic)
-            self.root.after(2000, self._simulate_connection)
+            # Try to connect using trading system
+            def connect_async():
+                try:
+                    if self.trading_system.broker_api.connect():
+                        self.update_connection_status('connected')
+                        self.connect_btn.config(text="🔌 Disconnect")
+                        self.log_message("🟢 Connected to MT5 successfully")
+                    else:
+                        self.update_connection_status('error')
+                        self.connect_btn.config(text="🔌 Connect")
+                        self.log_message("❌ Failed to connect to MT5")
+                except Exception as e:
+                    self.update_connection_status('error')
+                    self.connect_btn.config(text="🔌 Connect")
+                    self.log_message(f"❌ Connection error: {e}")
+            
+            # Run connection in separate thread
+            threading.Thread(target=connect_async, daemon=True).start()
     
-    def _simulate_connection(self):
-        """Simulate MT5 connection"""
-        import random
-        if random.choice([True, True, True, False]):  # 75% success rate
-            self.update_connection_status('connected')
-            self.connect_btn.config(text="🔌 Disconnect")
-            self.log_message("🟢 Connected to MT5 successfully")
-        else:
-            self.update_connection_status('error')
-            self.connect_btn.config(text="🔌 Connect")
-            self.log_message("❌ Failed to connect to MT5")
     
     def toggle_trading(self):
         """Toggle trading system"""
         if self.is_trading:
             # Stop trading
+            if self.trading_system:
+                self.trading_system.stop()
             self.is_trading = False
             self.trading_btn.config(text="▶️ Start Trading")
             self.log_message("⏹️ Trading system stopped")
@@ -854,12 +893,22 @@ class MainWindow:
                 self.log_message("❌ Please connect to MT5 first")
                 return
             
-            self.is_trading = True
-            self.trading_btn.config(text="⏹️ Stop Trading")
-            self.log_message("▶️ Trading system started")
+            if not self.trading_system:
+                self.log_message("❌ Trading system not initialized")
+                return
             
-            # Start group dashboard update loop
-            self.start_group_dashboard_update_loop()
+            try:
+                if self.trading_system.start():
+                    self.is_trading = True
+                    self.trading_btn.config(text="⏹️ Stop Trading")
+                    self.log_message("▶️ Trading system started")
+                    
+                    # Start group dashboard update loop
+                    self.start_group_dashboard_update_loop()
+                else:
+                    self.log_message("❌ Failed to start trading system")
+            except Exception as e:
+                self.log_message(f"❌ Error starting trading system: {e}")
     
     def log_message(self, message):
         """Add message to log"""
