@@ -900,7 +900,7 @@ class CorrelationManager:
                 return
             
             # ตรวจสอบว่าไม้นี้แก้แล้วหรือยัง
-            if self._is_position_hedged(losing_pair):
+            if self._is_position_hedged_from_mt5(group_id, symbol):
                 self.logger.info(f"⏭️ {symbol} (Order: {order_id}): Already hedged - skipping")
                 return
             

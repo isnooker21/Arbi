@@ -306,6 +306,15 @@ class TriangleArbitrageDetector:
                 # ลบ groups ที่ปิดแล้ว
                 for group_id in groups_to_remove:
                     self.logger.info(f"🗑️ Group {group_id} closed in MT5 - removing from memory")
+                    
+                    # Reset hedge tracker ก่อนลบข้อมูล
+                    if hasattr(self, 'correlation_manager') and self.correlation_manager:
+                        # Reset ไม้ arbitrage ทั้งหมดใน group นี้
+                        group_pairs = self.group_currency_mapping.get(group_id, [])
+                        for symbol in group_pairs:
+                            self.correlation_manager.hedge_tracker.reset_position(group_id, symbol)
+                            self.logger.info(f"🔄 Reset hedge tracker for {group_id}:{symbol}")
+                    
                     del self.active_groups[group_id]
                     self._save_active_groups()
                     self._reset_group_data_after_close(group_id)
@@ -597,6 +606,11 @@ class TriangleArbitrageDetector:
                             'order_id': result.get('order_id'),
                             'index': result_index
                         }
+                        
+                        # Track ไม้ arbitrage ใน hedge tracker
+                        if hasattr(self, 'correlation_manager') and self.correlation_manager:
+                            group_id = f"group_{triangle_name}_{group_counter}"
+                            self.correlation_manager.hedge_tracker.lock_position(group_id, order_data['symbol'])
                     else:
                         results[result_index] = {
                             'success': False,
@@ -749,6 +763,11 @@ class TriangleArbitrageDetector:
             
             if result and result.get('retcode') == 10009:
                 self.logger.debug(f"✅ Order sent: {symbol} {direction} {self.position_size} lot (took {execution_time:.1f}ms)")
+                
+                # Track ไม้ arbitrage ใน hedge tracker
+                if hasattr(self, 'correlation_manager') and self.correlation_manager:
+                    self.correlation_manager.hedge_tracker.lock_position(group_id, symbol)
+                
                 return {
                     'success': True,
                     'order_id': result.get('order_id'),
@@ -1089,6 +1108,14 @@ class TriangleArbitrageDetector:
                 except Exception as e:
                     self.logger.error(f"Error closing position {pos.get('ticket')}: {e}")
             
+            # Reset hedge tracker ก่อนลบข้อมูล
+            if hasattr(self, 'correlation_manager') and self.correlation_manager:
+                # Reset ไม้ arbitrage ทั้งหมดใน group นี้
+                group_pairs = self.group_currency_mapping.get(group_id, [])
+                for symbol in group_pairs:
+                    self.correlation_manager.hedge_tracker.reset_position(group_id, symbol)
+                    self.logger.info(f"🔄 Reset hedge tracker for {group_id}:{symbol}")
+            
             # ลบจาก memory และ reset ข้อมูล
             if group_id in self.active_groups:
                 del self.active_groups[group_id]
@@ -1412,6 +1439,14 @@ class TriangleArbitrageDetector:
                                                if r.get('status') == 'closed' and r.get('group_id') == group_id])
                 # ล้างข้อมูลการแก้ไม้สำหรับกลุ่มนี้
                 self.correlation_manager.clear_hedged_data_for_group(group_id)
+            
+            # Reset hedge tracker ก่อนลบข้อมูล
+            if hasattr(self, 'correlation_manager') and self.correlation_manager:
+                # Reset ไม้ arbitrage ทั้งหมดใน group นี้
+                group_pairs = self.group_currency_mapping.get(group_id, [])
+                for symbol in group_pairs:
+                    self.correlation_manager.hedge_tracker.reset_position(group_id, symbol)
+                    self.logger.info(f"🔄 Reset hedge tracker for {group_id}:{symbol}")
             
             # ลบกลุ่มออกจาก active_groups
             self._remove_group_data(group_id)
@@ -1748,6 +1783,11 @@ class TriangleArbitrageDetector:
                 
                 if order:
                     orders.append(order)
+                    
+                    # Track ไม้ arbitrage ใน hedge tracker
+                    if hasattr(self, 'correlation_manager') and self.correlation_manager:
+                        group_id = f"group_{triangle_name}_{group_counter}"
+                        self.correlation_manager.hedge_tracker.lock_position(group_id, pair)
                 else:
                     # If any order fails, cancel all previous orders
                     self.logger.error(f"Failed to place order for {pair}, cancelling triangle")
@@ -1789,6 +1829,11 @@ class TriangleArbitrageDetector:
                 
                 if order:
                     orders.append(order)
+                    
+                    # Track ไม้ arbitrage ใน hedge tracker
+                    if hasattr(self, 'correlation_manager') and self.correlation_manager:
+                        group_id = f"group_{triangle_name}_{group_counter}"
+                        self.correlation_manager.hedge_tracker.lock_position(group_id, pair)
                 else:
                     # If any order fails, cancel all previous orders
                     self.logger.error(f"Failed to place order for {pair}, cancelling triangle")
@@ -2227,6 +2272,14 @@ class TriangleArbitrageDetector:
                 if triangle_type in self.group_counters:
                     self.group_counters[triangle_type] = 0
                     self.logger.info(f"🔄 Reset {triangle_type} counter to 0 - next group will be group_{triangle_type}_1")
+                
+                # Reset hedge tracker สำหรับ group นี้
+                if hasattr(self, 'correlation_manager') and self.correlation_manager:
+                    # Reset ไม้ arbitrage ทั้งหมดใน group นี้
+                    group_pairs = self.group_currency_mapping.get(group_id, [])
+                    for symbol in group_pairs:
+                        self.correlation_manager.hedge_tracker.reset_position(group_id, symbol)
+                        self.logger.info(f"🔄 Reset hedge tracker for {group_id}:{symbol}")
                 
                 # ลบข้อมูล group_currency_mapping สำหรับ group นี้
                 if group_id in self.group_currency_mapping:
