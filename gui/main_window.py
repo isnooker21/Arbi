@@ -699,11 +699,102 @@ class MainWindow:
                 self.group_dashboard and 
                 hasattr(self.group_dashboard, 'update_summary')):
                 self.group_dashboard.update_summary(active_groups)
+            
+            # Update positions status
+            if (hasattr(self, 'group_dashboard') and 
+                self.group_dashboard and 
+                hasattr(self.group_dashboard, 'update_positions_status')):
+                positions_data = self.get_positions_status_data()
+                self.group_dashboard.update_positions_status(positions_data)
                 
         except Exception as e:
             import traceback
             self.log_message(f"❌ Error updating group dashboard: {e}")
             self.log_message(f"❌ Traceback: {traceback.format_exc()}")
+    
+    def get_positions_status_data(self):
+        """ดึงข้อมูลสถานะไม้สำหรับแสดงใน GUI แบ่งตาม Group"""
+        try:
+            if not self.trading_system or not hasattr(self.trading_system, 'correlation_manager'):
+                return {'groups': {}}
+            
+            # Get positions from correlation manager
+            correlation_manager = self.trading_system.correlation_manager
+            
+            # Get all positions from MT5
+            all_positions = correlation_manager.broker.get_all_positions()
+            
+            # Initialize groups data
+            groups_data = {}
+            
+            # Initialize all 6 groups
+            for i in range(1, 7):
+                group_id = f'group_triangle_{i}_1'
+                groups_data[group_id] = {
+                    'profit_arbitrage': [],
+                    'losing_arbitrage': [],
+                    'profit_correlation': [],
+                    'losing_correlation': [],
+                    'existing_correlation': []
+                }
+            
+            # Categorize positions by group
+            for pos in all_positions:
+                symbol = pos.get('symbol', '')
+                pnl = pos.get('profit', 0)
+                order_id = pos.get('ticket', 'N/A')
+                comment = pos.get('comment', '')
+                magic = pos.get('magic', 0)
+                
+                # Determine group from magic number
+                group_id = self._get_group_from_magic(magic)
+                
+                # Calculate additional data
+                risk_percent = correlation_manager._calculate_risk_per_lot(pos)
+                price_distance = correlation_manager._calculate_price_distance(pos)
+                is_hedged = correlation_manager._is_position_hedged(pos, group_id)
+                
+                position_data = {
+                    'symbol': symbol,
+                    'order_id': order_id,
+                    'pnl': pnl,
+                    'risk_percent': risk_percent,
+                    'price_distance': price_distance,
+                    'is_hedged': is_hedged
+                }
+                
+                # Add to appropriate group and category
+                if group_id in groups_data:
+                    if comment.startswith('RECOVERY_'):
+                        # Recovery positions
+                        if pnl > 0:
+                            groups_data[group_id]['profit_correlation'].append(position_data)
+                        else:
+                            groups_data[group_id]['losing_correlation'].append(position_data)
+                    else:
+                        # Arbitrage positions
+                        if pnl > 0:
+                            groups_data[group_id]['profit_arbitrage'].append(position_data)
+                        else:
+                            groups_data[group_id]['losing_arbitrage'].append(position_data)
+            
+            return {'groups': groups_data}
+            
+        except Exception as e:
+            self.log_message(f"❌ Error getting positions status data: {e}")
+            return {'groups': {}}
+    
+    def _get_group_from_magic(self, magic):
+        """หา group_id จาก magic number"""
+        magic_to_group = {
+            234001: 'group_triangle_1_1',
+            234002: 'group_triangle_2_1', 
+            234003: 'group_triangle_3_1',
+            234004: 'group_triangle_4_1',
+            234005: 'group_triangle_5_1',
+            234006: 'group_triangle_6_1'
+        }
+        return magic_to_group.get(magic, 'group_triangle_1_1')  # Default to group 1
     
     def _show_default_group_status(self):
         """Show default status for all groups when not connected"""

@@ -30,6 +30,9 @@ class GroupDashboard:
         
         # Summary panel
         self.create_summary_panel()
+        
+        # Positions status panel
+        self.create_positions_status_panel()
     
     def create_header(self):
         """สร้าง header"""
@@ -375,3 +378,161 @@ class GroupDashboard:
         
         if hasattr(main_window, 'update_group_dashboard'):
             main_window.update_group_dashboard()
+    
+    def create_positions_status_panel(self):
+        """สร้าง panel แสดงสถานะไม้แบบละเอียด"""
+        # Main positions status frame
+        self.positions_status_frame = tk.Frame(
+            self.main_frame, 
+            bg=TradingTheme.COLORS['secondary_bg'],
+            relief='raised',
+            bd=1
+        )
+        self.positions_status_frame.pack(fill='both', expand=True, padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['md'])
+        
+        # Title
+        title_label = tk.Label(
+            self.positions_status_frame,
+            text="📊 POSITIONS STATUS",
+            font=TradingTheme.FONTS['subtitle'],
+            bg=TradingTheme.COLORS['secondary_bg'],
+            fg=TradingTheme.COLORS['text_primary']
+        )
+        title_label.pack(anchor='w', padx=TradingTheme.SPACING['md'], pady=(TradingTheme.SPACING['md'], TradingTheme.SPACING['sm']))
+        
+        # Create scrollable text widget for positions status
+        self.positions_text = scrolledtext.ScrolledText(
+            self.positions_status_frame,
+            height=15,
+            font=('Consolas', 10),
+            bg=TradingTheme.COLORS['primary_bg'],
+            fg=TradingTheme.COLORS['text_primary'],
+            insertbackground=TradingTheme.COLORS['text_primary'],
+            selectbackground=TradingTheme.COLORS['accent'],
+            state='disabled',
+            wrap='none'
+        )
+        self.positions_text.pack(fill='both', expand=True, padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['sm'])
+    
+    def update_positions_status(self, positions_data):
+        """อัปเดตสถานะไม้แบบละเอียด"""
+        if not hasattr(self, 'positions_text'):
+            return
+        
+        # Clear existing content
+        self.positions_text.config(state='normal')
+        self.positions_text.delete(1.0, tk.END)
+        
+        try:
+            # Format positions data
+            status_text = self.format_positions_status(positions_data)
+            self.positions_text.insert(tk.END, status_text)
+            
+        except Exception as e:
+            self.positions_text.insert(tk.END, f"❌ Error updating positions status: {e}")
+        
+        # Disable editing
+        self.positions_text.config(state='disabled')
+    
+    def format_positions_status(self, positions_data):
+        """จัดรูปแบบข้อมูลสถานะไม้แบ่งตาม Group"""
+        output = []
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        output.append(f"🕐 Last Update: {timestamp}\n")
+        output.append("=" * 100 + "\n")
+        
+        # แบ่งตาม Group
+        groups_data = positions_data.get('groups', {})
+        
+        for group_id in sorted(groups_data.keys()):
+            group_data = groups_data[group_id]
+            group_name = group_id.replace('group_triangle_', 'G').replace('_', ' ')
+            
+            output.append(f"\n📊 {group_name.upper()} STATUS:\n")
+            output.append("-" * 80 + "\n")
+            
+            # Profit Arbitrage Positions
+            profit_arbitrage = group_data.get('profit_arbitrage', [])
+            if profit_arbitrage:
+                output.append("🟢 PROFIT ARBITRAGE POSITIONS:\n")
+                for i, pos in enumerate(profit_arbitrage, 1):
+                    symbol = pos.get('symbol', 'Unknown')
+                    order_id = pos.get('order_id', 'N/A')
+                    pnl = pos.get('pnl', 0)
+                    risk = pos.get('risk_percent', 0)
+                    distance = pos.get('price_distance', 0)
+                    
+                    output.append(f"     {i}. {symbol:<8} (Order: {order_id}) - ✅ HEDGED | PnL: ${pnl:>8.2f}\n")
+                    output.append(f"         Risk: {risk:>6.2f}% (info only)\n")
+                    output.append(f"         Distance: {distance:>6.1f} pips (≥10) ✅\n")
+            else:
+                output.append("🟢 PROFIT ARBITRAGE POSITIONS: None\n")
+            
+            output.append("\n")
+            
+            # Losing Arbitrage Positions
+            losing_arbitrage = group_data.get('losing_arbitrage', [])
+            if losing_arbitrage:
+                output.append("🔴 LOSING ARBITRAGE POSITIONS:\n")
+                for i, pos in enumerate(losing_arbitrage, 1):
+                    symbol = pos.get('symbol', 'Unknown')
+                    order_id = pos.get('order_id', 'N/A')
+                    pnl = pos.get('pnl', 0)
+                    risk = pos.get('risk_percent', 0)
+                    distance = pos.get('price_distance', 0)
+                    is_hedged = pos.get('is_hedged', False)
+                    
+                    hedged_status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
+                    distance_status = "✅" if distance >= 10 else "❌"
+                    
+                    output.append(f"     {i}. {symbol:<8} (Order: {order_id}) - {hedged_status} | PnL: ${pnl:>8.2f}\n")
+                    output.append(f"         Risk: {risk:>6.2f}% (info only)\n")
+                    output.append(f"         Distance: {distance:>6.1f} pips (≥10) {distance_status}\n")
+            else:
+                output.append("🔴 LOSING ARBITRAGE POSITIONS: None\n")
+            
+            output.append("\n")
+            
+            # Profit Correlation Positions
+            profit_correlation = group_data.get('profit_correlation', [])
+            if profit_correlation:
+                output.append("🟢 PROFIT CORRELATION POSITIONS:\n")
+                for i, pos in enumerate(profit_correlation, 1):
+                    symbol = pos.get('symbol', 'Unknown')
+                    order_id = pos.get('order_id', 'N/A')
+                    pnl = pos.get('pnl', 0)
+                    output.append(f"     {i}. {symbol:<8} (Order: {order_id}) - PnL: ${pnl:>8.2f}\n")
+            else:
+                output.append("🟢 PROFIT CORRELATION POSITIONS: None\n")
+            
+            output.append("\n")
+            
+            # Losing Correlation Positions
+            losing_correlation = group_data.get('losing_correlation', [])
+            if losing_correlation:
+                output.append("🔴 LOSING CORRELATION POSITIONS:\n")
+                for i, pos in enumerate(losing_correlation, 1):
+                    symbol = pos.get('symbol', 'Unknown')
+                    order_id = pos.get('order_id', 'N/A')
+                    pnl = pos.get('pnl', 0)
+                    output.append(f"     {i}. {symbol:<8} (Order: {order_id}) - PnL: ${pnl:>8.2f}\n")
+            else:
+                output.append("🔴 LOSING CORRELATION POSITIONS: None\n")
+            
+            output.append("\n")
+            
+            # Existing Correlation Positions
+            existing_correlation = group_data.get('existing_correlation', [])
+            if existing_correlation:
+                output.append("🔄 EXISTING CORRELATION POSITIONS:\n")
+                for i, pos in enumerate(existing_correlation, 1):
+                    symbol = pos.get('symbol', 'Unknown')
+                    order_id = pos.get('order_id', 'N/A')
+                    pnl = pos.get('pnl', 0)
+                    output.append(f"     {i}. {symbol:<8} (Order: {order_id}) - PnL: ${pnl:>8.2f}\n")
+            else:
+                output.append("🔄 EXISTING CORRELATION POSITIONS: None\n")
+            
+            output.append("\n" + "=" * 100 + "\n")
+        
+        return ''.join(output)
