@@ -6,7 +6,7 @@ Dashboard ที่แสดงสถานะของแต่ละ arbitrage
 """
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, scrolledtext
 from datetime import datetime
 from .theme import TradingTheme
 
