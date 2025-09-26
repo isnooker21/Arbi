@@ -377,14 +377,20 @@ class CorrelationManager:
             # เรียงตามคะแนน (สูงสุดก่อน) - คู่ที่ขาดทุนมาก + distance มาก
             suitable_pairs.sort(key=lambda x: x['score'], reverse=True)
             
-            # ป้องกันการแก้ไม้ซ้ำ - หลีกเลี่ยงไม้ที่แก้ล่าสุด
-            if group_id in self.last_hedged_positions:
-                last_hedged = self.last_hedged_positions[group_id]
-                # กรองไม้ที่แก้ล่าสุดออก
-                suitable_pairs = [p for p in suitable_pairs if p['symbol'] != last_hedged]
-                if not suitable_pairs:
-                    self.logger.warning(f"⚠️ All suitable pairs were recently hedged for {group_id}")
-                    return None
+            # ป้องกันการแก้ไม้ซ้ำ - ใช้ hedge tracker
+            # กรองไม้ที่กำลังถูกแก้หรือแก้แล้วออก
+            filtered_pairs = []
+            for pair_data in suitable_pairs:
+                symbol = pair_data['symbol']
+                # ตรวจสอบจาก hedge tracker ว่าไม้นี้ถูกแก้แล้วหรือยัง
+                if not self._check_hedge_status_from_tracking(group_id, symbol):
+                    filtered_pairs.append(pair_data)
+            
+            if not filtered_pairs:
+                self.logger.warning(f"⚠️ All suitable pairs are already hedged for {group_id}")
+                return None
+            
+            suitable_pairs = filtered_pairs
             
             best_pair = suitable_pairs[0]['pair']
             best_info = suitable_pairs[0]
