@@ -14,27 +14,18 @@ from datetime import datetime
 import json
 from .theme import TradingTheme
 from .group_dashboard import GroupDashboard
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from main import TradingSystem
 
 class MainWindow:
-    def __init__(self, auto_setup=True):
+    def __init__(self, trading_system=None):
         self.root = tk.Tk()
         self.root.title("🎯 Forex Arbitrage AI Trading System")
         self.root.geometry("1400x800")
         self.root.minsize(1200, 700)
         
         # Initialize variables
-        self.trading_system = None
+        self.trading_system = trading_system
         self.is_trading = False
         self.connection_status = "disconnected"
-        self.auto_setup = auto_setup
-        
-        # Initialize trading system
-        if auto_setup:
-            self._initialize_trading_system()
         
         # Apply modern theme
         TradingTheme.apply_theme(self.root)
@@ -46,16 +37,6 @@ class MainWindow:
         self.setup_logging()
         
         # No auto-connect - user will click Connect button manually
-    
-    def _initialize_trading_system(self):
-        """Initialize trading system"""
-        try:
-            self.log_message("🔧 Initializing trading system...")
-            self.trading_system = TradingSystem()
-            self.log_message("✅ Trading system initialized successfully")
-        except Exception as e:
-            self.log_message(f"❌ Failed to initialize trading system: {e}")
-            self.trading_system = None
     
     def setup_ui(self):
         """Setup modern UI layout"""
