@@ -455,34 +455,34 @@ class CorrelationManager:
                 # แสดงข้อมูล Group แบบย่อ
                 self.logger.info(f"{status_icon} GROUP {group_number}: Total PnL: ${total_pnl:8.2f} | Arbitrage: {len(arbitrage_positions)} | Recovery: {len(recovery_positions)}")
                 
-                # แสดงไม้ที่ขาดทุนและสถานะการแก้ไม้
-                losing_arbitrage = [pos for pos in arbitrage_positions if pos.get('profit', 0) < 0]
-                if losing_arbitrage:
-                    for pos in losing_arbitrage:
-                        symbol = pos.get('symbol', '')
-                        pnl = pos.get('profit', 0)
-                        group_id = f"group_triangle_{group_number.replace('G', '')}_1"
-                        
-                        # สร้าง position dict ที่มี order_id
-                        position_data = {
-                            'symbol': symbol,
-                            'order_id': pos.get('ticket', ''),
-                            'profit': pnl
-                        }
-                        
-                        # ใช้ hedge tracker จริงๆ
-                        is_hedged = self._check_hedge_status_from_tracking(group_id, symbol)
-                        hedge_status = "✅ HG" if is_hedged else "❌ NH"
-                        
-                        self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} [{hedge_status}]")
+                # แสดงไม้ทั้งหมด (ทั้งกำไรและขาดทุน)
+                for pos in arbitrage_positions:
+                    symbol = pos.get('symbol', '')
+                    pnl = pos.get('profit', 0)
+                    group_id = f"group_triangle_{group_number.replace('G', '')}_1"
+                    
+                    # สร้าง position dict ที่มี order_id
+                    position_data = {
+                        'symbol': symbol,
+                        'order_id': pos.get('ticket', ''),
+                        'profit': pnl
+                    }
+                    
+                    # ใช้ hedge tracker จริงๆ
+                    is_hedged = self._check_hedge_status_from_tracking(group_id, symbol)
+                    hedge_status = "✅ HG" if is_hedged else "❌ NH"
+                    
+                    # แสดงสถานะกำไร/ขาดทุน
+                    pnl_icon = "🟢" if pnl >= 0 else "🔴"
+                    self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} [{hedge_status}] {pnl_icon}")
                 
-                # แสดงไม้ recovery ที่ขาดทุน
-                losing_recovery = [pos for pos in recovery_positions if pos.get('profit', 0) < 0]
-                if losing_recovery:
-                    for pos in losing_recovery:
+                # แสดงไม้ recovery ทั้งหมด (ทั้งกำไรและขาดทุน)
+                if recovery_positions:
+                    for pos in recovery_positions:
                         symbol = pos.get('symbol', '')
                         pnl = pos.get('profit', 0)
-                        self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} [RECOVERY]")
+                        pnl_icon = "🟢" if pnl >= 0 else "🔴"
+                        self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} [RECOVERY] {pnl_icon}")
                 
                 self.logger.info("")
             
