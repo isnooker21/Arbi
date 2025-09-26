@@ -372,11 +372,16 @@ class IndividualOrderTracker:
                     if 'last_sync' in data_to_save[key] and isinstance(data_to_save[key]['last_sync'], datetime):
                         data_to_save[key]['last_sync'] = data_to_save[key]['last_sync'].isoformat()
                 
+                # Convert stats datetime objects to strings
+                stats_to_save = self.stats.copy()
+                if 'last_sync' in stats_to_save and isinstance(stats_to_save['last_sync'], datetime):
+                    stats_to_save['last_sync'] = stats_to_save['last_sync'].isoformat()
+                
                 # Save to file
                 with open(self.persistence_file, 'w') as f:
                     json.dump({
                         'order_tracking': data_to_save,
-                        'stats': self.stats,
+                        'stats': stats_to_save,
                         'saved_at': datetime.now().isoformat()
                     }, f, indent=2)
                 
