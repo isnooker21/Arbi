@@ -518,19 +518,23 @@ class CorrelationManager:
                         
                         # ใช้ Individual Order Tracker ในการตรวจสอบ hedge status
                         is_hedged = self._is_position_hedged(position_data, group_id)
-                        hedge_status = "✅ HG" if is_hedged else "❌ NH"
                             
                         # แสดงสถานะกำไร/ขาดทุน
                         pnl_icon = "🟢" if pnl >= 0 else "🔴"
-                        self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} [{hedge_status}] {pnl_icon}")
-                
-                # แสดงไม้ recovery ทั้งหมด (ทั้งกำไรและขาดทุน)
-                if recovery_positions:
-                    for pos in recovery_positions:
-                        symbol = pos.get('symbol', '')
-                        pnl = pos.get('profit', 0)
-                        pnl_icon = "🟢" if pnl >= 0 else "🔴"
-                        self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} [RECOVERY] {pnl_icon}")
+                        
+                        if is_hedged:
+                            # แสดง recovery orders ที่เกี่ยวข้อง
+                            ticket = str(pos.get('ticket', ''))
+                            order_info = self.order_tracker.get_order_info(ticket, symbol)
+                            if order_info:
+                                recovery_orders = order_info.get('recovery_orders', [])
+                                self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} {pnl_icon}")
+                                self.logger.info(f"   - HG แล้ว")
+                                
+                                # แสดง recovery orders แบบ recursive (chain recovery)
+                                self._display_recovery_chain(recovery_orders, indent_level=1)
+                        else:
+                            self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} {pnl_icon}")
                 
                 self.logger.info("")
             
@@ -2014,6 +2018,39 @@ class CorrelationManager:
                 
         except Exception as e:
             self.logger.error(f"Error starting recovery: {e}")
+    
+    def _display_recovery_chain(self, recovery_orders: List[str], indent_level: int = 1):
+        """Display recovery chain recursively"""
+        try:
+            indent = "   " + "  " * indent_level  # เพิ่ม indent ตาม level
+            
+            for recovery_key in recovery_orders:
+                if recovery_key in self.order_tracker.order_tracking:
+                    recovery_info = self.order_tracker.order_tracking[recovery_key]
+                    recovery_symbol = recovery_info.get('symbol', '')
+                    recovery_ticket = recovery_info.get('ticket', '')
+                    recovery_status = recovery_info.get('status', 'UNKNOWN')
+                    
+                    # หา recovery position จาก MT5
+                    recovery_position = self._get_position_by_ticket(recovery_ticket)
+                    if recovery_position:
+                        recovery_pnl = recovery_position.get('profit', 0)
+                        recovery_icon = "🟢" if recovery_pnl >= 0 else "🔴"
+                        self.logger.info(f"{indent}- {recovery_symbol:8s}: ${recovery_pnl:8.2f} {recovery_icon}")
+                        
+                        # ตรวจสอบว่า recovery order นี้ถูก hedge หรือไม่
+                        if recovery_status == 'HEDGED':
+                            recovery_recovery_orders = recovery_info.get('recovery_orders', [])
+                            if recovery_recovery_orders:
+                                self.logger.info(f"{indent}  - HG แล้ว")
+                                # แสดง recovery orders ของ recovery order (chain recovery)
+                                self._display_recovery_chain(recovery_recovery_orders, indent_level + 2)
+                    else:
+                        # Recovery order ไม่พบใน MT5 (อาจถูกปิดแล้ว)
+                        self.logger.info(f"{indent}- {recovery_symbol:8s}: [CLOSED]")
+                        
+        except Exception as e:
+            self.logger.error(f"Error displaying recovery chain: {e}")
     
     def _find_correlation_pairs_for_symbol(self, symbol: str) -> List[Dict]:
         """Find correlation pairs for a specific symbol"""

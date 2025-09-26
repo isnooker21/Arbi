@@ -214,12 +214,13 @@ class IndividualOrderTracker:
         Get all orders that need recovery.
         
         Returns:
-            List[Dict]: Orders with status NOT_HEDGED
+            List[Dict]: Orders with status NOT_HEDGED or ORPHANED
         """
         with self._lock:
             needing_recovery = []
             for order_key, order_info in self.order_tracking.items():
-                if order_info.get("status") == "NOT_HEDGED":
+                status = order_info.get("status")
+                if status in ["NOT_HEDGED", "ORPHANED"]:
                     needing_recovery.append(order_info)
             return needing_recovery
     
@@ -264,10 +265,47 @@ class IndividualOrderTracker:
                     
                     # Check if order is still active in MT5
                     if ticket not in active_tickets:
-                        # Order is closed - mark for removal
+                        # Order is closed - check if it was hedged
+                        order_type = order_info.get('type', 'UNKNOWN')
+                        status = order_info.get('status', 'UNKNOWN')
+                        
+                        if order_type == 'ORIGINAL' and status == 'HEDGED':
+                            # Original order that was hedged is closed - need to handle recovery orders
+                            recovery_orders = order_info.get('recovery_orders', [])
+                            self.logger.warning(f"🚨 HEDGED ORIGINAL ORDER CLOSED: {order_key} had {len(recovery_orders)} recovery orders")
+                            
+                            # Check if recovery orders are still active
+                            active_recovery_orders = []
+                            for recovery_key in recovery_orders:
+                                if recovery_key in self.order_tracking:
+                                    recovery_info = self.order_tracking[recovery_key]
+                                    recovery_ticket = recovery_info.get('ticket')
+                                    if recovery_ticket and recovery_ticket in active_tickets:
+                                        active_recovery_orders.append(recovery_key)
+                            
+                            if active_recovery_orders:
+                                self.logger.warning(f"⚠️ {len(active_recovery_orders)} recovery orders still active - they will become orphaned")
+                                # Mark recovery orders as orphaned (no original order to hedge)
+                                for recovery_key in active_recovery_orders:
+                                    if recovery_key in self.order_tracking:
+                                        self.order_tracking[recovery_key]['status'] = 'ORPHANED'
+                                        self.logger.warning(f"🔗 Marked {recovery_key} as ORPHANED")
+                            
+                        elif order_type == 'RECOVERY':
+                            # Recovery order is closed - check if original is still active
+                            hedging_for = order_info.get('hedging_for', '')
+                            if hedging_for and hedging_for in self.order_tracking:
+                                original_info = self.order_tracking[hedging_for]
+                                original_ticket = original_info.get('ticket')
+                                if original_ticket and original_ticket in active_tickets:
+                                    # Original order still active - mark as not hedged
+                                    self.order_tracking[hedging_for]['status'] = 'NOT_HEDGED'
+                                    self.logger.warning(f"🔗 Original order {hedging_for} marked as NOT_HEDGED (recovery order closed)")
+                        
+                        # Mark for removal
                         orders_to_remove.append(order_key)
                         sync_results['orders_removed'] += 1
-                        self.logger.debug(f"🔄 Order {order_key} (Ticket: {ticket}) not found in MT5 - will remove")
+                        self.logger.info(f"🔄 Order {order_key} (Ticket: {ticket}) closed - removed from tracking")
                     else:
                         self.logger.debug(f"✅ Order {order_key} (Ticket: {ticket}) still active in MT5")
                 
@@ -304,7 +342,8 @@ class IndividualOrderTracker:
                 'original_orders': len([o for o in self.order_tracking.values() if o.get('type') == 'ORIGINAL']),
                 'recovery_orders': len([o for o in self.order_tracking.values() if o.get('type') == 'RECOVERY']),
                 'hedged_orders': len([o for o in self.order_tracking.values() if o.get('status') == 'HEDGED']),
-                'not_hedged_orders': len([o for o in self.order_tracking.values() if o.get('status') == 'NOT_HEDGED'])
+                'not_hedged_orders': len([o for o in self.order_tracking.values() if o.get('status') == 'NOT_HEDGED']),
+                'orphaned_orders': len([o for o in self.order_tracking.values() if o.get('status') == 'ORPHANED'])
             })
             return stats
     
@@ -319,17 +358,21 @@ class IndividualOrderTracker:
             self.logger.info(f"   Recovery Orders: {stats['recovery_orders']}")
             self.logger.info(f"   Hedged Orders: {stats['hedged_orders']}")
             self.logger.info(f"   Not Hedged Orders: {stats['not_hedged_orders']}")
+            self.logger.info(f"   Orphaned Orders: {stats['orphaned_orders']}")
             self.logger.info(f"   Last Sync: {stats['last_sync']}")
             
             # Log detailed order information
             not_hedged_orders = [o for o in self.order_tracking.values() if o.get('status') == 'NOT_HEDGED']
-            if not_hedged_orders:
+            orphaned_orders = [o for o in self.order_tracking.values() if o.get('status') == 'ORPHANED']
+            
+            if not_hedged_orders or orphaned_orders:
                 self.logger.info("   Orders Needing Recovery:")
-                for order in not_hedged_orders[:5]:  # Show max 5
+                for order in (not_hedged_orders + orphaned_orders)[:5]:  # Show max 5
                     ticket = order.get('ticket')
                     symbol = order.get('symbol')
                     order_type = order.get('type')
-                    self.logger.info(f"     - {ticket}_{symbol} ({order_type})")
+                    status = order.get('status')
+                    self.logger.info(f"     - {ticket}_{symbol} ({order_type}) [{status}]")
             
             # Log hedged orders
             hedged_orders = [o for o in self.order_tracking.values() if o.get('status') == 'HEDGED']

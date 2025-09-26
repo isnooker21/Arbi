@@ -1040,7 +1040,7 @@ class TriangleArbitrageDetector:
             risk_per_lot = abs(total_pnl) / total_lot_size
             
             # ไม่ใช้เงื่อนไข risk แล้ว - แสดงข้อมูลเท่านั้น
-            self.logger.info(f"📊 Group {triangle_type} risk: {risk_per_lot:.2%} (info only)")
+            # self.logger.info(f"📊 Group {triangle_type} risk: {risk_per_lot:.2%} (info only)")
             
             # ตรวจสอบระยะห่างราคา
             max_price_distance = 0

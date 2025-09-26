@@ -635,7 +635,6 @@ class MainWindow:
                         
                         # Update group status
                         self.group_dashboard.update_group_status(triangle_id, enhanced_group_data)
-                        self.log_message(f"✅ Updated {triangle_id}: {group_data.get('group_id', 'Unknown')}")
                     else:
                         # No active group for this triangle
                         empty_data = {
