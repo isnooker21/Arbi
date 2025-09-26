@@ -532,6 +532,9 @@ class CorrelationManager:
                                 self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} {pnl_icon}")
                                 self.logger.info(f"   - HG แล้ว")
                                 
+                                # Debug: แสดงจำนวน recovery orders
+                                self.logger.info(f"🔍 {symbol}: Found {len(recovery_orders)} recovery orders")
+                                
                                 # แสดง recovery orders ต่อท้ายคู่เงิน
                                 if recovery_orders:
                                     for recovery_key in recovery_orders:
