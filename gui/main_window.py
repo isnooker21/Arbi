@@ -80,6 +80,18 @@ class MainWindow:
         )
         self.settings_btn.pack(side='right', padx=TradingTheme.SPACING['sm'])
         
+        # Connect/Disconnect Button
+        self.connect_btn = TradingTheme.create_button_style(
+            controls_frame, "🔌 Connect", self.toggle_connection, "primary"
+        )
+        self.connect_btn.pack(side='right', padx=TradingTheme.SPACING['sm'])
+        
+        # Start/Stop Trading Button
+        self.trading_btn = TradingTheme.create_button_style(
+            controls_frame, "▶️ Start Trading", self.toggle_trading, "success"
+        )
+        self.trading_btn.pack(side='right', padx=TradingTheme.SPACING['sm'])
+        
         # Connection Status
         self.connection_indicator, self.connection_label = TradingTheme.create_status_indicator(
             controls_frame, "Connection", self.connection_status
@@ -800,6 +812,54 @@ class MainWindow:
         
         # Start the update loop
         update_loop()
+    
+    def toggle_connection(self):
+        """Toggle MT5 connection"""
+        if self.connection_status == 'connected':
+            # Disconnect
+            self.update_connection_status('disconnected')
+            self.connect_btn.config(text="🔌 Connect")
+            self.log_message("🔴 Disconnected from MT5")
+        else:
+            # Connect
+            self.update_connection_status('connecting')
+            self.connect_btn.config(text="⏳ Connecting...")
+            self.log_message("🟡 Connecting to MT5...")
+            
+            # Simulate connection (replace with actual MT5 connection logic)
+            self.root.after(2000, self._simulate_connection)
+    
+    def _simulate_connection(self):
+        """Simulate MT5 connection"""
+        import random
+        if random.choice([True, True, True, False]):  # 75% success rate
+            self.update_connection_status('connected')
+            self.connect_btn.config(text="🔌 Disconnect")
+            self.log_message("🟢 Connected to MT5 successfully")
+        else:
+            self.update_connection_status('error')
+            self.connect_btn.config(text="🔌 Connect")
+            self.log_message("❌ Failed to connect to MT5")
+    
+    def toggle_trading(self):
+        """Toggle trading system"""
+        if self.is_trading:
+            # Stop trading
+            self.is_trading = False
+            self.trading_btn.config(text="▶️ Start Trading")
+            self.log_message("⏹️ Trading system stopped")
+        else:
+            # Start trading
+            if self.connection_status != 'connected':
+                self.log_message("❌ Please connect to MT5 first")
+                return
+            
+            self.is_trading = True
+            self.trading_btn.config(text="⏹️ Stop Trading")
+            self.log_message("▶️ Trading system started")
+            
+            # Start group dashboard update loop
+            self.start_group_dashboard_update_loop()
     
     def log_message(self, message):
         """Add message to log"""
