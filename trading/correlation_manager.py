@@ -148,7 +148,7 @@ class CorrelationManager:
             'min_loss_threshold': -0.005, # ขาดทุนขั้นต่ำ -0.5%
             'max_recovery_time_hours': 24, # เวลาสูงสุด 24 ชั่วโมง
             'hedge_ratio_range': (0.3, 2.5),  # ขนาด hedge ratio
-            'wait_time_minutes': 5,      # รอ 5 นาทีก่อนเริ่มแก้ไม้
+            'wait_time_minutes': 0,      # ไม่รอ - แก้ไม้ทันที
             'base_lot_size': 0.1         # ขนาด lot เริ่มต้น
         }
         
@@ -182,6 +182,8 @@ class CorrelationManager:
             self.logger.error(f"❌ Error in auto-registration: {e}")
             import traceback
             self.logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        self.logger.info("✅ CorrelationManager initialization completed")
     
     def _initialize_tracker_from_mt5(self):
         """Initialize tracker with existing positions from MT5"""
