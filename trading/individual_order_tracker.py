@@ -312,6 +312,17 @@ class IndividualOrderTracker:
                     symbol = order.get('symbol')
                     order_type = order.get('type')
                     self.logger.info(f"     - {ticket}_{symbol} ({order_type})")
+            
+            # Log hedged orders
+            hedged_orders = [o for o in self.order_tracking.values() if o.get('status') == 'HEDGED']
+            if hedged_orders:
+                self.logger.info("   Hedged Orders:")
+                for order in hedged_orders[:5]:  # Show max 5
+                    ticket = order.get('ticket')
+                    symbol = order.get('symbol')
+                    order_type = order.get('type')
+                    recovery_orders = order.get('recovery_orders', [])
+                    self.logger.info(f"     - {ticket}_{symbol} ({order_type}) -> {len(recovery_orders)} recovery orders")
     
     def force_reset_all_orders(self):
         """

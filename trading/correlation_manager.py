@@ -516,21 +516,9 @@ class CorrelationManager:
                             'profit': pnl
                         }
                         
-                        # ใช้ Professional Hedge Tracker ในการตรวจสอบ hedge status
+                        # ใช้ Individual Order Tracker ในการตรวจสอบ hedge status
                         is_hedged = self._is_position_hedged(position_data, group_id)
                         hedge_status = "✅ HG" if is_hedged else "❌ NH"
-                        
-                        # Show individual order tracker info when there are issues
-                        ticket = str(pos.get('ticket', ''))
-                        if ticket:
-                            order_info = self.order_tracker.get_order_info(ticket, symbol)
-                            if order_info:
-                                tracker_status = order_info.get('status', 'UNKNOWN')
-                                order_type = order_info.get('type', 'N/A')
-                                self.logger.debug(f"     🔍 Tracker: {tracker_status} ({order_type})")
-                        
-                        # Add debug logging for hedge status only when needed
-                        self._debug_hedge_status(pos)
                             
                         # แสดงสถานะกำไร/ขาดทุน
                         pnl_icon = "🟢" if pnl >= 0 else "🔴"
