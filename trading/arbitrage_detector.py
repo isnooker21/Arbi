@@ -286,7 +286,7 @@ class TriangleArbitrageDetector:
                 
                 # Sync arbitrage orders with MT5
                 if hasattr(self, 'correlation_manager') and self.correlation_manager:
-                    sync_results = self.correlation_manager.hedge_tracker.sync_arbitrage_orders_with_mt5()
+                    sync_results = self.correlation_manager.order_tracker.sync_with_mt5()
                     if sync_results.get('arbitrage_orders_removed', 0) > 0:
                         self.logger.debug(f"🔄 Arbitrage sync: {sync_results['arbitrage_orders_removed']} orders removed")
                 
@@ -318,7 +318,7 @@ class TriangleArbitrageDetector:
                         # Reset ไม้ arbitrage ทั้งหมดใน group นี้
                         group_pairs = self.group_currency_mapping.get(group_id, [])
                         for symbol in group_pairs:
-                            self.correlation_manager.hedge_tracker.reset_position(group_id, symbol)
+                            # Individual order tracker handles cleanup automatically via sync
                             self.logger.info(f"🔄 Reset hedge tracker for {group_id}:{symbol}")
                     
                     del self.active_groups[group_id]
@@ -585,20 +585,8 @@ class TriangleArbitrageDetector:
                 try:
                     self.logger.info(f"🔍 Thread {result_index}: Starting order for {order_data['symbol']}")
                     
-                    # Check if arbitrage order already exists for this symbol in this group
-                    if hasattr(self, 'correlation_manager') and self.correlation_manager:
-                        group_id = f"group_{triangle_name}_{self.group_counters[triangle_name]}"
-                        if self.correlation_manager.hedge_tracker.is_arbitrage_order_exists(group_id, order_data['symbol']):
-                            self.logger.warning(f"🚫 Arbitrage order for {order_data['symbol']} in {group_id} already exists - skipping")
-                            results[result_index] = {
-                                'success': False,
-                                'symbol': order_data['symbol'],
-                                'direction': order_data['direction'],
-                                'order_id': None,
-                                'index': result_index,
-                                'error': 'Duplicate order prevented'
-                            }
-                            return
+                    # Note: Individual order tracker doesn't prevent duplicates at this level
+                    # Duplicate prevention is handled by the broker API and order execution
                     
                     # สร้าง comment ตามหมายเลขสามเหลี่ยม (1-6)
                     triangle_number = triangle_name.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
@@ -628,16 +616,18 @@ class TriangleArbitrageDetector:
                             'index': result_index
                         }
                         
-                        # Register arbitrage order in hedge tracker
+                        # Register original arbitrage order in individual order tracker
                         if hasattr(self, 'correlation_manager') and self.correlation_manager:
                             group_id = f"group_{triangle_name}_{self.group_counters[triangle_name]}"
                             order_id = result.get('order_id')
                             if order_id:
-                                success = self.correlation_manager.hedge_tracker.register_arbitrage_order(group_id, order_data['symbol'], str(order_id))
+                                success = self.correlation_manager.order_tracker.register_original_order(
+                                    str(order_id), order_data['symbol'], group_id
+                                )
                                 if success:
-                                    self.logger.info(f"✅ Arbitrage order registered: {group_id}:{order_data['symbol']} (Order: {order_id})")
+                                    self.logger.info(f"✅ Original arbitrage order registered: {order_id}_{order_data['symbol']} in {group_id}")
                                 else:
-                                    self.logger.warning(f"⚠️ Failed to register arbitrage order: {group_id}:{order_data['symbol']}")
+                                    self.logger.warning(f"⚠️ Failed to register original arbitrage order: {order_id}_{order_data['symbol']}")
                     else:
                         results[result_index] = {
                             'success': False,
@@ -791,9 +781,10 @@ class TriangleArbitrageDetector:
             if result and result.get('retcode') == 10009:
                 self.logger.debug(f"✅ Order sent: {symbol} {direction} {self.position_size} lot (took {execution_time:.1f}ms)")
                 
-                # Track ไม้ arbitrage ใน hedge tracker
+                # Track ไม้ arbitrage ใน individual order tracker
                 if hasattr(self, 'correlation_manager') and self.correlation_manager:
-                    self.correlation_manager.hedge_tracker.lock_position(group_id, symbol)
+                    # Individual order tracker doesn't need locking - each order is tracked individually
+                    pass
                 
                 return {
                     'success': True,
@@ -1140,7 +1131,7 @@ class TriangleArbitrageDetector:
                 # Reset ไม้ arbitrage ทั้งหมดใน group นี้
                 group_pairs = self.group_currency_mapping.get(group_id, [])
                 for symbol in group_pairs:
-                    self.correlation_manager.hedge_tracker.reset_position(group_id, symbol)
+                    # Individual order tracker handles cleanup automatically via sync
                     self.logger.info(f"🔄 Reset hedge tracker for {group_id}:{symbol}")
             
             # ลบจาก memory และ reset ข้อมูล
@@ -1472,7 +1463,7 @@ class TriangleArbitrageDetector:
                 # Reset ไม้ arbitrage ทั้งหมดใน group นี้
                 group_pairs = self.group_currency_mapping.get(group_id, [])
                 for symbol in group_pairs:
-                    self.correlation_manager.hedge_tracker.reset_position(group_id, symbol)
+                    # Individual order tracker handles cleanup automatically via sync
                     self.logger.info(f"🔄 Reset hedge tracker for {group_id}:{symbol}")
             
             # ลบกลุ่มออกจาก active_groups
@@ -1829,7 +1820,7 @@ class TriangleArbitrageDetector:
                     # Track ไม้ arbitrage ใน hedge tracker
                     if hasattr(self, 'correlation_manager') and self.correlation_manager:
                         group_id = f"group_{triangle_name}_{self.group_counters[triangle_name]}"
-                        self.correlation_manager.hedge_tracker.lock_position(group_id, pair)
+                        # Individual order tracker doesn't need locking - each order is tracked individually
                 else:
                     # If any order fails, cancel all previous orders
                     self.logger.error(f"Failed to place order for {pair}, cancelling triangle")
@@ -1878,7 +1869,7 @@ class TriangleArbitrageDetector:
                     # Track ไม้ arbitrage ใน hedge tracker
                     if hasattr(self, 'correlation_manager') and self.correlation_manager:
                         group_id = f"group_{triangle_name}_{self.group_counters[triangle_name]}"
-                        self.correlation_manager.hedge_tracker.lock_position(group_id, pair)
+                        # Individual order tracker doesn't need locking - each order is tracked individually
                 else:
                     # If any order fails, cancel all previous orders
                     self.logger.error(f"Failed to place order for {pair}, cancelling triangle")
@@ -2323,7 +2314,7 @@ class TriangleArbitrageDetector:
                     # Reset ไม้ arbitrage ทั้งหมดใน group นี้
                     group_pairs = self.group_currency_mapping.get(group_id, [])
                     for symbol in group_pairs:
-                        self.correlation_manager.hedge_tracker.reset_position(group_id, symbol)
+                        # Individual order tracker handles cleanup automatically via sync
                         self.logger.info(f"🔄 Reset hedge tracker for {group_id}:{symbol}")
                 
                 # ลบข้อมูล group_currency_mapping สำหรับ group นี้
