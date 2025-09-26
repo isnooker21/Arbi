@@ -15,6 +15,8 @@ Key Features:
 
 import logging
 import threading
+import json
+import os
 from datetime import datetime
 from typing import Dict, List, Optional, Set
 
@@ -53,6 +55,12 @@ class IndividualOrderTracker:
             'last_sync': None
         }
         
+        # Persistence file
+        self.persistence_file = "data/order_tracking.json"
+        
+        # Load existing data on startup
+        self._load_from_file()
+        
         self.logger.info("🚀 Individual Order Tracker initialized")
     
     def register_original_order(self, ticket: str, symbol: str, group_id: str) -> bool:
@@ -87,6 +95,10 @@ class IndividualOrderTracker:
             
             self.stats['original_orders_registered'] += 1
             self.logger.info(f"📝 Original order registered: {order_key}")
+            
+            # Save to file
+            self._save_to_file()
+            
             return True
     
     def register_recovery_order(self, recovery_ticket: str, recovery_symbol: str, 
@@ -132,6 +144,10 @@ class IndividualOrderTracker:
             self.stats['orders_hedged'] += 1
             
             self.logger.info(f"✅ Recovery registered: {original_key} → {recovery_key}")
+            
+            # Save to file
+            self._save_to_file()
+            
             return True
     
     def is_order_hedged(self, ticket: str, symbol: str) -> bool:
@@ -265,6 +281,8 @@ class IndividualOrderTracker:
                 
                 if sync_results['orders_removed'] > 0:
                     self.logger.info(f"🔄 Sync completed: {sync_results['orders_checked']} checked, {sync_results['orders_removed']} removed")
+                    # Save to file after removing closed orders
+                    self._save_to_file()
                 
             except Exception as e:
                 sync_results['errors'] += 1
@@ -333,6 +351,74 @@ class IndividualOrderTracker:
             order_count = len(self.order_tracking)
             self.order_tracking.clear()
             self.logger.warning(f"🚨 FORCE RESET: Cleared {order_count} tracked orders")
+            
+            # Save to file after clearing
+            self._save_to_file()
+    
+    def _save_to_file(self):
+        """Save order tracking data to file"""
+        try:
+            with self._lock:
+                # Ensure data directory exists
+                os.makedirs(os.path.dirname(self.persistence_file), exist_ok=True)
+                
+                # Convert datetime objects to strings for JSON serialization
+                data_to_save = {}
+                for key, order_info in self.order_tracking.items():
+                    data_to_save[key] = order_info.copy()
+                    # Convert datetime objects to ISO format strings
+                    if 'created_at' in data_to_save[key] and isinstance(data_to_save[key]['created_at'], datetime):
+                        data_to_save[key]['created_at'] = data_to_save[key]['created_at'].isoformat()
+                    if 'last_sync' in data_to_save[key] and isinstance(data_to_save[key]['last_sync'], datetime):
+                        data_to_save[key]['last_sync'] = data_to_save[key]['last_sync'].isoformat()
+                
+                # Save to file
+                with open(self.persistence_file, 'w') as f:
+                    json.dump({
+                        'order_tracking': data_to_save,
+                        'stats': self.stats,
+                        'saved_at': datetime.now().isoformat()
+                    }, f, indent=2)
+                
+                self.logger.debug(f"💾 Saved order tracking data to {self.persistence_file}")
+                
+        except Exception as e:
+            self.logger.error(f"Error saving order tracking data: {e}")
+    
+    def _load_from_file(self):
+        """Load order tracking data from file"""
+        try:
+            if not os.path.exists(self.persistence_file):
+                self.logger.info("📁 No existing order tracking file found - starting fresh")
+                return
+            
+            with open(self.persistence_file, 'r') as f:
+                data = json.load(f)
+            
+            # Load order tracking data
+            if 'order_tracking' in data:
+                for key, order_info in data['order_tracking'].items():
+                    # Convert ISO format strings back to datetime objects
+                    if 'created_at' in order_info and isinstance(order_info['created_at'], str):
+                        order_info['created_at'] = datetime.fromisoformat(order_info['created_at'])
+                    if 'last_sync' in order_info and isinstance(order_info['last_sync'], str):
+                        order_info['last_sync'] = datetime.fromisoformat(order_info['last_sync'])
+                    
+                    self.order_tracking[key] = order_info
+            
+            # Load stats
+            if 'stats' in data:
+                self.stats.update(data['stats'])
+            
+            # Convert last_sync from string to datetime if needed
+            if 'last_sync' in self.stats and isinstance(self.stats['last_sync'], str):
+                self.stats['last_sync'] = datetime.fromisoformat(self.stats['last_sync'])
+            
+            loaded_count = len(self.order_tracking)
+            self.logger.info(f"📁 Loaded {loaded_count} orders from {self.persistence_file}")
+            
+        except Exception as e:
+            self.logger.error(f"Error loading order tracking data: {e}")
     
     def __str__(self) -> str:
         """String representation of the tracker."""
