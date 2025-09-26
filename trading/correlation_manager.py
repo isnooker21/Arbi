@@ -279,8 +279,8 @@ class CorrelationManager:
             
             # ไม่ต้อง sync tracking แล้ว ดูจาก MT5 จริงๆ
             
-            # แสดงสถานะไม้ทั้งหมดในกลุ่ม
-            self._log_group_hedging_status(group_id, losing_pairs)
+            # ลด log ที่ซ้ำ - ใช้แค่ _log_all_groups_status แทน
+            # self._log_group_hedging_status(group_id, losing_pairs)
             
             # แสดงสถานะทุก Group
             self._log_all_groups_status()
@@ -409,201 +409,19 @@ class CorrelationManager:
             return None
     
     def _log_group_hedging_status(self, group_id: str, losing_pairs: List[Dict]):
-        """แสดงสถานะการแก้ไม้ของกลุ่มให้ชัดเจน"""
-        try:
-            # แยก Group number จาก group_id
-            group_number = self._extract_group_number(group_id)
-            
-            self.logger.info("=" * 80)
-            self.logger.info(f"📊 GROUP {group_number} HEDGING STATUS")
-            self.logger.info("=" * 80)
-            
-            # ดึงข้อมูลจาก MT5 จริงๆ แทนการใช้ข้อมูลที่ส่งมา (ใช้ magic number)
-            all_positions = self.broker.get_all_positions()
-            group_positions = []
-            
-            # หา magic number จาก group_id
-            magic_number = self._get_magic_number_from_group_id(group_id)
-            
-            # หาไม้ที่เกี่ยวข้องกับกลุ่มนี้จาก MT5 โดยใช้ magic number
-            for pos in all_positions:
-                magic = pos.get('magic', 0)
-                comment = pos.get('comment', '')
-                
-                # ตรวจสอบว่าเป็นไม้ arbitrage (ไม่ใช่ recovery)
-                if magic == magic_number and not comment.startswith('RECOVERY_'):
-                    group_positions.append({
-                        'symbol': pos['symbol'],
-                        'order_id': pos['ticket'],
-                        'lot_size': pos['volume'],
-                        'entry_price': pos['price'],
-                        'pnl': pos['profit'],
-                        'comment': comment,
-                        'magic': magic
-                    })
-            
-            # แสดงไม้ arbitrage ทั้งหมด (แยกเป็นกำไรและขาดทุน)
-            losing_positions = []
-            profit_positions = []
-            
-            for pos in group_positions:
-                symbol = pos['symbol']
-                order_id = pos['order_id']
-                pnl = pos['pnl']
-                
-                if pnl < 0:  # ขาดทุน
-                    losing_positions.append(pos)
-                else:  # กำไร
-                    profit_positions.append(pos)
-            
-            # แสดงไม้ที่กำไร
-            if profit_positions:
-                self.logger.info("🟢 PROFIT ARBITRAGE POSITIONS:")
-                for i, pos in enumerate(profit_positions, 1):
-                    symbol = pos['symbol']
-                    order_id = pos['order_id']
-                    pnl = pos['pnl']
-                    self.logger.info(f"   {i:2d}. {symbol:8s} (Order: {order_id:8d}) - 💰 PROFIT: ${pnl:8.2f}")
-            else:
-                self.logger.info("🟢 PROFIT ARBITRAGE POSITIONS: None")
-            
-            # แสดงไม้ที่ขาดทุน
-            if losing_positions:
-                self.logger.info("🔴 LOSING ARBITRAGE POSITIONS:")
-                for i, pos in enumerate(losing_positions, 1):
-                    symbol = pos['symbol']
-                    order_id = pos['order_id']
-                    pnl = pos['pnl']
-                    is_hedged = self._is_position_hedged(pos, group_id)
-                    status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
-                    
-                    self.logger.info(f"   {i:2d}. {symbol:8s} (Order: {order_id:8d}) - {status:12s} | PnL: ${pnl:8.2f}")
-                    
-                    if not is_hedged:
-                        # แสดงเงื่อนไขการแก้ไม้
-                        risk_per_lot = self._calculate_risk_per_lot(pos)
-                        price_distance = self._calculate_price_distance(pos)
-                        
-                        risk_status = "✅" if risk_per_lot >= 0.015 else "❌"
-                        distance_status = "✅" if price_distance >= 10 else "❌"
-                        
-                        self.logger.info(f"        Risk: {risk_per_lot:6.2%} (info only)")
-                        self.logger.info(f"        Distance: {price_distance:5.1f} pips (≥10) {distance_status}")
-                    else:
-                        # แสดงข้อมูล recovery position ที่แก้ไม้แล้ว
-                        self.logger.info(f"        🔗 Already hedged with recovery position")
-            else:
-                self.logger.info("🔴 LOSING ARBITRAGE POSITIONS: None")
-            
-            # แสดงไม้ correlation ที่เกี่ยวข้องกับกลุ่มนี้ (ดึงจาก MT5 จริงๆ)
-            profit_correlations = []
-            losing_correlations = []
-            
-            # หาไม้ correlation จาก MT5 โดยใช้ comment และ magic number
-            for pos in all_positions:
-                comment = pos.get('comment', '')
-                magic = pos.get('magic', 0)
-                
-                # เช็คว่าเป็น recovery position ของกลุ่มนี้หรือไม่ (ใช้ magic number และ comment)
-                if magic == magic_number and 'RECOVERY_' in comment:
-                    # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
-                    if group_id and 'triangle_' in group_id:
-                        triangle_part = group_id.split('triangle_')[1].split('_')[0]
-                        group_number = triangle_part
-                    else:
-                        group_number = 'X'
-                    
-                    # เช็คว่าเป็น recovery position ของกลุ่มนี้หรือไม่
-                    # ใช้ magic number และ comment pattern ที่มี RECOVERY_
-                    is_recovery = False
-                    
-                    if magic == magic_number and 'RECOVERY_' in comment:
-                        is_recovery = True
-                    
-                    if is_recovery:
-                        correlation_pos = {
-                            'symbol': pos['symbol'],
-                            'order_id': pos['ticket'],
-                            'lot_size': pos['volume'],
-                            'entry_price': pos['price'],
-                            'pnl': pos['profit'],
-                            'comment': comment
-                        }
-                        
-                        # ตรวจสอบ PnL และแยกเป็นกำไร/ขาดทุน
-                        pnl = pos['profit']
-                        if pnl >= 0:  # กำไร
-                            profit_correlations.append(correlation_pos)
-                        else:  # ขาดทุน
-                            losing_correlations.append(correlation_pos)
-            
-            # แสดงไม้ correlation ที่กำไร
-            if profit_correlations:
-                self.logger.info("🟢 PROFIT CORRELATION POSITIONS:")
-                for i, pos in enumerate(profit_correlations, 1):
-                    symbol = pos['symbol']
-                    order_id = pos['order_id']
-                    pnl = pos['pnl']
-                    self.logger.info(f"   {i:2d}. {symbol:8s} (Order: {order_id:8d}) - 💰 PROFIT: ${pnl:8.2f}")
-            else:
-                self.logger.info("🟢 PROFIT CORRELATION POSITIONS: None")
-            
-            # แสดงไม้ correlation ที่ขาดทุน
-            if losing_correlations:
-                self.logger.info("🔴 LOSING CORRELATION POSITIONS:")
-                for i, pos in enumerate(losing_correlations, 1):
-                    symbol = pos['symbol']
-                    order_id = pos['order_id']
-                    pnl = pos['pnl']
-                    is_hedged = self._is_position_hedged(pos, group_id)
-                    status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
-                    
-                    self.logger.info(f"   {i:2d}. {symbol:8s} (Order: {order_id:8d}) - {status:12s} | PnL: ${pnl:8.2f}")
-                    
-                    if not is_hedged:
-                        # แสดงเงื่อนไขการแก้ไม้
-                        risk_per_lot = self._calculate_risk_per_lot(pos)
-                        price_distance = self._calculate_price_distance(pos)
-                        
-                        risk_status = "✅" if risk_per_lot >= 0.015 else "❌"
-                        distance_status = "✅" if price_distance >= 10 else "❌"
-                        
-                        self.logger.info(f"        Risk: {risk_per_lot:6.2%} (info only)")
-                        self.logger.info(f"        Distance: {price_distance:5.1f} pips (≥10) {distance_status}")
-            else:
-                self.logger.info("🔴 LOSING CORRELATION POSITIONS: None")
-            
-            # ถ้าไม่มีไม้ correlation
-            if not profit_correlations and not losing_correlations:
-                self.logger.info("🔄 EXISTING CORRELATION POSITIONS: None")
-            
-            # สรุปสถานะ
-            total_losing_positions = len(losing_positions) + len(losing_correlations)
-            hedged_count = sum(1 for pair in losing_positions if self._is_position_hedged(pair, group_id))
-            hedged_count += sum(1 for position in losing_correlations if self._is_position_hedged(position, group_id))
-            
-            # คำนวณ Total PnL
-            total_pnl = sum(pos['pnl'] for pos in group_positions) + sum(pos['pnl'] for pos in profit_correlations) + sum(pos['pnl'] for pos in losing_correlations)
-            
-            self.logger.info("-" * 80)
-            self.logger.info(f"📈 GROUP {group_number} SUMMARY:")
-            self.logger.info(f"   Total PnL: ${total_pnl:10.2f}")
-            self.logger.info(f"   Hedged Positions: {hedged_count:2d}/{total_losing_positions:2d}")
-            self.logger.info(f"   Arbitrage Positions: {len(group_positions):2d}")
-            self.logger.info(f"   Recovery Positions: {len(profit_correlations) + len(losing_correlations):2d}")
-            self.logger.info("=" * 80)
-            
-        except Exception as e:
-            self.logger.error(f"Error logging group hedging status: {e}")
+        """แสดงสถานะการแก้ไม้ของกลุ่มให้ชัดเจน - ลด log ที่ซ้ำ"""
+        # ลด log ที่ซ้ำ - ใช้แค่ _log_all_groups_status แทน
+        pass
     
     def _log_all_groups_status(self):
         """แสดงสถานะทุก Group เรียงตาม Group สวยงาม"""
         try:
-            self.logger.info("=" * 100)
+            self.logger.info("=" * 80)
             self.logger.info("📊 ALL GROUPS STATUS OVERVIEW")
-            self.logger.info("=" * 100)
+            self.logger.info("=" * 80)
             
-            # ไม่ต้อง sync tracking แล้ว ดูจาก MT5 จริงๆ
+            # Sync hedge tracker กับ MT5 ก่อน
+            self.hedge_tracker.sync_with_mt5()
             
             # ดึงข้อมูลจาก MT5 จริงๆ
             all_positions = self.broker.get_all_positions()
@@ -634,19 +452,15 @@ class CorrelationManager:
                 # สถานะ Group
                 status_icon = "🟢" if total_pnl >= 0 else "🔴"
                 
-                self.logger.info(f"{status_icon} GROUP {group_number}:")
-                self.logger.info(f"   Total PnL: ${total_pnl:10.2f}")
-                self.logger.info(f"   Arbitrage: {len(arbitrage_positions):2d} positions (${arbitrage_pnl:8.2f})")
-                self.logger.info(f"   Recovery:  {len(recovery_positions):2d} positions (${recovery_pnl:8.2f})")
+                # แสดงข้อมูล Group แบบย่อ
+                self.logger.info(f"{status_icon} GROUP {group_number}: Total PnL: ${total_pnl:8.2f} | Arbitrage: {len(arbitrage_positions)} | Recovery: {len(recovery_positions)}")
                 
                 # แสดงไม้ที่ขาดทุนและสถานะการแก้ไม้
                 losing_arbitrage = [pos for pos in arbitrage_positions if pos.get('profit', 0) < 0]
                 if losing_arbitrage:
-                    self.logger.info(f"   Losing Arbitrage: {len(losing_arbitrage)} positions")
                     for pos in losing_arbitrage:
                         symbol = pos.get('symbol', '')
                         pnl = pos.get('profit', 0)
-                        # ตรวจสอบสถานะการแก้ไม้
                         group_id = f"group_triangle_{group_number.replace('G', '')}_1"
                         
                         # สร้าง position dict ที่มี order_id
@@ -656,51 +470,27 @@ class CorrelationManager:
                             'profit': pnl
                         }
                         
-                        is_hedged = self._is_position_hedged(position_data, group_id)
+                        # ใช้ hedge tracker จริงๆ
+                        is_hedged = self._check_hedge_status_from_tracking(group_id, symbol)
                         hedge_status = "✅ HG" if is_hedged else "❌ NH"
                         
-                        # Debug: แสดงข้อมูล tracking จาก Professional Hedge Tracker
-                        position_info = self.hedge_tracker.get_position_info(group_id, symbol)
-                        if position_info:
-                            status = position_info.get('status', 'UNKNOWN')
-                            hedge_symbol = position_info.get('hedge_symbol', 'N/A')
-                            self.logger.debug(f"     📝 Tracker: {symbol} -> {hedge_symbol} ({status})")
-                        
-                        self.logger.info(f"     - {symbol:8s}: ${pnl:8.2f} [{hedge_status}]")
+                        self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} [{hedge_status}]")
                 
                 # แสดงไม้ recovery ที่ขาดทุน
                 losing_recovery = [pos for pos in recovery_positions if pos.get('profit', 0) < 0]
                 if losing_recovery:
-                    self.logger.info(f"   Losing Recovery: {len(losing_recovery)} positions")
                     for pos in losing_recovery:
                         symbol = pos.get('symbol', '')
                         pnl = pos.get('profit', 0)
-                        self.logger.info(f"     - {symbol:8s}: ${pnl:8.2f}")
-                
-                # แสดงไม้ที่แก้ไม้แล้ว (HEDGED)
-                hedged_arbitrage = []
-                for pos in arbitrage_positions:
-                    if pos.get('profit', 0) < 0:  # เฉพาะไม้ที่ขาดทุน
-                        group_id = f"group_triangle_{group_number.replace('G', '')}_1"
-                        if self._is_position_hedged(pos, group_id):
-                            hedged_arbitrage.append(pos)
-                
-                if hedged_arbitrage:
-                    self.logger.info(f"   Hedged Positions: {len(hedged_arbitrage)} positions")
-                    for pos in hedged_arbitrage:
-                        symbol = pos.get('symbol', '')
-                        pnl = pos.get('profit', 0)
-                        # หา recovery position ที่แก้ไม้
-                        recovery_info = self._find_recovery_for_position(pos, recovery_positions)
-                        if recovery_info:
-                            recovery_symbol = recovery_info.get('symbol', '')
-                            self.logger.info(f"     - {symbol:8s}: ${pnl:8.2f} → {recovery_symbol:8s}")
-                        else:
-                            self.logger.info(f"     - {symbol:8s}: ${pnl:8.2f} → ???")
+                        self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} [RECOVERY]")
                 
                 self.logger.info("")
             
-            self.logger.info("=" * 100)
+            # แสดงสถานะ hedge tracker
+            self.logger.info("🔍 HEDGE TRACKER STATUS:")
+            self.hedge_tracker.log_status_summary()
+            
+            self.logger.info("=" * 80)
             
         except Exception as e:
             self.logger.error(f"Error logging all groups status: {e}")
@@ -2132,9 +1922,9 @@ class CorrelationManager:
     def check_recovery_positions_with_status(self, group_id: str = None, losing_pairs: list = None):
         """ตรวจสอบ recovery positions พร้อมแสดงสถานะการแก้ไม้"""
         try:
-            # แสดงสถานะการแก้ไม้ทุกครั้งที่ถูกเรียก
-            if group_id and losing_pairs:
-                self._log_group_hedging_status(group_id, losing_pairs)
+            # ลด log ที่ซ้ำ - ใช้แค่ _log_all_groups_status แทน
+            # if group_id and losing_pairs:
+            #     self._log_group_hedging_status(group_id, losing_pairs)
             
             # ตรวจสอบ recovery positions ปกติ
             self.check_recovery_positions()

@@ -1058,8 +1058,8 @@ class TriangleArbitrageDetector:
                         'magic': pos.get('magic', 0)
                     })
             
-            # เรียกใช้ correlation_manager เพื่อแสดงสถานะ
-            self.correlation_manager._log_group_hedging_status(group_id, losing_pairs)
+            # ลด log ที่ซ้ำ - ใช้แค่ _log_all_groups_status แทน
+            # self.correlation_manager._log_group_hedging_status(group_id, losing_pairs)
             
         except Exception as e:
             self.logger.error(f"Error logging group status for recovery: {e}")
