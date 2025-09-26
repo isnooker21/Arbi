@@ -492,6 +492,16 @@ class CorrelationManager:
                 arbitrage_positions = [pos for pos in group_positions if not pos.get('comment', '').startswith('RECOVERY_')]
                 recovery_positions = [pos for pos in group_positions if pos.get('comment', '').startswith('RECOVERY_')]
                 
+                # Debug: แสดงข้อมูลไม้ทั้งหมด
+                self.logger.debug(f"🔍 GROUP {group_number} DEBUG:")
+                self.logger.debug(f"  Total positions: {len(group_positions)}")
+                self.logger.debug(f"  Arbitrage positions: {len(arbitrage_positions)}")
+                self.logger.debug(f"  Recovery positions: {len(recovery_positions)}")
+                for pos in group_positions:
+                    comment = pos.get('comment', '')
+                    symbol = pos.get('symbol', '')
+                    self.logger.debug(f"  Position: {symbol} | Comment: '{comment}'")
+                
                 # คำนวณ PnL
                 arbitrage_pnl = sum(pos.get('profit', 0) for pos in arbitrage_positions)
                 recovery_pnl = sum(pos.get('profit', 0) for pos in recovery_positions)
@@ -2035,14 +2045,22 @@ class CorrelationManager:
             indent = "   " + "  " * indent_level  # เพิ่ม indent ตาม level
             
             # Debug: แสดงจำนวน recovery orders
-            self.logger.debug(f"🔍 _display_recovery_chain: Processing {len(recovery_orders)} recovery orders")
+            self.logger.info(f"🔍 _display_recovery_chain: Processing {len(recovery_orders)} recovery orders")
+            
+            if not recovery_orders:
+                self.logger.info("🔍 No recovery orders to display")
+                return
             
             for recovery_key in recovery_orders:
+                self.logger.info(f"🔍 Processing recovery_key: {recovery_key}")
+                
                 if recovery_key in self.order_tracker.order_tracking:
                     recovery_info = self.order_tracker.order_tracking[recovery_key]
                     recovery_symbol = recovery_info.get('symbol', '')
                     recovery_ticket = recovery_info.get('ticket', '')
                     recovery_status = recovery_info.get('status', 'UNKNOWN')
+                    
+                    self.logger.info(f"🔍 Recovery info: {recovery_symbol} | Ticket: {recovery_ticket} | Status: {recovery_status}")
                     
                     # หา recovery position จาก MT5
                     recovery_position = self._get_position_by_ticket(recovery_ticket)
@@ -2061,6 +2079,8 @@ class CorrelationManager:
                     else:
                         # Recovery order ไม่พบใน MT5 (อาจถูกปิดแล้ว)
                         self.logger.info(f"{indent}- {recovery_symbol:8s}: [CLOSED]")
+                else:
+                    self.logger.info(f"🔍 Recovery key {recovery_key} not found in order_tracker")
                         
         except Exception as e:
             self.logger.error(f"Error displaying recovery chain: {e}")
