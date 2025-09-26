@@ -539,6 +539,13 @@ class CorrelationManager:
                         else:
                             self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} {pnl_icon}")
                 
+                # แสดง recovery orders ที่ไม่ใช่ arbitrage positions
+                for pos in recovery_positions:
+                        symbol = pos.get('symbol', '')
+                        pnl = pos.get('profit', 0)
+                        pnl_icon = "🟢" if pnl >= 0 else "🔴"
+                        self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} {pnl_icon} [RECOVERY]")
+                
                 self.logger.info("")
             
             # Show individual order tracker status
