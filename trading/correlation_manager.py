@@ -476,12 +476,18 @@ class CorrelationManager:
             
             # จัดกลุ่มตาม magic number
             groups_data = {}
+            recovery_positions_all = []
             for pos in all_positions:
                 magic = pos.get('magic', 0)
+                comment = pos.get('comment', '')
+                
                 if magic in [234001, 234002, 234003, 234004, 234005, 234006]:
                     if magic not in groups_data:
                         groups_data[magic] = []
                     groups_data[magic].append(pos)
+                elif comment.startswith('RECOVERY_'):
+                    # รวม recovery orders ที่มี magic number อื่น
+                    recovery_positions_all.append(pos)
             
             # แสดงสถานะแต่ละ Group เรียงตาม Group
             for magic in sorted(groups_data.keys()):
@@ -491,6 +497,12 @@ class CorrelationManager:
                 # แยกประเภทไม้
                 arbitrage_positions = [pos for pos in group_positions if not pos.get('comment', '').startswith('RECOVERY_')]
                 recovery_positions = [pos for pos in group_positions if pos.get('comment', '').startswith('RECOVERY_')]
+                
+                # เพิ่ม recovery orders ที่มี magic number อื่น
+                for recovery_pos in recovery_positions_all:
+                    recovery_comment = recovery_pos.get('comment', '')
+                    if f"G{group_number}_" in recovery_comment:
+                        recovery_positions.append(recovery_pos)
                 
                 
                 # คำนวณ PnL
@@ -510,10 +522,10 @@ class CorrelationManager:
                         pnl = pos.get('profit', 0)
                         group_id = f"group_triangle_{group_number.replace('G', '')}_1"
                         
-                        # สร้าง position dict ที่มี order_id
+                        # สร้าง position dict ที่มี ticket
                         position_data = {
                             'symbol': symbol,
-                            'order_id': pos.get('ticket', ''),
+                            'ticket': pos.get('ticket', ''),
                             'profit': pnl
                         }
                         
@@ -636,11 +648,6 @@ class CorrelationManager:
                 return False
             
             is_hedged = self.order_tracker.is_order_hedged(ticket, symbol)
-            
-            # Debug logging for hedged orders
-            self.logger.info(f"🔍 Checking hedge status: {ticket}_{symbol} = {is_hedged}")
-            if is_hedged:
-                self.logger.info(f"🔍 {ticket}_{symbol}: Status = HEDGED")
             
             return is_hedged
             
