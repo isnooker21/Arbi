@@ -1688,11 +1688,15 @@ class CorrelationManager:
             correlation = correlation_candidate['correlation']
             original_symbol = original_position.get('symbol', '')
             
+            self.logger.info(f"🔍 EXECUTING CORRELATION: {original_symbol} -> {symbol} (correlation: {correlation:.2f})")
+            
             # 🔒 STEP 1: Check if original position is already hedged
             original_ticket = str(original_position.get('ticket', ''))
             if self.order_tracker.is_order_hedged(original_ticket, original_symbol):
                 self.logger.warning(f"🚫 Position {original_ticket}_{original_symbol} already hedged - skipping")
                 return False
+            
+            self.logger.info(f"✅ Position {original_ticket}_{original_symbol} not hedged - proceeding")
             
             # กำหนดทิศทางที่ถูกต้อง (ใช้ทิศทางเดียวกันกับคู่เดิม)
             original_direction = original_position.get('type', 'SELL')
@@ -1718,7 +1722,9 @@ class CorrelationManager:
             )
             
             # Send correlation order
+            self.logger.info(f"📤 Sending recovery order: {symbol} {correlation_lot_size} lot, direction: {direction}")
             order_result = self._send_correlation_order(symbol, correlation_lot_size, group_id, original_position)
+            self.logger.info(f"📤 Order result: {order_result}")
             
             if order_result and order_result.get('success'):
                 # ✅ STEP 2: Register recovery order in individual tracker
@@ -1845,8 +1851,10 @@ class CorrelationManager:
             original_symbol = original_position.get('symbol', 'UNKNOWN') if original_position else 'UNKNOWN'
             comment = f"RECOVERY_G{group_number}_{original_symbol}_TO_{symbol}"
             
-            # หา magic number จาก group_id
+            # หา magic number จาก group_id หรือใช้ default
             magic_number = self._get_magic_number_from_group_id(group_id)
+            if not magic_number:
+                magic_number = 234000  # Default magic number for recovery orders
             
             # กำหนดทิศทางที่ถูกต้อง (ใช้ทิศทางเดียวกันกับคู่เดิม)
             original_direction = original_position.get('type', 'SELL') if original_position else 'SELL'
@@ -2029,8 +2037,10 @@ class CorrelationManager:
                 best_correlation = correlation_candidates[0]
                 self.logger.info(f"🎯 Best correlation: {best_correlation}")
                 
-                # Execute recovery
-                success = self._execute_correlation_position(position, best_correlation, position.get('magic'))
+                # Execute recovery - need to get proper group_id
+                # For now, use a default group_id since we're doing individual order recovery
+                group_id = f"recovery_{ticket}_{symbol}"
+                success = self._execute_correlation_position(position, best_correlation, group_id)
                 self.logger.info(f"🔄 Recovery result: {success}")
             else:
                 self.logger.warning(f"⚠️ No correlation pairs found for {symbol}")
@@ -2140,6 +2150,42 @@ class CorrelationManager:
             
         except Exception as e:
             self.logger.error(f"Error adjusting recovery thresholds: {e}")
+    
+    def test_recovery_system(self):
+        """Test the recovery system with current losing positions"""
+        try:
+            self.logger.info("🧪 TESTING RECOVERY SYSTEM")
+            
+            # Get all MT5 positions
+            all_positions = self.broker.get_all_positions()
+            losing_positions = [pos for pos in all_positions if pos.get('profit', 0) < -10]  # Losing more than $10
+            
+            self.logger.info(f"📊 Found {len(losing_positions)} positions losing more than $10")
+            
+            if not losing_positions:
+                self.logger.warning("⚠️ No losing positions found for testing")
+                return
+            
+            # Test with the biggest loser
+            biggest_loser = min(losing_positions, key=lambda x: x.get('profit', 0))
+            ticket = biggest_loser.get('ticket')
+            symbol = biggest_loser.get('symbol')
+            profit = biggest_loser.get('profit', 0)
+            
+            self.logger.info(f"🎯 Testing with biggest loser: {ticket}_{symbol} (${profit:.2f})")
+            
+            # Check if this order is tracked
+            order_info = self.order_tracker.get_order_info(str(ticket), symbol)
+            if not order_info:
+                self.logger.warning(f"⚠️ Order {ticket}_{symbol} not tracked - registering as original")
+                # Register as original order for testing
+                self.order_tracker.register_original_order(str(ticket), symbol, f"test_group_{ticket}")
+            
+            # Force recovery check
+            self.force_recovery_check()
+            
+        except Exception as e:
+            self.logger.error(f"Error testing recovery system: {e}")
     
     def check_recovery_positions_with_status(self, group_id: str = None, losing_pairs: list = None):
         """ตรวจสอบ recovery positions พร้อมแสดงสถานะการแก้ไม้"""
