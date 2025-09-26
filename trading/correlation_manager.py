@@ -429,10 +429,11 @@ class CorrelationManager:
             # Sync hedge tracker กับ MT5 ก่อน
             self.hedge_tracker.sync_with_mt5()
             
-            # Debug: แสดงข้อมูลใน hedge tracker
-            self.logger.info("🔍 HEDGE TRACKER DEBUG:")
-            for position_key, position_info in self.hedge_tracker.positions.items():
-                self.logger.info(f"  Position {position_key}: {position_info}")
+            # Debug: แสดงข้อมูลใน hedge tracker (ลดความถี่)
+            if len(self.hedge_tracker.positions) > 0:
+                self.logger.debug("🔍 HEDGE TRACKER DEBUG:")
+                for position_key, position_info in self.hedge_tracker.positions.items():
+                    self.logger.debug(f"  Position {position_key}: {position_info}")
             
             # ดึงข้อมูลจาก MT5 จริงๆ
             all_positions = self.broker.get_all_positions()
@@ -498,7 +499,7 @@ class CorrelationManager:
                 self.logger.info("")
             
             # แสดงสถานะ hedge tracker
-            self.logger.info("🔍 HEDGE TRACKER STATUS:")
+            self.logger.debug("🔍 HEDGE TRACKER STATUS:")
             self.hedge_tracker.log_status_summary()
             
             self.logger.info("=" * 80)
@@ -601,7 +602,7 @@ class CorrelationManager:
         try:
             # ใช้ MT5 โดยตรงในการตรวจสอบ hedge status
             is_hedged = self._is_position_hedged_from_mt5(group_id, original_symbol)
-            self.logger.info(f"🔍 Hedge status for {group_id}:{original_symbol} = {'HEDGED' if is_hedged else 'NOT_HEDGED'}")
+            self.logger.debug(f"🔍 Hedge status for {group_id}:{original_symbol} = {'HEDGED' if is_hedged else 'NOT_HEDGED'}")
             return is_hedged
             
         except Exception as e:
@@ -630,10 +631,10 @@ class CorrelationManager:
                     if self._is_recovery_suitable_for_symbol(original_symbol, pos.get('symbol', ''), comment):
                         # ตรวจสอบว่า recovery position ยังเปิดอยู่หรือไม่
                         if pos.get('profit') is not None:  # position ยังเปิดอยู่
-                            self.logger.info(f"✅ {original_symbol} is hedged by {pos.get('symbol')} (Order: {pos.get('ticket')})")
+                            self.logger.debug(f"✅ {original_symbol} is hedged by {pos.get('symbol')} (Order: {pos.get('ticket')})")
                             return True
             
-            self.logger.info(f"❌ {original_symbol} is NOT hedged")
+            self.logger.debug(f"❌ {original_symbol} is NOT hedged")
             return False
             
         except Exception as e:
@@ -907,7 +908,7 @@ class CorrelationManager:
             risk_per_lot = self._calculate_risk_per_lot(losing_pair)
             price_distance = self._calculate_price_distance(losing_pair)
             
-            self.logger.info(f"🔍 Checking hedging conditions for {symbol} (Order: {order_id}):")
+            self.logger.debug(f"🔍 Checking hedging conditions for {symbol} (Order: {order_id}):")
             self.logger.info(f"   PnL: ${pnl:.2f} (LOSS)")
             self.logger.info(f"   Risk: {risk_per_lot:.2%} (info only)")
             self.logger.info(f"   Distance: {price_distance:.1f} pips (need ≥10) {'✅' if price_distance >= 10 else '❌'}")
@@ -926,7 +927,7 @@ class CorrelationManager:
                                 calc_distance = abs(current_price - entry_price) * 100
                             else:
                                 calc_distance = abs(current_price - entry_price) * 10000
-                            self.logger.info(f"   🔍 Debug: Entry={entry_price:.5f}, Current={current_price:.5f}, Calc={calc_distance:.1f} pips")
+                            self.logger.debug(f"   🔍 Debug: Entry={entry_price:.5f}, Current={current_price:.5f}, Calc={calc_distance:.1f} pips")
                         break
             
             if price_distance < 10:  # ใช้แค่ Distance ≥ 10 pips
@@ -974,7 +975,7 @@ class CorrelationManager:
             symbol = position.get('symbol', '')
             if group_id and symbol:
                 status = self.hedge_tracker.get_position_status(group_id, symbol)
-                self.logger.info(f"📝 Position {group_id}:{symbol} status: {status}")
+                self.logger.debug(f"📝 Position {group_id}:{symbol} status: {status}")
             
         except Exception as e:
             self.logger.error(f"Error marking position as hedged: {e}")
@@ -1184,7 +1185,7 @@ class CorrelationManager:
             risk_per_lot = self._calculate_risk_per_lot(recovery_pair)
             price_distance = self._calculate_price_distance(recovery_pair)
             
-            self.logger.info(f"🔍 Checking hedging conditions for {symbol} (Order: {order_id}):")
+            self.logger.debug(f"🔍 Checking hedging conditions for {symbol} (Order: {order_id}):")
             self.logger.info(f"   Risk: {risk_per_lot:.2%} (info only)")
             self.logger.info(f"   Distance: {price_distance:.1f} pips (need ≥10) {'✅' if price_distance >= 10 else '❌'}")
             
@@ -1195,7 +1196,7 @@ class CorrelationManager:
             self.logger.info(f"✅ {symbol}: All conditions met - continuing recovery")
             
             # หาคู่เงินใหม่สำหรับ recovery (ไม่ซ้ำกับคู่ในกลุ่ม)
-            self.logger.info(f"🔍 Searching for correlation candidates for {symbol}")
+            self.logger.debug(f"🔍 Searching for correlation candidates for {symbol}")
             group_pairs = self._get_group_pairs_from_mt5(group_id)
             correlation_candidates = self._find_optimal_correlation_pairs(symbol, group_pairs)
             
@@ -1644,7 +1645,7 @@ class CorrelationManager:
             # ดึงคู่เงินทั้งหมดจาก MT5 จริงๆ
             all_pairs = self._get_all_currency_pairs_from_mt5()
             
-            self.logger.info(f"🔍 Using all currency pairs from MT5: {len(all_pairs)} pairs")
+            self.logger.debug(f"🔍 Using all currency pairs from MT5: {len(all_pairs)} pairs")
             
             # กำหนดคู่เงินที่ห้ามซ้ำ (คู่ในกลุ่ม arbitrage)
             if group_pairs is None:
