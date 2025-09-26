@@ -179,6 +179,58 @@ class CorrelationManager:
         
         # Load existing recovery data on startup
         self._load_recovery_data()
+        
+        # Initialize tracker with existing MT5 recovery positions
+        self._initialize_tracker_from_mt5()
+    
+    def _initialize_tracker_from_mt5(self):
+        """Initialize tracker with existing recovery positions from MT5"""
+        try:
+            all_positions = self.broker.get_all_positions()
+            initialized_count = 0
+            
+            for pos in all_positions:
+                comment = pos.get('comment', '')
+                if comment.startswith('RECOVERY_'):
+                    # Parse comment: RECOVERY_G{X}_{original_symbol}_TO_{recovery_symbol}
+                    parts = comment.split('_')
+                    if len(parts) >= 5:
+                        group_num = parts[1][1:]  # Remove 'G' prefix
+                        original_symbol = parts[2]
+                        recovery_symbol = pos.get('symbol', '')
+                        order_id = pos.get('ticket', '')
+                        
+                        group_id = f"group_triangle_{group_num}_1"
+                        
+                        # Add to tracker if not already present
+                        if self.hedge_tracker.get_position_status(group_id, original_symbol) == "AVAILABLE":
+                            success = self.hedge_tracker.lock_position(group_id, original_symbol)
+                            if success:
+                                self.hedge_tracker.activate_position(group_id, original_symbol, order_id, recovery_symbol)
+                                initialized_count += 1
+                                self.logger.info(f"🔄 Initialized tracker: {group_id}:{original_symbol} -> {recovery_symbol} (Order: {order_id})")
+            
+            if initialized_count > 0:
+                self.logger.info(f"🔄 Initialized tracker with {initialized_count} existing recovery positions")
+            else:
+                self.logger.info("🔄 No existing recovery positions found in MT5")
+                
+        except Exception as e:
+            self.logger.error(f"Error initializing tracker from MT5: {e}")
+    
+    def _debug_hedge_status(self, group_id: str, symbol: str):
+        """Debug hedge status checking"""
+        try:
+            tracker_status = self.hedge_tracker.get_position_status(group_id, symbol)
+            mt5_status = self._is_position_hedged_from_mt5(group_id, symbol)
+            
+            self.logger.debug(f"🔍 DEBUG {group_id}:{symbol}")
+            self.logger.debug(f"   Tracker Status: {tracker_status}")
+            self.logger.debug(f"   MT5 Status: {'HEDGED' if mt5_status else 'NOT_HEDGED'}")
+            self.logger.debug(f"   Final Result: {'HEDGED' if (tracker_status == 'ACTIVE' or mt5_status) else 'NOT_HEDGED'}")
+            
+        except Exception as e:
+            self.logger.error(f"Error in debug hedge status: {e}")
     
     def _log_all_groups_status(self):
         """แสดงสถานะทุก Group ในระบบ"""
@@ -469,24 +521,35 @@ class CorrelationManager:
                 
                 # แสดงไม้ทั้งหมด (ทั้งกำไรและขาดทุน)
                 for pos in arbitrage_positions:
-                    symbol = pos.get('symbol', '')
-                    pnl = pos.get('profit', 0)
-                    group_id = f"group_triangle_{group_number.replace('G', '')}_1"
-                    
-                    # สร้าง position dict ที่มี order_id
-                    position_data = {
-                        'symbol': symbol,
-                        'order_id': pos.get('ticket', ''),
-                        'profit': pnl
-                    }
-                    
-                    # ใช้ MT5 โดยตรงในการตรวจสอบ hedge status
-                    is_hedged = self._is_position_hedged_from_mt5(group_id, symbol)
-                    hedge_status = "✅ HG" if is_hedged else "❌ NH"
-                    
-                    # แสดงสถานะกำไร/ขาดทุน
-                    pnl_icon = "🟢" if pnl >= 0 else "🔴"
-                    self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} [{hedge_status}] {pnl_icon}")
+                        symbol = pos.get('symbol', '')
+                        pnl = pos.get('profit', 0)
+                        group_id = f"group_triangle_{group_number.replace('G', '')}_1"
+                        
+                        # สร้าง position dict ที่มี order_id
+                        position_data = {
+                            'symbol': symbol,
+                            'order_id': pos.get('ticket', ''),
+                            'profit': pnl
+                        }
+                        
+                        # ใช้ Professional Hedge Tracker ในการตรวจสอบ hedge status
+                        is_hedged = self._is_position_hedged(position_data, group_id)
+                        hedge_status = "✅ HG" if is_hedged else "❌ NH"
+                        
+                        # แสดงข้อมูล tracker
+                        position_info = self.hedge_tracker.get_position_info(group_id, symbol)
+                        if position_info:
+                            tracker_status = position_info.get('status', 'UNKNOWN')
+                            hedge_symbol = position_info.get('hedge_symbol', 'N/A')
+                            order_id = position_info.get('order_id', 'N/A')
+                            self.logger.info(f"     🔍 Tracker: {tracker_status} -> {hedge_symbol} (Order: {order_id})")
+                        
+                        # Add debug logging for hedge status
+                        self._debug_hedge_status(group_id, symbol)
+                            
+                        # แสดงสถานะกำไร/ขาดทุน
+                        pnl_icon = "🟢" if pnl >= 0 else "🔴"
+                        self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} [{hedge_status}] {pnl_icon}")
                 
                 # แสดงไม้ recovery ทั้งหมด (ทั้งกำไรและขาดทุน)
                 if recovery_positions:
@@ -570,31 +633,30 @@ class CorrelationManager:
             return 0.0
     
     def _is_position_hedged(self, position: Dict, group_id: str = None) -> bool:
-        """ตรวจสอบว่าตำแหน่งนี้แก้ไม้แล้วหรือยัง - ดูจาก MT5 จริงๆ"""
+        """ตรวจสอบว่าตำแหน่งนี้แก้ไม้แล้วหรือยัง"""
         try:
-            order_id = position.get('order_id')
-            symbol = position.get('symbol')
+            symbol = position.get('symbol', '')
             
-            if not order_id or not symbol or not group_id:
+            if not symbol or not group_id:
                 return False
             
-            # ดูจาก MT5 จริงๆ โดยใช้ comment pattern
-            all_positions = self.broker.get_all_positions()
-            for pos in all_positions:
-                comment = pos.get('comment', '')
-                if comment.startswith('RECOVERY_'):
-                    # ตรวจสอบว่า recovery position นี้แก้ไม้ original symbol หรือไม่
-                    if self._is_recovery_suitable_for_symbol(symbol, pos.get('symbol', ''), comment):
-                        # ตรวจสอบว่า recovery position ยังเปิดอยู่หรือไม่
-                        if pos.get('profit') is not None:  # position ยังเปิดอยู่
-                            self.logger.debug(f"✅ {symbol} is hedged by {pos.get('symbol')} (Order: {pos.get('order_id')})")
-                            return True
+            # Use ProfessionalHedgeTracker first
+            status = self.hedge_tracker.get_position_status(group_id, symbol)
+            if status == "ACTIVE":
+                self.logger.debug(f"✅ {symbol} is hedged (Tracker: {status})")
+                return True
             
-            self.logger.debug(f"❌ {symbol} is NOT hedged")
+            # Fallback: Check MT5 directly for existing recovery positions
+            mt5_hedged = self._is_position_hedged_from_mt5(group_id, symbol)
+            if mt5_hedged:
+                self.logger.debug(f"✅ {symbol} is hedged (MT5 fallback)")
+                return True
+            
+            self.logger.debug(f"❌ {symbol} is NOT hedged (Tracker: {status}, MT5: {mt5_hedged})")
             return False
             
         except Exception as e:
-            self.logger.error(f"Error checking if position is hedged: {e}")
+            self.logger.error(f"Error checking hedge status: {e}")
             return False
     
     def _check_hedge_status_from_tracking(self, group_id: str, original_symbol: str) -> bool:
@@ -618,7 +680,10 @@ class CorrelationManager:
             # หา magic number ของ group นี้
             group_magic = self._get_group_magic_number(group_id)
             if not group_magic:
+                self.logger.info(f"❌ No magic number found for {group_id}")
                 return False
+            
+            self.logger.info(f"🔍 Checking hedge status for {original_symbol} in {group_id} (Magic: {group_magic})")
             
             # หา ticket ของ original position
             original_ticket = None
@@ -629,10 +694,11 @@ class CorrelationManager:
                     break
             
             if not original_ticket:
-                self.logger.debug(f"❌ {original_symbol} not found in MT5 for {group_id}")
+                self.logger.info(f"❌ {original_symbol} not found in MT5 for {group_id} (Magic: {group_magic})")
                 return False
             
             # ตรวจสอบว่ามี recovery position ที่แก้ไม้ original_ticket หรือไม่
+            recovery_found = False
             for pos in all_positions:
                 magic = pos.get('magic', 0)
                 comment = pos.get('comment', '')
@@ -641,11 +707,17 @@ class CorrelationManager:
                 
                 # ตรวจสอบว่าเป็น recovery position ของ group นี้หรือไม่
                 if magic == group_magic and comment.startswith('RECOVERY_'):
+                    recovery_found = True
+                    self.logger.info(f"🔍 Found recovery position: {symbol} (Ticket: {ticket}, Comment: {comment})")
                     # ตรวจสอบว่า recovery position นี้แก้ไม้ original_symbol หรือไม่
                     if self._is_recovery_suitable_for_symbol(original_symbol, pos.get('symbol', ''), comment):
                         # ตรวจสอบว่า recovery position ยังเปิดอยู่หรือไม่
                         if pos.get('profit') is not None:  # position ยังเปิดอยู่
+                            self.logger.info(f"✅ {original_symbol} is hedged by {symbol} (Ticket: {ticket})")
                             return True
+            
+            if not recovery_found:
+                self.logger.info(f"❌ No recovery positions found for {group_id} (Magic: {group_magic})")
             return False
             
         except Exception as e:
@@ -802,11 +874,15 @@ class CorrelationManager:
                 if len(parts) == 2:
                     original_part = parts[0]  # RECOVERY_G6_EURUSD
                     if original_symbol in original_part:
+                        self.logger.info(f"✅ Recovery suitable: {original_symbol} -> {recovery_symbol} (new format)")
                         return True
             else:
                 # รูปแบบเก่า: RECOVERY_G6_EURUSD
                 if original_symbol in comment:
+                    self.logger.info(f"✅ Recovery suitable: {original_symbol} -> {recovery_symbol} (old format)")
                     return True
+            
+            self.logger.info(f"❌ Recovery not suitable: {original_symbol} -> {recovery_symbol} (comment: {comment})")
             return False
             
         except Exception as e:
@@ -2051,7 +2127,7 @@ class CorrelationManager:
                 self.logger.info(f"✅ Recovery position {symbol} was already closed - updated status")
                 return 0.0
                 
-            # ปิดออเดอร์
+                # ปิดออเดอร์
             success = self.broker.close_position(symbol)
                 
             if success:
