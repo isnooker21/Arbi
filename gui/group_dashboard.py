@@ -25,13 +25,7 @@ class GroupDashboard:
         # Header
         self.create_header()
         
-        # Groups grid
-        self.create_groups_grid()
-        
-        # Summary panel
-        self.create_summary_panel()
-        
-        # Positions status panel
+        # Positions status panel (แสดงแทน groups grid)
         self.create_positions_status_panel()
     
     def create_header(self):
@@ -42,7 +36,7 @@ class GroupDashboard:
         # Title
         title_label = tk.Label(
             header_frame,
-            text="📊 Group Status Dashboard",
+            text="📊 Positions Status Dashboard",
             font=TradingTheme.FONTS['title'],
             bg=TradingTheme.COLORS['secondary_bg'],
             fg=TradingTheme.COLORS['text_primary']
@@ -403,8 +397,8 @@ class GroupDashboard:
         # Create scrollable text widget for positions status
         self.positions_text = scrolledtext.ScrolledText(
             self.positions_status_frame,
-            height=15,
-            font=('Consolas', 10),
+            height=25,
+            font=('Consolas', 9),
             bg=TradingTheme.COLORS['primary_bg'],
             fg=TradingTheme.COLORS['text_primary'],
             insertbackground=TradingTheme.COLORS['text_primary'],
