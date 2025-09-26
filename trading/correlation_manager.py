@@ -208,15 +208,15 @@ class CorrelationManager:
                             if success:
                                 self.hedge_tracker.activate_position(group_id, original_symbol, order_id, recovery_symbol)
                                 initialized_count += 1
-                                self.logger.info(f"🔄 Initialized tracker: {group_id}:{original_symbol} -> {recovery_symbol} (Order: {order_id})")
+                                self.logger.debug(f"🔄 Initialized tracker: {group_id}:{original_symbol} -> {recovery_symbol} (Order: {order_id})")
             
             if initialized_count > 0:
                 self.logger.info(f"🔄 Initialized tracker with {initialized_count} existing recovery positions")
             else:
-                self.logger.info("🔄 No existing recovery positions found in MT5")
+                self.logger.debug("🔄 No existing recovery positions found in MT5")
                 
         except Exception as e:
-            self.logger.error(f"Error initializing tracker from MT5: {e}")
+            self.logger.debug(f"Error initializing tracker from MT5: {e}")
     
     def _debug_hedge_status(self, group_id: str, symbol: str):
         """Debug hedge status checking"""
@@ -224,13 +224,12 @@ class CorrelationManager:
             tracker_status = self.hedge_tracker.get_position_status(group_id, symbol)
             mt5_status = self._is_position_hedged_from_mt5(group_id, symbol)
             
-            self.logger.debug(f"🔍 DEBUG {group_id}:{symbol}")
-            self.logger.debug(f"   Tracker Status: {tracker_status}")
-            self.logger.debug(f"   MT5 Status: {'HEDGED' if mt5_status else 'NOT_HEDGED'}")
-            self.logger.debug(f"   Final Result: {'HEDGED' if (tracker_status == 'ACTIVE' or mt5_status) else 'NOT_HEDGED'}")
+            # Only log debug info if there's an issue
+            if tracker_status != "ACTIVE" and not mt5_status:
+                self.logger.debug(f"🔍 DEBUG {group_id}:{symbol} - Tracker: {tracker_status}, MT5: {'HEDGED' if mt5_status else 'NOT_HEDGED'}")
             
         except Exception as e:
-            self.logger.error(f"Error in debug hedge status: {e}")
+            self.logger.debug(f"Error in debug hedge status: {e}")
     
     def _log_all_groups_status(self):
         """แสดงสถานะทุก Group ในระบบ"""
@@ -320,7 +319,7 @@ class CorrelationManager:
             self.logger.info("=" * 80)
             
         except Exception as e:
-            self.logger.error(f"Error logging all groups status: {e}")
+            self.logger.debug(f"Error logging all groups status: {e}")
         
     def start_chain_recovery(self, group_id: str, losing_pairs: List[Dict]):
         """เริ่ม chain recovery สำหรับกลุ่มที่ขาดทุน"""
@@ -353,13 +352,13 @@ class CorrelationManager:
             # เลือกคู่ที่เหมาะสมที่สุดสำหรับ recovery (แค่คู่เดียว)
             best_pair = self._select_best_pair_for_recovery(losing_pairs, group_id)
             if best_pair:
-                self.logger.info(f"🎯 Selected best pair for recovery: {best_pair['symbol']} (Order: {best_pair['order_id']})")
+                self.logger.debug(f"🎯 Selected best pair for recovery: {best_pair['symbol']} (Order: {best_pair['order_id']})")
                 self._start_pair_recovery(group_id, best_pair)
             else:
-                self.logger.info("❌ No suitable pair found for recovery")
+                self.logger.debug("❌ No suitable pair found for recovery")
                 
         except Exception as e:
-            self.logger.error(f"Error starting chain recovery: {e}")
+            self.logger.debug(f"Error starting chain recovery: {e}")
     
     def _select_best_pair_for_recovery(self, losing_pairs: List[Dict], group_id: str = None) -> Dict:
         """เลือกคู่ที่เหมาะสมที่สุดสำหรับ recovery (แค่คู่เดียว)"""
@@ -536,15 +535,15 @@ class CorrelationManager:
                         is_hedged = self._is_position_hedged(position_data, group_id)
                         hedge_status = "✅ HG" if is_hedged else "❌ NH"
                         
-                        # แสดงข้อมูล tracker
+                        # แสดงข้อมูล tracker เฉพาะเมื่อมีปัญหา
                         position_info = self.hedge_tracker.get_position_info(group_id, symbol)
-                        if position_info:
+                        if position_info and position_info.get('status') != 'AVAILABLE':
                             tracker_status = position_info.get('status', 'UNKNOWN')
                             hedge_symbol = position_info.get('hedge_symbol', 'N/A')
                             order_id = position_info.get('order_id', 'N/A')
-                            self.logger.info(f"     🔍 Tracker: {tracker_status} -> {hedge_symbol} (Order: {order_id})")
+                            self.logger.debug(f"     🔍 Tracker: {tracker_status} -> {hedge_symbol} (Order: {order_id})")
                         
-                        # Add debug logging for hedge status
+                        # Add debug logging for hedge status only when needed
                         self._debug_hedge_status(group_id, symbol)
                             
                         # แสดงสถานะกำไร/ขาดทุน
@@ -568,7 +567,7 @@ class CorrelationManager:
             self.logger.info("=" * 80)
             
         except Exception as e:
-            self.logger.error(f"Error logging all groups status: {e}")
+            self.logger.debug(f"Error logging all groups status: {e}")
     
     def _find_recovery_for_position(self, arbitrage_position: Dict, recovery_positions: List[Dict]) -> Dict:
         """หา recovery position ที่แก้ไม้ arbitrage position นี้"""
@@ -643,20 +642,17 @@ class CorrelationManager:
             # Use ProfessionalHedgeTracker first
             status = self.hedge_tracker.get_position_status(group_id, symbol)
             if status == "ACTIVE":
-                self.logger.debug(f"✅ {symbol} is hedged (Tracker: {status})")
                 return True
             
             # Fallback: Check MT5 directly for existing recovery positions
             mt5_hedged = self._is_position_hedged_from_mt5(group_id, symbol)
             if mt5_hedged:
-                self.logger.debug(f"✅ {symbol} is hedged (MT5 fallback)")
                 return True
             
-            self.logger.debug(f"❌ {symbol} is NOT hedged (Tracker: {status}, MT5: {mt5_hedged})")
             return False
             
         except Exception as e:
-            self.logger.error(f"Error checking hedge status: {e}")
+            self.logger.debug(f"Error checking hedge status: {e}")
             return False
     
     def _check_hedge_status_from_tracking(self, group_id: str, original_symbol: str) -> bool:
@@ -680,10 +676,9 @@ class CorrelationManager:
             # หา magic number ของ group นี้
             group_magic = self._get_group_magic_number(group_id)
             if not group_magic:
-                self.logger.info(f"❌ No magic number found for {group_id}")
+                self.logger.debug(f"❌ No magic number found for {group_id}")
                 return False
             
-            self.logger.info(f"🔍 Checking hedge status for {original_symbol} in {group_id} (Magic: {group_magic})")
             
             # หา ticket ของ original position
             original_ticket = None
@@ -694,7 +689,6 @@ class CorrelationManager:
                     break
             
             if not original_ticket:
-                self.logger.info(f"❌ {original_symbol} not found in MT5 for {group_id} (Magic: {group_magic})")
                 return False
             
             # ตรวจสอบว่ามี recovery position ที่แก้ไม้ original_ticket หรือไม่
@@ -708,20 +702,20 @@ class CorrelationManager:
                 # ตรวจสอบว่าเป็น recovery position ของ group นี้หรือไม่
                 if magic == group_magic and comment.startswith('RECOVERY_'):
                     recovery_found = True
-                    self.logger.info(f"🔍 Found recovery position: {symbol} (Ticket: {ticket}, Comment: {comment})")
+                    self.logger.debug(f"🔍 Found recovery position: {symbol} (Ticket: {ticket}, Comment: {comment})")
                     # ตรวจสอบว่า recovery position นี้แก้ไม้ original_symbol หรือไม่
                     if self._is_recovery_suitable_for_symbol(original_symbol, pos.get('symbol', ''), comment):
                         # ตรวจสอบว่า recovery position ยังเปิดอยู่หรือไม่
                         if pos.get('profit') is not None:  # position ยังเปิดอยู่
-                            self.logger.info(f"✅ {original_symbol} is hedged by {symbol} (Ticket: {ticket})")
+                            self.logger.debug(f"✅ {original_symbol} is hedged by {symbol} (Ticket: {ticket})")
                             return True
             
             if not recovery_found:
-                self.logger.info(f"❌ No recovery positions found for {group_id} (Magic: {group_magic})")
+                self.logger.debug(f"❌ No recovery positions found for {group_id} (Magic: {group_magic})")
             return False
             
         except Exception as e:
-            self.logger.error(f"Error checking if position is hedged from MT5: {e}")
+            self.logger.debug(f"Error checking if position is hedged from MT5: {e}")
             return False
     
     def _get_group_magic_number(self, group_id: str) -> int:
@@ -1014,7 +1008,7 @@ class CorrelationManager:
                         break
             
             if price_distance < 10:  # ใช้แค่ Distance ≥ 10 pips
-                self.logger.info(f"⏳ {symbol}: Distance too small ({price_distance:.1f} pips) - waiting for 10 pips")
+                self.logger.debug(f"⏳ {symbol}: Distance too small ({price_distance:.1f} pips) - waiting for 10 pips")
                 return
             
             self.logger.info(f"✅ {symbol}: All conditions met - starting recovery")
@@ -1024,7 +1018,7 @@ class CorrelationManager:
             correlation_candidates = self._find_optimal_correlation_pairs(symbol, group_pairs)
             
             if not correlation_candidates:
-                self.logger.warning(f"   No correlation candidates found for {symbol}")
+                self.logger.debug(f"   No correlation candidates found for {symbol}")
                 return
             
             # เลือกคู่เงินที่ดีที่สุด
@@ -1142,14 +1136,14 @@ class CorrelationManager:
             )
             
             if result and result.get('retcode') == 10009:
-                self.logger.info(f"✅ Recovery order sent: {symbol} {lot_size} lot")
+                self.logger.debug(f"✅ Recovery order sent: {symbol} {lot_size} lot")
                 return True
             else:
-                self.logger.error(f"❌ Failed to send recovery order: {symbol}")
+                self.logger.debug(f"❌ Failed to send recovery order: {symbol}")
                 return False
                 
         except Exception as e:
-            self.logger.error(f"Error sending hedge order: {e}")
+            self.logger.debug(f"Error sending hedge order: {e}")
             return False
     
     def check_recovery_chain(self):
@@ -1182,7 +1176,7 @@ class CorrelationManager:
                 self.logger.debug(f"📊 Active recovery chains: {active_chains}")
                         
         except Exception as e:
-            self.logger.error(f"Error checking recovery chain: {e}")
+            self.logger.debug(f"Error checking recovery chain: {e}")
     
     def _should_continue_recovery(self, recovery_pair: Dict) -> bool:
         """ตรวจสอบว่าควรดำเนินการ recovery ต่อหรือไม่ - ใช้เงื่อนไขเดียวกับ arbitrage"""
@@ -1273,18 +1267,18 @@ class CorrelationManager:
             self.logger.info(f"   Distance: {price_distance:.1f} pips (need ≥10) {'✅' if price_distance >= 10 else '❌'}")
             
             if price_distance < 10:  # ใช้แค่ Distance ≥ 10 pips
-                self.logger.info(f"⏳ {symbol}: Distance too small ({price_distance:.1f} pips) - waiting for 10 pips")
+                self.logger.debug(f"⏳ {symbol}: Distance too small ({price_distance:.1f} pips) - waiting for 10 pips")
                 return
             
-            self.logger.info(f"✅ {symbol}: All conditions met - continuing recovery")
+            self.logger.debug(f"✅ {symbol}: All conditions met - continuing recovery")
             
             # หาคู่เงินใหม่สำหรับ recovery (ไม่ซ้ำกับคู่ในกลุ่ม)
-            self.logger.debug(f"🔍 Searching for correlation candidates for {symbol}")
+            # self.logger.debug(f"🔍 Searching for correlation candidates for {symbol}")
             group_pairs = self._get_group_pairs_from_mt5(group_id)
             correlation_candidates = self._find_optimal_correlation_pairs(symbol, group_pairs)
             
             if not correlation_candidates:
-                self.logger.warning(f"❌ No correlation candidates found for {symbol}")
+                self.logger.debug(f"❌ No correlation candidates found for {symbol}")
                 return
             
             # เลือกคู่เงินที่ดีที่สุด
@@ -1304,12 +1298,12 @@ class CorrelationManager:
             if success:
                 # บันทึกว่าไม้นี้แก้แล้ว
                 self._mark_position_as_hedged(recovery_pair, group_id)
-                self.logger.info(f"✅ Chain recovery continued for {symbol} -> {best_correlation['symbol']}")
+                self.logger.debug(f"✅ Chain recovery continued for {symbol} -> {best_correlation['symbol']}")
             else:
-                self.logger.error(f"❌ Failed to continue chain recovery for {symbol} -> {best_correlation['symbol']}")
+                self.logger.debug(f"❌ Failed to continue chain recovery for {symbol} -> {best_correlation['symbol']}")
                 
         except Exception as e:
-            self.logger.error(f"Error continuing recovery chain: {e}")
+            self.logger.debug(f"Error continuing recovery chain: {e}")
     
     def update_recovery_parameters(self, params: Dict):
         """อัพเดทพารามิเตอร์ recovery"""
@@ -1339,7 +1333,7 @@ class CorrelationManager:
                     self.logger.debug(f"Parameter {key} not found in recovery_thresholds or account info")
                     
         except Exception as e:
-            self.logger.error(f"Error updating recovery parameters: {e}")
+            self.logger.debug(f"Error updating recovery parameters: {e}")
     
     def check_recovery_opportunities(self):
         """ตรวจสอบโอกาสการ recovery"""
@@ -1352,20 +1346,20 @@ class CorrelationManager:
                         self._continue_recovery_chain(position['group_id'], position)
                         
         except Exception as e:
-            self.logger.error(f"Error checking recovery opportunities: {e}")
+            self.logger.debug(f"Error checking recovery opportunities: {e}")
     
     def _initiate_correlation_recovery(self, losing_position: Dict):
         """เริ่ม correlation recovery"""
         try:
             symbol = losing_position['symbol']
-            self.logger.info(f"🔄 Starting correlation recovery for {symbol}")
+            self.logger.debug(f"🔄 Starting correlation recovery for {symbol}")
             
             # หาคู่เงินที่เหมาะสมสำหรับ recovery (ไม่ซ้ำกับคู่ในกลุ่ม)
             group_pairs = self._get_group_pairs_from_mt5(losing_position.get('group_id', 'unknown'))
             correlation_candidates = self._find_optimal_correlation_pairs(symbol, group_pairs)
             
             if not correlation_candidates:
-                self.logger.warning(f"   No correlation candidates found for {symbol}")
+                self.logger.debug(f"   No correlation candidates found for {symbol}")
                 return
             
             # เลือกคู่เงินที่ดีที่สุด
@@ -1385,12 +1379,12 @@ class CorrelationManager:
             if success:
                 # บันทึกว่าไม้นี้แก้แล้ว
                 self._mark_position_as_hedged(losing_position, losing_position.get('group_id', 'unknown'))
-                self.logger.info(f"✅ Correlation recovery position opened: {best_correlation['symbol']}")
+                self.logger.debug(f"✅ Correlation recovery position opened: {best_correlation['symbol']}")
             else:
-                self.logger.error(f"❌ Failed to open correlation recovery position: {best_correlation['symbol']}")
+                self.logger.debug(f"❌ Failed to open correlation recovery position: {best_correlation['symbol']}")
                 
         except Exception as e:
-            self.logger.error(f"Error initiating correlation recovery: {e}")
+            self.logger.debug(f"Error initiating correlation recovery: {e}")
     
     def _find_optimal_correlation_pairs(self, base_symbol: str, group_pairs: List[str] = None) -> List[Dict]:
         """
@@ -1402,7 +1396,7 @@ class CorrelationManager:
             return self._find_correlation_pairs_for_any_symbol(base_symbol, group_pairs)
             
         except Exception as e:
-            self.logger.error(f"Error finding optimal correlation pairs for {base_symbol}: {e}")
+            self.logger.debug(f"Error finding optimal correlation pairs for {base_symbol}: {e}")
             return []
     
     def _is_currency_pair(self, symbol: str) -> bool:
@@ -1511,7 +1505,7 @@ class CorrelationManager:
             return 0.50  # Default correlation
             
         except Exception as e:
-            self.logger.error(f"Error calculating correlation: {e}")
+            self.logger.debug(f"Error calculating correlation: {e}")
             return 0.50
     
     def _calculate_correlation_for_any_pair(self, base_symbol: str, target_symbol: str) -> float:
@@ -1521,7 +1515,7 @@ class CorrelationManager:
             return self._calculate_real_correlation_from_mt5(base_symbol, target_symbol)
             
         except Exception as e:
-            self.logger.error(f"Error calculating correlation for any pair: {e}")
+            self.logger.debug(f"Error calculating correlation for any pair: {e}")
             return 0.60
     
     def _calculate_real_correlation_from_mt5(self, base_symbol: str, target_symbol: str) -> float:
@@ -1545,7 +1539,7 @@ class CorrelationManager:
             return correlation
                 
         except Exception as e:
-            self.logger.error(f"Error calculating real correlation from MT5: {e}")
+            self.logger.debug(f"Error calculating real correlation from MT5: {e}")
             return self._calculate_dynamic_correlation(base_symbol, target_symbol)
     
     def _calculate_dynamic_correlation(self, base_symbol: str, target_symbol: str) -> float:
@@ -1561,7 +1555,7 @@ class CorrelationManager:
             return correlation
             
         except Exception as e:
-            self.logger.error(f"Error calculating dynamic correlation: {e}")
+            self.logger.debug(f"Error calculating dynamic correlation: {e}")
             return 0.60
     
     def _analyze_currency_relationship(self, base1: str, base2: str, target1: str, target2: str) -> float:
@@ -1685,7 +1679,7 @@ class CorrelationManager:
             return correlation < -0.5  # Negative correlation
             
         except Exception as e:
-            self.logger.error(f"Error checking negative correlation: {e}")
+            self.logger.debug(f"Error checking negative correlation: {e}")
             return False
     
     def _is_positive_correlation(self, base_symbol: str, target_symbol: str) -> bool:
@@ -1695,7 +1689,7 @@ class CorrelationManager:
             return correlation > 0.5  # Positive correlation
             
         except Exception as e:
-            self.logger.error(f"Error checking positive correlation: {e}")
+            self.logger.debug(f"Error checking positive correlation: {e}")
             return False
     
     def _determine_recovery_direction(self, base_symbol: str, target_symbol: str, correlation: float, original_position: Dict = None) -> str:
@@ -1717,7 +1711,7 @@ class CorrelationManager:
                 return 'SELL'
                 
         except Exception as e:
-            self.logger.error(f"Error determining recovery direction: {e}")
+            self.logger.debug(f"Error determining recovery direction: {e}")
             return 'SELL'  # Default to SELL
     
     def _find_correlation_pairs_for_any_symbol(self, base_symbol: str, group_pairs: List[str] = None) -> List[Dict]:
@@ -1772,16 +1766,16 @@ class CorrelationManager:
             correlation_candidates.sort(key=lambda x: x['recovery_strength'], reverse=True)
             
             if not correlation_candidates:
-                self.logger.error(f"❌ No correlation candidates created for {base_symbol}")
+                self.logger.debug(f"❌ No correlation candidates created for {base_symbol}")
             else:
-                self.logger.info(f"🎯 Final correlation candidates for {base_symbol}: {len(correlation_candidates)} pairs")
+                self.logger.debug(f"🎯 Final correlation candidates for {base_symbol}: {len(correlation_candidates)} pairs")
                 for i, candidate in enumerate(correlation_candidates[:5]):  # แสดง 5 อันดับแรก
-                    self.logger.info(f"   {i+1}. {candidate['symbol']}: {candidate['correlation']:.2f} ({candidate['direction']})")
+                    self.logger.debug(f"   {i+1}. {candidate['symbol']}: {candidate['correlation']:.2f} ({candidate['direction']})")
             
             return correlation_candidates
             
         except Exception as e:
-            self.logger.error(f"Error finding correlation pairs for any symbol: {e}")
+            self.logger.debug(f"Error finding correlation pairs for any symbol: {e}")
             return []
     
     def _execute_correlation_position(self, original_position: Dict, correlation_candidate: Dict, group_id: str) -> bool:
@@ -1870,19 +1864,19 @@ class CorrelationManager:
                 # บันทึกข้อมูลการแก้ไม้
                 self._log_hedging_action(original_position, correlation_position, correlation_candidate, group_id)
                 
-                self.logger.info(f"✅ Correlation recovery position opened: {symbol}")
+                self.logger.debug(f"✅ Correlation recovery position opened: {symbol}")
                 return True
             else:
                 # ❌ STEP 3: Reset position if order failed
                 self.hedge_tracker.reset_position(group_id, original_symbol)
-                self.logger.error(f"❌ Failed to open correlation recovery position: {symbol}")
+                self.logger.debug(f"❌ Failed to open correlation recovery position: {symbol}")
                 return False
                 
         except Exception as e:
             # ❌ STEP 4: Reset position on any error
             original_symbol = original_position.get('symbol', '')
             self.hedge_tracker.reset_position(group_id, original_symbol)
-            self.logger.error(f"Error executing correlation position: {e}")
+            self.logger.debug(f"Error executing correlation position: {e}")
             return False
     
     def _log_hedging_action(self, original_position: Dict, correlation_position: Dict, correlation_candidate: Dict, group_id: str = None):
@@ -1921,7 +1915,7 @@ class CorrelationManager:
             self.logger.info("=" * 60)
             
         except Exception as e:
-            self.logger.error(f"Error logging hedging action: {e}")
+            self.logger.debug(f"Error logging hedging action: {e}")
     
     def _calculate_hedge_volume(self, original_position: Dict, correlation_candidate: Dict) -> float:
         """คำนวณขนาด volume สำหรับ correlation position - ใช้ balance-based sizing"""
@@ -1943,7 +1937,7 @@ class CorrelationManager:
             return float(volume)
             
         except Exception as e:
-            self.logger.error(f"Error calculating hedge volume: {e}")
+            self.logger.debug(f"Error calculating hedge volume: {e}")
             return 0.1
     
     def _send_correlation_order(self, symbol: str, lot_size: float, group_id: str, original_position: Dict = None) -> Dict:
@@ -2009,7 +2003,7 @@ class CorrelationManager:
                 }
                 
         except Exception as e:
-            self.logger.error(f"Error sending correlation recovery order: {e}")
+            self.logger.debug(f"Error sending correlation recovery order: {e}")
             return {
                 'success': False,
                 'order_id': None,
@@ -2055,7 +2049,7 @@ class CorrelationManager:
                     
                     # ตรวจสอบว่าต้องการ recovery เพิ่มหรือไม่
                     if self._should_continue_recovery(position):
-                        self.logger.info(f"🔄 Starting chain recovery for {position['symbol']}")
+                        self.logger.debug(f"🔄 Starting chain recovery for {position['symbol']}")
                         self._continue_recovery_chain(position['group_id'], position)
                     # ไม่แสดง log ถ้าไม่พร้อม recovery เพื่อลด log spam
             
@@ -2063,7 +2057,7 @@ class CorrelationManager:
             for recovery_id in positions_to_remove:
                 if recovery_id in self.recovery_positions:
                     del self.recovery_positions[recovery_id]
-                    self.logger.info(f"🗑️ Removed orphaned recovery position: {recovery_id}")
+                    self.logger.debug(f"🗑️ Removed orphaned recovery position: {recovery_id}")
             
             # แสดง log เฉพาะเมื่อมี recovery positions และมีการเปลี่ยนแปลง
             if active_recovery_count > 0:
@@ -2124,10 +2118,10 @@ class CorrelationManager:
                 position['closed_at'] = datetime.now()
                 position['close_reason'] = 'already_closed'
                 self._update_recovery_data()
-                self.logger.info(f"✅ Recovery position {symbol} was already closed - updated status")
+                self.logger.debug(f"✅ Recovery position {symbol} was already closed - updated status")
                 return 0.0
                 
-                # ปิดออเดอร์
+            # ปิดออเดอร์
             success = self.broker.close_position(symbol)
                 
             if success:
@@ -2135,14 +2129,14 @@ class CorrelationManager:
                 position['closed_at'] = datetime.now()
                 position['close_reason'] = 'manual_close'
                 self._update_recovery_data()
-                self.logger.info(f"✅ Recovery position closed: {symbol} - PnL: ${pnl:.2f}")
+                self.logger.debug(f"✅ Recovery position closed: {symbol} - PnL: ${pnl:.2f}")
                 return pnl
             else:
-                self.logger.error(f"❌ Failed to close recovery position: {symbol}")
+                self.logger.debug(f"❌ Failed to close recovery position: {symbol}")
                 return 0.0
                     
         except Exception as e:
-            self.logger.error(f"Error closing recovery position: {e}")
+            self.logger.debug(f"Error closing recovery position: {e}")
             return 0.0
     
     def get_correlation_matrix(self) -> Dict:
@@ -2167,12 +2161,12 @@ class CorrelationManager:
                     position['closed_at'] = datetime.now()
                     position['close_reason'] = reason
                     self._update_recovery_data()
-                    self.logger.info(f"✅ Recovery position closed: {position['symbol']} (reason: {reason})")
+                    self.logger.debug(f"✅ Recovery position closed: {position['symbol']} (reason: {reason})")
                 else:
-                    self.logger.error(f"❌ Failed to close recovery position: {position['symbol']}")
+                    self.logger.debug(f"❌ Failed to close recovery position: {position['symbol']}")
                     
         except Exception as e:
-            self.logger.error(f"Error closing recovery position: {e}")
+            self.logger.debug(f"Error closing recovery position: {e}")
     
     def get_correlation_performance(self) -> Dict:
         """Get correlation performance metrics"""
@@ -2215,7 +2209,7 @@ class CorrelationManager:
             self.logger.debug(f"💾 Saved {len(self.recovery_positions)} recovery positions to {self.persistence_file}")
             
         except Exception as e:
-            self.logger.error(f"Error saving recovery data: {e}")
+            self.logger.debug(f"Error saving recovery data: {e}")
     
     def _load_recovery_data(self):
         """โหลดข้อมูล recovery positions และ chains จากไฟล์"""
@@ -2255,7 +2249,7 @@ class CorrelationManager:
                 self.logger.debug("No recovery data found in persistence file")
                 
         except Exception as e:
-            self.logger.error(f"Error loading recovery data: {e}")
+            self.logger.debug(f"Error loading recovery data: {e}")
             # เริ่มต้นใหม่ถ้าโหลดไม่ได้
             self.recovery_positions = {}
             self.recovery_chains = {}
@@ -2273,7 +2267,7 @@ class CorrelationManager:
         try:
             self._save_recovery_data()
         except Exception as e:
-            self.logger.error(f"Error updating recovery data: {e}")
+            self.logger.debug(f"Error updating recovery data: {e}")
     
     def _remove_recovery_data(self, recovery_id: str):
         """ลบข้อมูล recovery และบันทึกลงไฟล์"""
@@ -2282,7 +2276,7 @@ class CorrelationManager:
                 del self.recovery_positions[recovery_id]
             self._save_recovery_data()
         except Exception as e:
-            self.logger.error(f"Error removing recovery data: {e}")
+            self.logger.debug(f"Error removing recovery data: {e}")
     
     def clear_hedged_data_for_group(self, group_id: str):
         """ล้างข้อมูลการแก้ไม้สำหรับกลุ่มที่ปิดแล้ว (รองรับการแยกตาม Group)"""
@@ -2310,7 +2304,7 @@ class CorrelationManager:
             self.hedge_tracker.log_status_summary()
             
         except Exception as e:
-            self.logger.error(f"Error clearing hedged data for group {group_id}: {e}")
+            self.logger.debug(f"Error clearing hedged data for group {group_id}: {e}")
     
     def cleanup_closed_recovery_positions(self):
         """ทำความสะอาด recovery positions ที่ปิดไปแล้วและไม้ซ้ำ"""
@@ -2363,7 +2357,7 @@ class CorrelationManager:
                 self._update_recovery_data()
             
         except Exception as e:
-            self.logger.error(f"Error cleaning up closed recovery positions: {e}")
+            self.logger.debug(f"Error cleaning up closed recovery positions: {e}")
     
     def get_hedging_status(self) -> Dict:
         """ดึงสถานะการแก้ไม้ทั้งหมด"""
@@ -2374,14 +2368,14 @@ class CorrelationManager:
                 'hedged_groups': self.hedged_groups
             }
         except Exception as e:
-            self.logger.error(f"Error getting hedging status: {e}")
+            self.logger.debug(f"Error getting hedging status: {e}")
             return {}
     
     def log_recovery_positions_summary(self):
         """แสดงสรุปสถานะ recovery positions"""
         try:
             if not self.recovery_positions:
-                self.logger.info("📊 No recovery positions found")
+                self.logger.debug("📊 No recovery positions found")
                 return
             
             active_count = 0
@@ -2403,7 +2397,7 @@ class CorrelationManager:
             self.logger.info("=" * 60)
             
         except Exception as e:
-            self.logger.error(f"Error logging recovery positions summary: {e}")
+            self.logger.debug(f"Error logging recovery positions summary: {e}")
     
     def stop(self):
         """หยุดการทำงานของ Correlation Manager"""
@@ -2413,4 +2407,4 @@ class CorrelationManager:
             self._save_recovery_data()
             self.logger.info("🛑 Correlation Manager stopped")
         except Exception as e:
-            self.logger.error(f"Error stopping Correlation Manager: {e}")
+            self.logger.debug(f"Error stopping Correlation Manager: {e}")
