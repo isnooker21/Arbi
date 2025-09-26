@@ -678,8 +678,22 @@ class MainWindow:
                             break
                     
                     if group_data:
+                        # Get positions data for this group
+                        positions_data = self.get_positions_status_data()
+                        group_positions = positions_data.get('groups', {}).get(f'group_triangle_{triangle_id.split("_")[1]}_1', {})
+                        
+                        # Merge group data with positions data
+                        enhanced_group_data = {
+                            **group_data,
+                            'profit_arbitrage': group_positions.get('profit_arbitrage', []),
+                            'losing_arbitrage': group_positions.get('losing_arbitrage', []),
+                            'profit_correlation': group_positions.get('profit_correlation', []),
+                            'losing_correlation': group_positions.get('losing_correlation', []),
+                            'existing_correlation': group_positions.get('existing_correlation', [])
+                        }
+                        
                         # Update group status
-                        self.group_dashboard.update_group_status(triangle_id, group_data)
+                        self.group_dashboard.update_group_status(triangle_id, enhanced_group_data)
                         self.log_message(f"✅ Updated {triangle_id}: {group_data.get('group_id', 'Unknown')}")
                     else:
                         # No active group for this triangle
@@ -688,7 +702,12 @@ class MainWindow:
                             'group_id': 'None',
                             'total_pnl': 0.0,
                             'positions': [],
-                            'recovery_chain': []
+                            'recovery_chain': [],
+                            'profit_arbitrage': [],
+                            'losing_arbitrage': [],
+                            'profit_correlation': [],
+                            'losing_correlation': [],
+                            'existing_correlation': []
                         }
                         self.group_dashboard.update_group_status(triangle_id, empty_data)
             else:

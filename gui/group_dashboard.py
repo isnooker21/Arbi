@@ -25,8 +25,11 @@ class GroupDashboard:
         # Header
         self.create_header()
         
-        # Positions status panel (แสดงแทน groups grid)
-        self.create_positions_status_panel()
+        # Groups grid with positions status
+        self.create_groups_grid()
+        
+        # Summary panel
+        self.create_summary_panel()
     
     def create_header(self):
         """สร้าง header"""
@@ -36,7 +39,7 @@ class GroupDashboard:
         # Title
         title_label = tk.Label(
             header_frame,
-            text="📊 Positions Status Dashboard",
+            text="📊 Group Status Dashboard",
             font=TradingTheme.FONTS['title'],
             bg=TradingTheme.COLORS['secondary_bg'],
             fg=TradingTheme.COLORS['text_primary']
@@ -233,6 +236,24 @@ class GroupDashboard:
         recovery_label.pack(anchor='w', pady=(TradingTheme.SPACING['xs'], 0))
         self.recovery_labels[triangle_id] = recovery_label
         
+        # Positions status text area
+        if not hasattr(self, 'positions_text_areas'):
+            self.positions_text_areas = {}
+        
+        positions_text = scrolledtext.ScrolledText(
+            content_frame,
+            height=8,
+            font=('Consolas', 8),
+            bg=TradingTheme.COLORS['secondary_bg'],
+            fg=TradingTheme.COLORS['text_primary'],
+            insertbackground=TradingTheme.COLORS['text_primary'],
+            selectbackground=TradingTheme.COLORS['accent_bg'],
+            state='disabled',
+            wrap='none'
+        )
+        positions_text.pack(fill='both', expand=True, pady=(TradingTheme.SPACING['sm'], 0))
+        self.positions_text_areas[triangle_id] = positions_text
+        
         # Last update
         if not hasattr(self, 'last_update_labels'):
             self.last_update_labels = {}
@@ -345,6 +366,17 @@ class GroupDashboard:
         if triangle_id in self.last_update_labels:
             last_update = datetime.now().strftime("%H:%M:%S")
             self.last_update_labels[triangle_id].config(text=f"Last: {last_update}")
+        
+        # Update positions status text area
+        if hasattr(self, 'positions_text_areas') and triangle_id in self.positions_text_areas:
+            positions_text = self.positions_text_areas[triangle_id]
+            positions_text.config(state='normal')
+            positions_text.delete(1.0, tk.END)
+            
+            # Format positions data for this group
+            positions_data = self.format_group_positions_status(group_data)
+            positions_text.insert(tk.END, positions_data)
+            positions_text.config(state='disabled')
     
     def update_summary(self, groups_data):
         """อัปเดต summary"""
@@ -528,5 +560,71 @@ class GroupDashboard:
                 output.append("🔄 EXISTING CORRELATION POSITIONS: None\n")
             
             output.append("\n" + "=" * 100 + "\n")
+        
+        return ''.join(output)
+    
+    def format_group_positions_status(self, group_data):
+        """จัดรูปแบบข้อมูลสถานะไม้สำหรับแต่ละ Group"""
+        output = []
+        
+        # Profit Arbitrage Positions
+        profit_arbitrage = group_data.get('profit_arbitrage', [])
+        if profit_arbitrage:
+            output.append("🟢 PROFIT ARBITRAGE:\n")
+            for i, pos in enumerate(profit_arbitrage, 1):
+                symbol = pos.get('symbol', 'Unknown')
+                order_id = pos.get('order_id', 'N/A')
+                pnl = pos.get('pnl', 0)
+                output.append(f"  {i}. {symbol} (${pnl:.2f})\n")
+        else:
+            output.append("🟢 PROFIT ARBITRAGE: None\n")
+        
+        output.append("\n")
+        
+        # Losing Arbitrage Positions
+        losing_arbitrage = group_data.get('losing_arbitrage', [])
+        if losing_arbitrage:
+            output.append("🔴 LOSING ARBITRAGE:\n")
+            for i, pos in enumerate(losing_arbitrage, 1):
+                symbol = pos.get('symbol', 'Unknown')
+                order_id = pos.get('order_id', 'N/A')
+                pnl = pos.get('pnl', 0)
+                risk = pos.get('risk_percent', 0)
+                distance = pos.get('price_distance', 0)
+                is_hedged = pos.get('is_hedged', False)
+                
+                hedged_status = "✅" if is_hedged else "❌"
+                distance_status = "✅" if distance >= 10 else "❌"
+                
+                output.append(f"  {i}. {symbol} (${pnl:.2f}) {hedged_status}\n")
+                output.append(f"     Risk: {risk:.2f}% | Dist: {distance:.1f}p {distance_status}\n")
+        else:
+            output.append("🔴 LOSING ARBITRAGE: None\n")
+        
+        output.append("\n")
+        
+        # Profit Correlation Positions
+        profit_correlation = group_data.get('profit_correlation', [])
+        if profit_correlation:
+            output.append("🟢 PROFIT CORRELATION:\n")
+            for i, pos in enumerate(profit_correlation, 1):
+                symbol = pos.get('symbol', 'Unknown')
+                pnl = pos.get('pnl', 0)
+                output.append(f"  {i}. {symbol} (${pnl:.2f})\n")
+        else:
+            output.append("🟢 PROFIT CORRELATION: None\n")
+        
+        output.append("\n")
+        
+        # Losing Correlation Positions
+        losing_correlation = group_data.get('losing_correlation', [])
+        if losing_correlation:
+            output.append("🔴 LOSING CORRELATION:\n")
+            for i, pos in enumerate(losing_correlation, 1):
+                symbol = pos.get('symbol', 'Unknown')
+                pnl = pos.get('pnl', 0)
+                output.append(f"  {i}. {symbol} (${pnl:.2f})\n")
+        else:
+            output.append("🔴 LOSING CORRELATION: None\n")
         
         return ''.join(output)
