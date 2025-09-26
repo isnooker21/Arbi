@@ -2131,6 +2131,19 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"Error in force recovery check: {e}")
     
+    def fix_missing_orders(self):
+        """Fix missing orders in tracker - register all existing MT5 positions"""
+        try:
+            self.logger.info("🔧 FIXING MISSING ORDERS: Registering all existing MT5 positions")
+            self.register_existing_orders()
+            
+            # Now check recovery
+            self.logger.info("🔍 Checking recovery after fixing orders...")
+            self.check_recovery_positions()
+            
+        except Exception as e:
+            self.logger.error(f"Error fixing missing orders: {e}")
+    
     def adjust_recovery_thresholds_for_testing(self):
         """Adjust recovery thresholds to be more lenient for testing"""
         try:
@@ -2151,10 +2164,72 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"Error adjusting recovery thresholds: {e}")
     
+    def register_existing_orders(self):
+        """Register all existing MT5 positions as original orders in the tracker"""
+        try:
+            self.logger.info("🔧 REGISTERING EXISTING ORDERS IN TRACKER")
+            
+            # Get all MT5 positions
+            all_positions = self.broker.get_all_positions()
+            self.logger.info(f"📊 Found {len(all_positions)} positions in MT5")
+            
+            registered_count = 0
+            skipped_count = 0
+            
+            for pos in all_positions:
+                ticket = str(pos.get('ticket', ''))
+                symbol = pos.get('symbol', '')
+                magic = pos.get('magic', 0)
+                profit = pos.get('profit', 0)
+                
+                if not ticket or not symbol:
+                    continue
+                
+                # Check if already tracked
+                order_info = self.order_tracker.get_order_info(ticket, symbol)
+                if order_info:
+                    skipped_count += 1
+                    continue
+                
+                # Determine group_id from magic number
+                group_id = self._get_group_id_from_magic(magic)
+                
+                # Register as original order
+                success = self.order_tracker.register_original_order(ticket, symbol, group_id)
+                if success:
+                    registered_count += 1
+                    self.logger.info(f"✅ Registered: {ticket}_{symbol} (${profit:.2f}) in {group_id}")
+                else:
+                    self.logger.warning(f"❌ Failed to register: {ticket}_{symbol}")
+            
+            self.logger.info(f"📊 Registration complete: {registered_count} registered, {skipped_count} already tracked")
+            
+            # Show updated statistics
+            stats = self.order_tracker.get_statistics()
+            self.logger.info(f"📊 Tracker stats: {stats['total_tracked_orders']} total, {stats['not_hedged_orders']} not hedged")
+            
+        except Exception as e:
+            self.logger.error(f"Error registering existing orders: {e}")
+    
+    def _get_group_id_from_magic(self, magic: int) -> str:
+        """Get group_id from magic number"""
+        magic_to_group = {
+            234001: "group_triangle_1_1",
+            234002: "group_triangle_2_1", 
+            234003: "group_triangle_3_1",
+            234004: "group_triangle_4_1",
+            234005: "group_triangle_5_1",
+            234006: "group_triangle_6_1"
+        }
+        return magic_to_group.get(magic, f"group_unknown_{magic}")
+    
     def test_recovery_system(self):
         """Test the recovery system with current losing positions"""
         try:
             self.logger.info("🧪 TESTING RECOVERY SYSTEM")
+            
+            # First register all existing orders
+            self.register_existing_orders()
             
             # Get all MT5 positions
             all_positions = self.broker.get_all_positions()
@@ -2173,13 +2248,6 @@ class CorrelationManager:
             profit = biggest_loser.get('profit', 0)
             
             self.logger.info(f"🎯 Testing with biggest loser: {ticket}_{symbol} (${profit:.2f})")
-            
-            # Check if this order is tracked
-            order_info = self.order_tracker.get_order_info(str(ticket), symbol)
-            if not order_info:
-                self.logger.warning(f"⚠️ Order {ticket}_{symbol} not tracked - registering as original")
-                # Register as original order for testing
-                self.order_tracker.register_original_order(str(ticket), symbol, f"test_group_{ticket}")
             
             # Force recovery check
             self.force_recovery_check()
