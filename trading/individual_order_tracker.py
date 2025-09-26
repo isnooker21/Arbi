@@ -361,29 +361,6 @@ class IndividualOrderTracker:
             self.logger.info(f"   Orphaned Orders: {stats['orphaned_orders']}")
             self.logger.info(f"   Last Sync: {stats['last_sync']}")
             
-            # Log detailed order information
-            not_hedged_orders = [o for o in self.order_tracking.values() if o.get('status') == 'NOT_HEDGED']
-            orphaned_orders = [o for o in self.order_tracking.values() if o.get('status') == 'ORPHANED']
-            
-            if not_hedged_orders or orphaned_orders:
-                self.logger.info("   Orders Needing Recovery:")
-                for order in (not_hedged_orders + orphaned_orders)[:5]:  # Show max 5
-                    ticket = order.get('ticket')
-                    symbol = order.get('symbol')
-                    order_type = order.get('type')
-                    status = order.get('status')
-                    self.logger.info(f"     - {ticket}_{symbol} ({order_type}) [{status}]")
-            
-            # Log hedged orders
-            hedged_orders = [o for o in self.order_tracking.values() if o.get('status') == 'HEDGED']
-            if hedged_orders:
-                self.logger.info("   Hedged Orders:")
-                for order in hedged_orders[:5]:  # Show max 5
-                    ticket = order.get('ticket')
-                    symbol = order.get('symbol')
-                    order_type = order.get('type')
-                    recovery_orders = order.get('recovery_orders', [])
-                    self.logger.info(f"     - {ticket}_{symbol} ({order_type}) -> {len(recovery_orders)} recovery orders")
     
     def force_reset_all_orders(self):
         """

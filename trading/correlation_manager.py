@@ -492,15 +492,6 @@ class CorrelationManager:
                 arbitrage_positions = [pos for pos in group_positions if not pos.get('comment', '').startswith('RECOVERY_')]
                 recovery_positions = [pos for pos in group_positions if pos.get('comment', '').startswith('RECOVERY_')]
                 
-                # Debug: แสดงข้อมูลไม้ทั้งหมด
-                self.logger.debug(f"🔍 GROUP {group_number} DEBUG:")
-                self.logger.debug(f"  Total positions: {len(group_positions)}")
-                self.logger.debug(f"  Arbitrage positions: {len(arbitrage_positions)}")
-                self.logger.debug(f"  Recovery positions: {len(recovery_positions)}")
-                for pos in group_positions:
-                    comment = pos.get('comment', '')
-                    symbol = pos.get('symbol', '')
-                    self.logger.debug(f"  Position: {symbol} | Comment: '{comment}'")
                 
                 # คำนวณ PnL
                 arbitrage_pnl = sum(pos.get('profit', 0) for pos in arbitrage_positions)
