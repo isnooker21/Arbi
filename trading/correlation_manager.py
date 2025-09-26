@@ -1904,71 +1904,242 @@ class CorrelationManager:
             }
     
     def check_recovery_positions(self):
-        """ตรวจสอบ recovery positions - เฉพาะกลุ่มที่ยังเปิดอยู่"""
+        """Debug version with detailed logging - Check individual orders needing recovery"""
         try:
+            self.logger.info("🔍 RECOVERY CHECK: Starting recovery position analysis")
+            
+            # Log recovery thresholds for debugging
+            self.log_recovery_thresholds()
+            
             # 🔄 STEP 1: Sync individual order tracker with MT5
             sync_results = self.order_tracker.sync_with_mt5()
             if sync_results.get('orders_removed', 0) > 0:
-                self.logger.debug(f"🔄 Synced: {sync_results['orders_removed']} orders removed")
+                self.logger.info(f"🔄 Synced: {sync_results['orders_removed']} orders removed")
             
-            # ตรวจสอบว่ามี recovery positions หรือไม่
-            if not self.recovery_positions:
+            # Get orders needing recovery from individual order tracker
+            orders_needing_recovery = self.order_tracker.get_orders_needing_recovery()
+            self.logger.info(f"🔍 Orders needing recovery: {len(orders_needing_recovery)}")
+            
+            if not orders_needing_recovery:
+                self.logger.warning("⚠️ No orders needing recovery found")
                 return
             
-            # ทำความสะอาด positions เก่าที่ปิดไปแล้ว
-            self.cleanup_closed_recovery_positions()
+            recovery_candidates = []
             
-            active_recovery_count = 0
-            positions_to_remove = []
-            
-            # สร้าง copy ของ dictionary keys เพื่อป้องกัน "dictionary changed size during iteration"
-            recovery_ids = list(self.recovery_positions.keys())
-            
-            for recovery_id in recovery_ids:
-                if recovery_id not in self.recovery_positions:
-                    continue  # ถ้า position ถูกลบไปแล้วระหว่างการ iterate
-                    
-                position = self.recovery_positions[recovery_id]
+            for order_info in orders_needing_recovery:
+                ticket = order_info.get('ticket')
+                symbol = order_info.get('symbol')
+                order_type = order_info.get('type', 'UNKNOWN')
                 
-                if position['status'] == 'active':
-                    # ตรวจสอบว่ากลุ่มยังเปิดอยู่หรือไม่
-                    group_id = position.get('group_id', '')
-                    if not group_id:
-                        positions_to_remove.append(recovery_id)
-                        continue
-                    
-                    # ตรวจสอบว่ากลุ่มยังเปิดอยู่จริงหรือไม่ (ต้องตรวจสอบกับ arbitrage_detector)
-                    # ถ้าไม่มี group_id ใน active_groups แสดงว่ากลุ่มปิดแล้ว
-                    active_recovery_count += 1
-                    
-                    # ตรวจสอบว่าต้องการ recovery เพิ่มหรือไม่
-                    if self._should_continue_recovery(position):
-                        self.logger.debug(f"🔄 Starting chain recovery for {position['symbol']}")
-                        self._continue_recovery_chain(position['group_id'], position)
-                    # ไม่แสดง log ถ้าไม่พร้อม recovery เพื่อลด log spam
+                # Get actual position from MT5
+                position = self._get_position_by_ticket(ticket)
+                if not position:
+                    self.logger.warning(f"⚠️ Position {ticket}_{symbol} not found in MT5")
+                    continue
+                
+                profit = position.get('profit', 0)
+                self.logger.info(f"🔍 Checking {ticket}_{symbol} ({order_type}): PnL=${profit:.2f}")
+                
+                # Check recovery conditions
+                meets_conditions = self._meets_recovery_conditions(position)
+                self.logger.info(f"🔍 Meets recovery conditions: {meets_conditions}")
+                
+                if meets_conditions:
+                    recovery_candidates.append(position)
+                    self.logger.info(f"✅ Added to recovery candidates: {ticket}_{symbol}")
+                else:
+                    self.logger.info(f"❌ Skipped: {ticket}_{symbol} - conditions not met")
             
-            # ลบ positions ที่ไม่มี group_id
-            for recovery_id in positions_to_remove:
-                if recovery_id in self.recovery_positions:
-                    del self.recovery_positions[recovery_id]
-                    self.logger.debug(f"🗑️ Removed orphaned recovery position: {recovery_id}")
+            self.logger.info(f"🔍 Total recovery candidates: {len(recovery_candidates)}")
             
-            # แสดง log เฉพาะเมื่อมี recovery positions และมีการเปลี่ยนแปลง
-            if active_recovery_count > 0:
-                self.logger.debug(f"📊 Active recovery positions: {active_recovery_count}")
-            
-            # 🧹 STEP 2: Clean up stale positions (every 10th call)
-            if hasattr(self, '_cleanup_counter'):
-                self._cleanup_counter += 1
+            if recovery_candidates:
+                # Process recovery for best candidate (largest loss)
+                best_candidate = max(recovery_candidates, key=lambda x: abs(x.get('profit', 0)))
+                self.logger.info(f"🎯 Best candidate: {best_candidate.get('symbol')} (${best_candidate.get('profit', 0):.2f})")
+                
+                # Start recovery
+                self._start_individual_recovery(best_candidate)
             else:
-                self._cleanup_counter = 1
+                self.logger.warning("⚠️ No candidates meet recovery conditions")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error in recovery check: {e}")
+    
+    def _get_position_by_ticket(self, ticket: str) -> Optional[Dict]:
+        """Get position from MT5 by ticket number"""
+        try:
+            all_positions = self.broker.get_all_positions()
+            for pos in all_positions:
+                if str(pos.get('ticket', '')) == str(ticket):
+                    return pos
+            return None
+        except Exception as e:
+            self.logger.error(f"Error getting position by ticket {ticket}: {e}")
+            return None
+    
+    def _meets_recovery_conditions(self, position: Dict) -> bool:
+        """Debug version of recovery conditions check"""
+        try:
+            profit = position.get('profit', 0)
+            symbol = position.get('symbol', '')
             
-            if self._cleanup_counter % 10 == 0:
-                # Individual order tracker handles cleanup automatically via sync
-                pass
+            self.logger.debug(f"🔍 Checking conditions for {symbol}:")
+            
+            # Check loss threshold
+            loss_threshold = self.recovery_thresholds.get('min_loss_threshold', -0.005)
+            balance = self.broker.get_account_balance() or 10000
+            loss_percent = profit / balance
+            
+            meets_loss = loss_percent <= loss_threshold
+            self.logger.debug(f"   Loss check: {loss_percent:.4f} <= {loss_threshold:.4f} = {meets_loss}")
+            
+            # Check if position is losing money
+            meets_profit_loss = profit < 0
+            self.logger.debug(f"   Profit loss check: {profit:.2f} < 0 = {meets_profit_loss}")
+            
+            # Check minimum loss amount (e.g., at least $10 loss)
+            min_loss_amount = -10.0  # $10 minimum loss
+            meets_min_loss = profit <= min_loss_amount
+            self.logger.debug(f"   Min loss amount check: {profit:.2f} <= {min_loss_amount} = {meets_min_loss}")
+            
+            # All conditions must be met
+            result = meets_loss and meets_profit_loss and meets_min_loss
+            self.logger.debug(f"   Final result: {result}")
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Error checking recovery conditions: {e}")
+            return False
+    
+    def _start_individual_recovery(self, position: Dict):
+        """Start recovery for individual position"""
+        try:
+            ticket = position.get('ticket', '')
+            symbol = position.get('symbol', '')
+            profit = position.get('profit', 0)
+            
+            self.logger.info(f"🚀 STARTING RECOVERY: {ticket}_{symbol} (${profit:.2f})")
+            
+            # Find correlation pairs
+            correlation_candidates = self._find_correlation_pairs_for_symbol(symbol)
+            self.logger.info(f"🔍 Found {len(correlation_candidates)} correlation candidates")
+            
+            if correlation_candidates:
+                best_correlation = correlation_candidates[0]
+                self.logger.info(f"🎯 Best correlation: {best_correlation}")
+                
+                # Execute recovery
+                success = self._execute_correlation_position(position, best_correlation, position.get('magic'))
+                self.logger.info(f"🔄 Recovery result: {success}")
+            else:
+                self.logger.warning(f"⚠️ No correlation pairs found for {symbol}")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error starting recovery: {e}")
+    
+    def _find_correlation_pairs_for_symbol(self, symbol: str) -> List[Dict]:
+        """Find correlation pairs for a specific symbol"""
+        try:
+            # Get all available currency pairs
+            all_pairs = self._get_all_currency_pairs_from_mt5()
+            
+            # Remove the symbol itself from the list
+            other_pairs = [pair for pair in all_pairs if pair != symbol]
+            
+            correlation_candidates = []
+            
+            # For now, use simple correlation based on common currency pairs
+            # This is a simplified version - in production you'd calculate actual correlations
+            for other_symbol in other_pairs[:10]:  # Check top 10 pairs
+                # Simple correlation estimation based on currency overlap
+                correlation = self._estimate_correlation(symbol, other_symbol)
+                
+                if correlation > 0.5:  # Minimum correlation threshold
+                    correlation_candidates.append({
+                        'symbol': other_symbol,
+                        'correlation': correlation,
+                        'hedge_ratio': 1.0  # Simplified hedge ratio
+                    })
+            
+            # Sort by correlation (highest first)
+            correlation_candidates.sort(key=lambda x: x['correlation'], reverse=True)
+            
+            return correlation_candidates
                         
         except Exception as e:
-            self.logger.error(f"Error checking recovery positions: {e}")
+            self.logger.error(f"Error finding correlation pairs for {symbol}: {e}")
+            return []
+    
+    def _estimate_correlation(self, symbol1: str, symbol2: str) -> float:
+        """Estimate correlation between two currency pairs"""
+        try:
+            # Simple correlation estimation based on currency overlap
+            # This is a simplified version - in production you'd use historical data
+            
+            # Extract base and quote currencies
+            base1, quote1 = symbol1[:3], symbol1[3:]
+            base2, quote2 = symbol2[:3], symbol2[3:]
+            
+            # Check for currency overlap
+            if base1 == base2 or quote1 == quote2:
+                return 0.8  # High correlation for same base or quote
+            elif base1 == quote2 or quote1 == base2:
+                return 0.7  # Good correlation for cross pairs
+            elif base1 in symbol2 or quote1 in symbol2:
+                return 0.6  # Moderate correlation for partial overlap
+            else:
+                return 0.3  # Low correlation for no overlap
+                
+        except Exception as e:
+            self.logger.error(f"Error estimating correlation: {e}")
+            return 0.0
+    
+    def log_recovery_thresholds(self):
+        """Log current recovery thresholds for debugging"""
+        try:
+            self.logger.info("🔍 RECOVERY THRESHOLDS:")
+            self.logger.info(f"   Min Loss Threshold: {self.recovery_thresholds.get('min_loss_threshold', -0.005)} ({self.recovery_thresholds.get('min_loss_threshold', -0.005) * 100:.1f}%)")
+            self.logger.info(f"   Wait Time: {self.recovery_thresholds.get('wait_time_minutes', 5)} minutes")
+            self.logger.info(f"   Min Correlation: {self.recovery_thresholds.get('min_correlation', 0.5)} ({self.recovery_thresholds.get('min_correlation', 0.5) * 100:.0f}%)")
+            self.logger.info(f"   Max Recovery Time: {self.recovery_thresholds.get('max_recovery_time_hours', 24)} hours")
+            self.logger.info(f"   Base Lot Size: {self.recovery_thresholds.get('base_lot_size', 0.1)}")
+            
+            # Get account balance for context
+            balance = self.broker.get_account_balance() or 10000
+            self.logger.info(f"   Account Balance: ${balance:.2f}")
+            self.logger.info(f"   Min Loss Amount: ${abs(self.recovery_thresholds.get('min_loss_threshold', -0.005) * balance):.2f}")
+            
+        except Exception as e:
+            self.logger.error(f"Error logging recovery thresholds: {e}")
+    
+    def force_recovery_check(self):
+        """Force a recovery check for debugging purposes"""
+        try:
+            self.logger.info("🚨 FORCE RECOVERY CHECK: Manual trigger for debugging")
+            self.check_recovery_positions()
+        except Exception as e:
+            self.logger.error(f"Error in force recovery check: {e}")
+    
+    def adjust_recovery_thresholds_for_testing(self):
+        """Adjust recovery thresholds to be more lenient for testing"""
+        try:
+            self.logger.info("🔧 ADJUSTING RECOVERY THRESHOLDS FOR TESTING")
+            
+            # Make thresholds more lenient
+            self.recovery_thresholds.update({
+                'min_loss_threshold': -0.001,  # -0.1% instead of -0.5%
+                'wait_time_minutes': 1,        # 1 minute instead of 5
+                'min_correlation': 0.3,        # 30% instead of 50%
+                'max_recovery_time_hours': 48, # 48 hours instead of 24
+                'base_lot_size': 0.01          # Smaller lot size for testing
+            })
+            
+            self.logger.info("✅ Recovery thresholds adjusted for testing:")
+            self.log_recovery_thresholds()
+            
+        except Exception as e:
+            self.logger.error(f"Error adjusting recovery thresholds: {e}")
     
     def check_recovery_positions_with_status(self, group_id: str = None, losing_pairs: list = None):
         """ตรวจสอบ recovery positions พร้อมแสดงสถานะการแก้ไม้"""
