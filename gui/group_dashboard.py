@@ -394,7 +394,7 @@ class GroupDashboard:
         title_label = tk.Label(
             self.positions_status_frame,
             text="📊 POSITIONS STATUS",
-            font=TradingTheme.FONTS['subtitle'],
+            font=TradingTheme.FONTS['subheader'],
             bg=TradingTheme.COLORS['secondary_bg'],
             fg=TradingTheme.COLORS['text_primary']
         )
