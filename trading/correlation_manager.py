@@ -119,6 +119,7 @@ class CorrelationManager:
         self.ai_engine = ai_engine  # ✅ Enable AI engine for correlation data
         self.correlation_matrix = {}
         self.recovery_positions = {}
+        self.recovery_chains = {}  # ✅ ADD: Initialize recovery_chains dictionary
         self.is_running = False
         self.logger = logging.getLogger(__name__)
         
