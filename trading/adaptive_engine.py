@@ -727,9 +727,29 @@ class AdaptiveEngine:
                         if not np.isnan(correlation):
                             correlations[pair] = float(correlation)
                             
+                            # Log EVERY correlation calculated
+                            if correlation < -0.5:
+                                self.logger.info(f"   {symbol} vs {pair} = {correlation:.3f} (STRONG NEGATIVE)")
+                            elif correlation < -0.2:
+                                self.logger.info(f"   {symbol} vs {pair} = {correlation:.3f} (WEAK NEGATIVE)")
+                            elif correlation > 0.7:
+                                self.logger.info(f"   {symbol} vs {pair} = {correlation:.3f} (STRONG POSITIVE)")
+                            else:
+                                self.logger.info(f"   {symbol} vs {pair} = {correlation:.3f}")
+                            
                 except Exception as e:
                     self.logger.debug(f"Error calculating correlation for {pair}: {e}")
                     continue
+            
+            # Log summary
+            if correlations:
+                positive_count = len([v for v in correlations.values() if v > 0])
+                negative_count = len([v for v in correlations.values() if v < 0])
+                
+                self.logger.info(f"CORRELATION SUMMARY for {symbol}:")
+                self.logger.info(f"   Total: {len(correlations)}")
+                self.logger.info(f"   Positive: {positive_count}")
+                self.logger.info(f"   Negative: {negative_count}")
             
             return correlations
             

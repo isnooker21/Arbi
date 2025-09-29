@@ -1343,8 +1343,8 @@ class CorrelationManager:
                     self.logger.debug(f"⏭️ Skip {pair}: common currency with {base_symbol}")
                     continue
                 
-                # ✅ Filter: Only negative correlations
-                if -0.95 < corr_value < -0.5:
+                # ✅ Filter: Only negative correlations (RELAXED THRESHOLD)
+                if -0.98 < corr_value < -0.2:
                     correlation_candidates.append({
                         'symbol': pair,
                         'correlation': corr_value,
@@ -1643,7 +1643,7 @@ class CorrelationManager:
         """ตรวจสอบว่าคู่เงินมี negative correlation หรือไม่"""
         try:
             correlation = self._calculate_dynamic_correlation(base_symbol, target_symbol)
-            return correlation < -0.5  # Negative correlation
+            return correlation < -0.2  # Negative correlation (RELAXED THRESHOLD)
             
         except Exception as e:
             self.logger.debug(f"Error checking negative correlation: {e}")
@@ -2356,8 +2356,9 @@ class CorrelationManager:
         
         Filters:
         1. Remove pairs with common currency
-        2. Select only negative correlations (-0.5 to -0.95)
-        3. Rank by strongest negative correlation
+        2. Select only negative correlations (-0.2 to -0.95) - RELAXED THRESHOLD
+        3. Fallback to inverse strategy if no negative correlations found
+        4. Rank by strongest negative correlation
         """
         try:
             # Get correlations from AI engine
@@ -2367,23 +2368,26 @@ class CorrelationManager:
                 self.logger.debug(f"No correlations found for {symbol}")
                 return []
             
+            self.logger.info(f"Received {len(correlations)} correlations for {symbol}")
+            
             correlation_candidates = []
             
+            # Try negative correlations first (with relaxed threshold)
             for pair, correlation_value in correlations.items():
                 # ✅ FILTER 1: Skip pairs with common currency
                 if self._has_common_currency(symbol, pair):
                     self.logger.debug(f"⏭️ Skip {pair}: common currency with {symbol}")
                     continue
                 
-                # ✅ FILTER 2: Only accept negative correlations
+                # ✅ FILTER 2: Only accept negative correlations (RELAXED: -0.2 instead of -0.5)
                 # Negative correlation means pairs move in opposite directions
-                if correlation_value >= -0.5:
-                    self.logger.debug(f"⏭️ Skip {pair}: correlation {correlation_value:.2f} not negative enough")
+                if correlation_value >= -0.2:
+                    self.logger.debug(f"⏭️ Skip {pair}: correlation {correlation_value:.3f} not negative enough")
                     continue
                 
                 # Strong negative correlation (good for hedging)
-                if correlation_value <= -0.95:
-                    self.logger.debug(f"⏭️ Skip {pair}: correlation {correlation_value:.2f} too perfect (suspicious)")
+                if correlation_value <= -0.98:
+                    self.logger.debug(f"⏭️ Skip {pair}: correlation {correlation_value:.3f} too perfect (suspicious)")
                     continue
                 
                 correlation_candidates.append({
@@ -2392,18 +2396,43 @@ class CorrelationManager:
                     'direction': 'opposite'  # Negative correlation = opposite direction
                 })
                 
-                self.logger.debug(f"✅ Valid hedge candidate: {pair} (correlation: {correlation_value:.2f})")
+                self.logger.info(f"VALID: {pair} ({correlation_value:.3f})")
+            
+            # Fallback: Use strong positive correlations (trade opposite direction)
+            if not correlation_candidates:
+                self.logger.warning(f"No negative correlations - using inverse strategy")
+                
+                for pair, correlation_value in correlations.items():
+                    if self._has_common_currency(symbol, pair):
+                        continue
+                    
+                    # Strong positive correlation
+                    if 0.7 <= correlation_value <= 0.98:
+                        correlation_candidates.append({
+                            'symbol': pair,
+                            'correlation': -correlation_value,  # Treat as negative for sorting
+                            'direction': 'inverse',
+                            'original_correlation': correlation_value
+                        })
+                        
+                        self.logger.info(f"INVERSE: {pair} (positive {correlation_value:.3f})")
+                
+                if correlation_candidates:
+                    self.logger.info(f"Found {len(correlation_candidates)} using inverse strategy")
             
             # ✅ SORT: Rank by strongest negative correlation
             # Most negative first (e.g., -0.85, -0.75, -0.65)
             correlation_candidates.sort(key=lambda x: x['correlation'])
             
             if correlation_candidates:
-                self.logger.info(f"🎯 Found {len(correlation_candidates)} valid negative correlation pairs for {symbol}")
+                self.logger.info(f"🎯 Found {len(correlation_candidates)} valid correlation pairs for {symbol}")
                 for i, candidate in enumerate(correlation_candidates[:3], 1):
-                    self.logger.info(f"   {i}. {candidate['symbol']}: {candidate['correlation']:.2f}")
+                    if 'original_correlation' in candidate:
+                        self.logger.info(f"   {i}. {candidate['symbol']}: {candidate['original_correlation']:.3f} (inverse)")
+                    else:
+                        self.logger.info(f"   {i}. {candidate['symbol']}: {candidate['correlation']:.3f}")
             else:
-                self.logger.warning(f"⚠️ No valid negative correlation pairs found for {symbol}")
+                self.logger.warning(f"⚠️ NO valid candidates after filtering")
             
             return correlation_candidates
             
