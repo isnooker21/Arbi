@@ -1887,9 +1887,20 @@ class CorrelationManager:
             original_ticket = str(original_position.get('ticket', '')) if original_position else 'UNKNOWN'
             original_symbol = original_position.get('symbol', 'UNKNOWN') if original_position else 'UNKNOWN'
             
-            # ✅ CRITICAL: Comment must show which ticket is being hedged
-            comment = f"RECOVERY_{original_ticket}_{original_symbol}_TO_{symbol}"
-            # Example: "RECOVERY_12345_GBPUSD_TO_AUDUSD"
+            # ✅ CRITICAL: Comment must show which ticket is being hedged (MT5 limit ~31 chars)
+            # Format: "R12345_GBP->AUD" (shorter format for MT5 compatibility)
+            comment = f"R{original_ticket}_{original_symbol[:3]}->{symbol[:3]}"
+            
+            # Ensure comment doesn't exceed MT5 limit (31 characters)
+            if len(comment) > 31:
+                # Fallback to even shorter format if needed
+                comment = f"R{original_ticket}_{original_symbol[:2]}{symbol[:2]}"
+                if len(comment) > 31:
+                    # Last resort: just use ticket number
+                    comment = f"R{original_ticket}"
+            
+            self.logger.debug(f"📝 Recovery comment: '{comment}' (length: {len(comment)})")
+            # Example: "R12345_GBP->AUD" instead of "RECOVERY_12345_GBPUSD_TO_AUDUSD"
             
             # หา magic number จาก group_id หรือใช้ default
             magic_number = self._get_magic_number_from_group_id(group_id)
