@@ -46,6 +46,10 @@ class AdaptiveEngine:
         
         self.logger = logging.getLogger(__name__)
         
+        # Initialize correlation matrix
+        self.correlation_matrix = {}
+        self._initialize_correlation_matrix()
+        
         # Engine state
         self.is_running = False
         self.engine_mode = 'adaptive'  # adaptive, conservative, aggressive
@@ -613,25 +617,218 @@ class AdaptiveEngine:
         """
         Get correlation data for a symbol.
         
-        Returns dict of {pair: correlation_value}
-        Example: {'GBPAUD': -0.72, 'USDCAD': -0.68, ...}
+        Returns negative correlations for hedging purposes.
+        
+        Args:
+            symbol: Currency pair symbol (e.g., "GBPJPY")
+            
+        Returns:
+            Dict mapping pairs to correlation values
+            Example: {'EURAUD': -0.75, 'USDCAD': -0.68, ...}
         """
         try:
-            # Return correlation data from cache or calculate
-            if hasattr(self, 'correlation_matrix') and symbol in self.correlation_matrix:
+            # Check if correlation_manager has correlation data
+            if hasattr(self.correlation_manager, 'correlation_matrix'):
+                correlation_matrix = self.correlation_manager.correlation_matrix
+                
+                if symbol in correlation_matrix:
+                    self.logger.debug(f"✅ Found correlation data for {symbol} from correlation_manager")
+                    return correlation_matrix[symbol]
+            
+            # Check if we have correlation data in our own matrix
+            if symbol in self.correlation_matrix:
+                self.logger.debug(f"✅ Found correlation data for {symbol} from adaptive_engine")
                 return self.correlation_matrix[symbol]
             
-            # Or if correlations are stored differently
-            if hasattr(self, 'correlation_data'):
-                return self.correlation_data.get(symbol, {})
+            # Fallback: Calculate correlations on-demand
+            self.logger.warning(f"⚠️ No cached correlations for {symbol}, calculating...")
+            correlations = self._calculate_on_demand_correlations(symbol)
             
-            # If no correlation data available, return empty dict
-            self.logger.warning(f"No correlation data found for {symbol}")
-            return {}
+            if correlations:
+                self.logger.info(f"✅ Calculated {len(correlations)} correlations for {symbol}")
+                return correlations
+            
+            # Last resort: Use default correlations
+            self.logger.warning(f"⚠️ Using default correlations for {symbol}")
+            return self._get_default_correlations(symbol)
             
         except Exception as e:
             self.logger.error(f"Error getting correlations for {symbol}: {e}")
+            return self._get_default_correlations(symbol)
+
+    def _calculate_on_demand_correlations(self, symbol: str, lookback_days: int = 30) -> Dict[str, float]:
+        """
+        Calculate correlations on-demand from historical data.
+        
+        Args:
+            symbol: Base symbol
+            lookback_days: Days of historical data to use
+            
+        Returns:
+            Dict of {pair: correlation_value}
+        """
+        try:
+            import pandas as pd
+            import numpy as np
+            
+            # Get all available pairs
+            all_pairs = self.broker.get_available_pairs()
+            if not all_pairs:
+                return {}
+            
+            # Filter major/minor pairs
+            major_minor_currencies = ['EUR', 'USD', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD']
+            filtered_pairs = []
+            
+            for pair in all_pairs:
+                if len(pair) == 6:
+                    currency1 = pair[:3]
+                    currency2 = pair[3:]
+                    if currency1 in major_minor_currencies and currency2 in major_minor_currencies:
+                        if pair != symbol:  # Don't correlate with self
+                            filtered_pairs.append(pair)
+            
+            # Get historical data for base symbol
+            base_data = self.broker.get_historical_data(symbol, 'H1', lookback_days * 24)
+            if base_data is None or len(base_data) < 10:
+                self.logger.warning(f"Insufficient data for {symbol}")
+                return {}
+            
+            correlations = {}
+            
+            # Calculate correlation with each pair
+            for pair in filtered_pairs[:20]:  # Limit to 20 pairs to save time
+                try:
+                    pair_data = self.broker.get_historical_data(pair, 'H1', lookback_days * 24)
+                    
+                    if pair_data is None or len(pair_data) < 10:
+                        continue
+                    
+                    # Align data by timestamp
+                    merged = pd.merge(
+                        base_data[['close']], 
+                        pair_data[['close']], 
+                        left_index=True, 
+                        right_index=True, 
+                        suffixes=('_base', '_pair')
+                    )
+                    
+                    if len(merged) < 10:
+                        continue
+                    
+                    # Calculate returns
+                    returns_base = merged['close_base'].pct_change().dropna()
+                    returns_pair = merged['close_pair'].pct_change().dropna()
+                    
+                    # Calculate correlation
+                    if len(returns_base) > 5 and len(returns_pair) > 5:
+                        correlation = returns_base.corr(returns_pair)
+                        
+                        if not np.isnan(correlation):
+                            correlations[pair] = float(correlation)
+                            
+                except Exception as e:
+                    self.logger.debug(f"Error calculating correlation for {pair}: {e}")
+                    continue
+            
+            return correlations
+            
+        except Exception as e:
+            self.logger.error(f"Error in on-demand correlation calculation: {e}")
             return {}
+
+    def _get_default_correlations(self, symbol: str) -> Dict[str, float]:
+        """
+        Get default negative correlations for common pairs.
+        
+        These are approximate correlations for hedging purposes.
+        """
+        default_correlations = {
+            'EURUSD': {
+                'USDCHF': -0.85, 'USDCAD': -0.72, 'GBPAUD': -0.68,
+                'NZDUSD': -0.65, 'AUDCAD': -0.75, 'GBPCHF': -0.80
+            },
+            'GBPUSD': {
+                'USDCHF': -0.80, 'USDCAD': -0.70, 'EURAUD': -0.65,
+                'AUDCAD': -0.68, 'NZDCAD': -0.62
+            },
+            'USDJPY': {
+                'EURUSD': -0.75, 'GBPUSD': -0.70, 'AUDUSD': -0.65,
+                'NZDUSD': -0.60
+            },
+            'EURJPY': {
+                'GBPAUD': -0.72, 'AUDNZD': -0.65, 'NZDCAD': -0.60,
+                'USDCHF': -0.70
+            },
+            'GBPJPY': {
+                'EURAUD': -0.75, 'AUDCAD': -0.68, 'NZDUSD': -0.62,
+                'USDCHF': -0.70, 'EURCHF': -0.68
+            },
+            'AUDJPY': {
+                'EURAUD': -0.70, 'GBPAUD': -0.65, 'USDCHF': -0.68
+            },
+            'USDCAD': {
+                'EURUSD': -0.75, 'GBPUSD': -0.70, 'AUDUSD': -0.65
+            },
+            'USDCHF': {
+                'EURUSD': -0.85, 'GBPUSD': -0.80, 'AUDUSD': -0.75
+            }
+        }
+        
+        if symbol in default_correlations:
+            self.logger.info(f"📊 Using default correlations for {symbol}")
+            return default_correlations[symbol]
+        
+        # If symbol not in defaults, return empty dict
+        self.logger.warning(f"⚠️ No default correlations available for {symbol}")
+        return {}
+
+    def _initialize_correlation_matrix(self):
+        """Initialize correlation matrix on startup"""
+        try:
+            self.logger.info("🔄 Initializing correlation matrix...")
+            
+            # Check if correlation_manager has existing data
+            if self.correlation_manager and hasattr(self.correlation_manager, 'correlation_matrix'):
+                existing_matrix = self.correlation_manager.correlation_matrix
+                if existing_matrix:
+                    self.correlation_matrix = existing_matrix
+                    self.logger.info(f"✅ Loaded {len(self.correlation_matrix)} correlations from correlation_manager")
+                    return
+            
+            # Calculate correlations
+            all_pairs = self.broker.get_available_pairs()
+            if not all_pairs:
+                self.logger.warning("⚠️ No pairs available for correlation calculation")
+                return
+            
+            # Filter major/minor pairs
+            major_minor_currencies = ['EUR', 'USD', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD']
+            filtered_pairs = []
+            
+            for pair in all_pairs:
+                if len(pair) == 6:
+                    currency1 = pair[:3]
+                    currency2 = pair[3:]
+                    if currency1 in major_minor_currencies and currency2 in major_minor_currencies:
+                        filtered_pairs.append(pair)
+            
+            self.logger.info(f"🔄 Calculating correlations for {len(filtered_pairs)} pairs...")
+            
+            # Calculate correlations between all pairs
+            for base_pair in filtered_pairs[:15]:  # Limit to avoid long initialization
+                try:
+                    correlations = self._calculate_on_demand_correlations(base_pair, lookback_days=30)
+                    if correlations:
+                        self.correlation_matrix[base_pair] = correlations
+                except Exception as e:
+                    self.logger.debug(f"Error calculating correlations for {base_pair}: {e}")
+                    continue
+            
+            self.logger.info(f"✅ Correlation matrix initialized with {len(self.correlation_matrix)} pairs")
+            
+        except Exception as e:
+            self.logger.error(f"Error initializing correlation matrix: {e}")
 
     def emergency_stop(self):
         """Emergency stop all trading activities"""
