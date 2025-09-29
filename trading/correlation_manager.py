@@ -1715,17 +1715,24 @@ class CorrelationManager:
     
     def _execute_correlation_position(self, original_position: Dict, correlation_candidate: Dict, group_id: str) -> bool:
         """
-        ⚡ CRITICAL: Execute correlation position for recovery
+        ⚡ CRITICAL: Execute correlation position for recovery with comprehensive duplicate prevention
         """
         try:
             symbol = correlation_candidate['symbol']
             correlation = correlation_candidate['correlation']
             original_symbol = original_position.get('symbol', '')
-            
-            # 🔒 STEP 1: Check if original position is already hedged
             original_ticket = str(original_position.get('ticket', ''))
+            
+            self.logger.info(f"🎯 Starting recovery for ticket {original_ticket}_{original_symbol}")
+            
+            # ✅ CRITICAL CHECK #1: Verify this ticket is not already hedged
             if self.order_tracker.is_order_hedged(original_ticket, original_symbol):
-                self.logger.warning(f"🚫 Position {original_ticket}_{original_symbol} already hedged - skipping")
+                self.logger.warning(f"🚫 DUPLICATE PREVENTION: Ticket {original_ticket}_{original_symbol} already hedged - skipping")
+                return False
+            
+            # ✅ CRITICAL CHECK #2: Double-check in case of race condition
+            if not self.order_tracker.needs_recovery(original_ticket, original_symbol):
+                self.logger.warning(f"🚫 DUPLICATE PREVENTION: Ticket {original_ticket}_{original_symbol} doesn't need recovery - skipping")
                 return False
             
             # กำหนดทิศทางที่ถูกต้อง (ใช้ทิศทางเดียวกันกับคู่เดิม)
@@ -1755,13 +1762,23 @@ class CorrelationManager:
             order_result = self._send_correlation_order(symbol, correlation_lot_size, group_id, original_position)
             
             if order_result and order_result.get('success'):
-                # ✅ STEP 2: Register recovery order in individual tracker
                 recovery_ticket = str(order_result.get('order_id', ''))
+                
                 if recovery_ticket:
-                    self._add_hedge_tracking(original_ticket, original_symbol, recovery_ticket, symbol)
-                    self.logger.info(f"✅ Recovery order executed: {recovery_ticket}_{symbol} for {original_ticket}_{original_symbol}")
+                    # ✅ CRITICAL: Register recovery immediately
+                    success = self.order_tracker.register_recovery_order(
+                        recovery_ticket, symbol,           # Recovery order info
+                        original_ticket, original_symbol   # Original order being hedged
+                    )
+                    
+                    if success:
+                        self.logger.info(f"✅ RECOVERY REGISTERED: {original_ticket}_{original_symbol} → {recovery_ticket}_{symbol}")
+                        self.logger.info(f"   Original ticket {original_ticket} is now HEDGED")
+                    else:
+                        self.logger.error(f"❌ Failed to register recovery for {original_ticket}_{original_symbol}")
+                        return False
                 else:
-                    self.logger.error(f"❌ No order ID returned for recovery order")
+                    self.logger.error("❌ No recovery ticket received from order")
                     return False
                 
                 # ดึงราคาปัจจุบันเป็น entry price
@@ -1795,6 +1812,7 @@ class CorrelationManager:
                 
                 return True
             else:
+                self.logger.error(f"❌ Recovery order failed for {original_ticket}_{original_symbol}")
                 return False
                 
         except Exception as e:
@@ -1864,17 +1882,14 @@ class CorrelationManager:
             return 0.1
     
     def _send_correlation_order(self, symbol: str, lot_size: float, group_id: str, original_position: Dict = None) -> Dict:
-        """ส่งออเดอร์ correlation recovery"""
+        """Send recovery order with clear ticket linkage"""
         try:
-            # สร้าง comment - ใส่คู่เงินที่แก้และคู่เงินที่แก้ไม้
-            # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
-            if 'triangle_' in group_id:
-                triangle_part = group_id.split('triangle_')[1].split('_')[0]
-                group_number = triangle_part
-            else:
-                group_number = 'X'
+            original_ticket = str(original_position.get('ticket', '')) if original_position else 'UNKNOWN'
             original_symbol = original_position.get('symbol', 'UNKNOWN') if original_position else 'UNKNOWN'
-            comment = f"RECOVERY_G{group_number}_{original_symbol}_TO_{symbol}"
+            
+            # ✅ CRITICAL: Comment must show which ticket is being hedged
+            comment = f"RECOVERY_{original_ticket}_{original_symbol}_TO_{symbol}"
+            # Example: "RECOVERY_12345_GBPUSD_TO_AUDUSD"
             
             # หา magic number จาก group_id หรือใช้ default
             magic_number = self._get_magic_number_from_group_id(group_id)
@@ -1900,13 +1915,8 @@ class CorrelationManager:
             )
             
             if result and (result.get('retcode') == 10009 or result.get('success')):
-                # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
-                if 'triangle_' in group_id:
-                    triangle_part = group_id.split('triangle_')[1].split('_')[0]
-                    group_number = triangle_part
-                else:
-                    group_number = 'X'
-                self.logger.info(f"✅ G{group_number} Recovery order sent: {symbol} {lot_size} lot")
+                self.logger.info(f"✅ Recovery order sent: {symbol} {lot_size} lot")
+                self.logger.info(f"   Comment: {comment}")
                 return {
                     'success': True,
                     'order_id': result.get('order_id'),
@@ -1937,18 +1947,25 @@ class CorrelationManager:
             }
     
     def check_recovery_positions(self):
-        """Check individual orders needing recovery"""
+        """Check individual orders needing recovery with comprehensive duplicate prevention"""
         try:
+            self.logger.info("=" * 80)
+            self.logger.info("🔍 RECOVERY SELECTION PROCESS")
+            self.logger.info("=" * 80)
+            
             # 🔄 STEP 1: Sync individual order tracker with MT5
             sync_results = self.order_tracker.sync_with_mt5()
             if sync_results.get('orders_removed', 0) > 0:
-                self.logger.debug(f"🔄 Synced: {sync_results['orders_removed']} orders removed")
+                self.logger.info(f"🔄 Synced: {sync_results['orders_removed']} orders removed")
             
             # Get orders needing recovery from individual order tracker
             orders_needing_recovery = self.order_tracker.get_orders_needing_recovery()
             
             if not orders_needing_recovery:
+                self.logger.info("📊 No orders needing recovery found")
                 return
+            
+            self.logger.info(f"📊 Found {len(orders_needing_recovery)} orders needing recovery from tracker")
             
             recovery_candidates = []
             
@@ -1959,6 +1976,19 @@ class CorrelationManager:
                 # Get actual position from MT5
                 position = self._get_position_by_ticket(ticket)
                 if not position:
+                    self.logger.debug(f"⚠️ Position {ticket}_{symbol} not found in MT5 - skipping")
+                    continue
+                
+                profit = position.get('profit', 0)
+                
+                # ✅ CRITICAL: Double-check if this specific ticket is already hedged
+                if self.order_tracker.is_order_hedged(ticket, symbol):
+                    self.logger.debug(f"⏭️ Skip {ticket}_{symbol} - already hedged (${profit:.2f})")
+                    continue
+                
+                # ✅ CRITICAL: Check if this ticket needs recovery
+                if not self.order_tracker.needs_recovery(ticket, symbol):
+                    self.logger.debug(f"⏭️ Skip {ticket}_{symbol} - doesn't need recovery (${profit:.2f})")
                     continue
                 
                 # Check recovery conditions
@@ -1966,13 +1996,25 @@ class CorrelationManager:
                 
                 if meets_conditions:
                     recovery_candidates.append(position)
+                    self.logger.info(f"✅ Candidate for recovery: {ticket}_{symbol} (${profit:.2f})")
+                else:
+                    self.logger.debug(f"❌ {ticket}_{symbol} doesn't meet recovery conditions (${profit:.2f})")
+            
+            self.logger.info(f"📊 Selected {len(recovery_candidates)} positions for recovery (not yet hedged)")
             
             if recovery_candidates:
                 # Process recovery for best candidate (largest loss)
                 best_candidate = max(recovery_candidates, key=lambda x: abs(x.get('profit', 0)))
+                ticket = best_candidate.get('ticket')
+                symbol = best_candidate.get('symbol')
+                profit = best_candidate.get('profit', 0)
+                
+                self.logger.info(f"🎯 Processing best candidate: {ticket}_{symbol} (${profit:.2f})")
                 
                 # Start recovery
                 self._start_individual_recovery(best_candidate)
+            else:
+                self.logger.info("📊 No valid recovery candidates found")
                 
         except Exception as e:
             self.logger.error(f"Error in recovery check: {e}")
@@ -2026,30 +2068,62 @@ class CorrelationManager:
             return False
     
     def _start_individual_recovery(self, position: Dict):
-        """Start recovery for individual position"""
+        """Start recovery for individual position with comprehensive logging"""
         try:
             ticket = position.get('ticket', '')
             symbol = position.get('symbol', '')
             profit = position.get('profit', 0)
             
-            self.logger.info(f"🚀 Starting recovery: {ticket}_{symbol} (${profit:.2f})")
+            self.logger.info("=" * 60)
+            self.logger.info(f"🚀 STARTING INDIVIDUAL RECOVERY")
+            self.logger.info("=" * 60)
+            self.logger.info(f"📉 Original Position: {ticket}_{symbol}")
+            self.logger.info(f"   Profit: ${profit:.2f}")
+            self.logger.info(f"   Lot Size: {position.get('lot_size', 0.1)}")
+            self.logger.info(f"   Entry Price: {position.get('entry_price', 0.0):.5f}")
+            
+            # ✅ CRITICAL: Final check before starting recovery
+            if self.order_tracker.is_order_hedged(ticket, symbol):
+                self.logger.warning(f"🚫 FINAL CHECK: Ticket {ticket}_{symbol} already hedged - aborting recovery")
+                return
+            
+            if not self.order_tracker.needs_recovery(ticket, symbol):
+                self.logger.warning(f"🚫 FINAL CHECK: Ticket {ticket}_{symbol} doesn't need recovery - aborting recovery")
+                return
+            
+            self.logger.info(f"✅ FINAL CHECK: Ticket {ticket}_{symbol} confirmed for recovery")
             
             # Find correlation pairs
             correlation_candidates = self._find_correlation_pairs_for_symbol(symbol)
             
             if correlation_candidates:
                 best_correlation = correlation_candidates[0]
+                recovery_symbol = best_correlation.get('symbol', 'UNKNOWN')
+                correlation = best_correlation.get('correlation', 0.0)
+                
+                self.logger.info(f"🎯 Selected recovery pair: {recovery_symbol}")
+                self.logger.info(f"   Correlation: {correlation:.3f}")
+                self.logger.info(f"   Recovery Strength: {best_correlation.get('recovery_strength', correlation):.3f}")
                 
                 # Execute recovery - need to get proper group_id
                 # For now, use a default group_id since we're doing individual order recovery
                 group_id = f"recovery_{ticket}_{symbol}"
+                self.logger.info(f"   Group ID: {group_id}")
+                
                 success = self._execute_correlation_position(position, best_correlation, group_id)
                 if success:
-                    self.logger.info(f"✅ Recovery executed successfully")
+                    self.logger.info("=" * 60)
+                    self.logger.info(f"✅ RECOVERY EXECUTED SUCCESSFULLY")
+                    self.logger.info(f"   {ticket}_{symbol} → {recovery_symbol}")
+                    self.logger.info("=" * 60)
                 else:
-                    self.logger.warning(f"❌ Recovery execution failed")
+                    self.logger.warning("=" * 60)
+                    self.logger.warning(f"❌ RECOVERY EXECUTION FAILED")
+                    self.logger.warning(f"   {ticket}_{symbol} → {recovery_symbol}")
+                    self.logger.warning("=" * 60)
             else:
                 self.logger.warning(f"⚠️ No correlation pairs found for {symbol}")
+                self.logger.warning("   Cannot proceed with recovery")
                 
         except Exception as e:
             self.logger.error(f"Error starting recovery: {e}")
