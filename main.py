@@ -220,26 +220,31 @@ class TradingSystem:
         # self.market_analyzer = MarketAnalyzer(self.broker_api)
         # self.market_analyzer = None
             
-            # Initialize trading components
+            # Initialize adaptive engine first (main trading engine)
+            self.adaptive_engine = AdaptiveEngine(
+                self.broker_api,
+                None,  # arbitrage_detector will be set later
+                None,  # correlation_manager will be set later
+                None  # No market analyzer needed for simple trading system
+            )
+            self.logger.info("Adaptive engine initialized")
+            
+            # Initialize trading components with adaptive engine
             self.correlation_manager = CorrelationManager(
                 self.broker_api, 
-                None  # No market analyzer needed for simple trading system
+                self.adaptive_engine  # Pass adaptive_engine to correlation_manager
             )
             self.arbitrage_detector = TriangleArbitrageDetector(
                 self.broker_api, 
-                None,  # No market analyzer needed for simple trading system
+                self.adaptive_engine,  # Pass adaptive_engine to arbitrage_detector
                 self.correlation_manager  # Pass correlation_manager to arbitrage_detector
             )
             self.logger.info("Trading components initialized")
             
-            # Initialize adaptive engine (main trading engine)
-            self.adaptive_engine = AdaptiveEngine(
-                self.broker_api,
-                self.arbitrage_detector,
-                self.correlation_manager,
-                None  # No market analyzer needed for simple trading system
-            )
-            self.logger.info("Adaptive engine initialized")
+            # Update adaptive engine with the initialized components
+            self.adaptive_engine.arbitrage_detector = self.arbitrage_detector
+            self.adaptive_engine.correlation_manager = self.correlation_manager
+            self.logger.info("Adaptive engine components connected")
             
             # Initialize data feed
             self.data_feed = RealTimeDataFeed(self.broker_api)

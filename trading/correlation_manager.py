@@ -116,7 +116,7 @@ class CorrelationManager:
     
     def __init__(self, broker_api, ai_engine=None):
         self.broker = broker_api
-        # self.ai = ai_engine  # DISABLED for simple trading system
+        self.ai_engine = ai_engine  # ✅ Enable AI engine for correlation data
         self.correlation_matrix = {}
         self.recovery_positions = {}
         self.is_running = False

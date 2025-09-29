@@ -609,6 +609,30 @@ class AdaptiveEngine:
         except Exception as e:
             self.logger.error(f"Error forcing portfolio rebalancing: {e}")
     
+    def get_correlations(self, symbol: str) -> Dict[str, float]:
+        """
+        Get correlation data for a symbol.
+        
+        Returns dict of {pair: correlation_value}
+        Example: {'GBPAUD': -0.72, 'USDCAD': -0.68, ...}
+        """
+        try:
+            # Return correlation data from cache or calculate
+            if hasattr(self, 'correlation_matrix') and symbol in self.correlation_matrix:
+                return self.correlation_matrix[symbol]
+            
+            # Or if correlations are stored differently
+            if hasattr(self, 'correlation_data'):
+                return self.correlation_data.get(symbol, {})
+            
+            # If no correlation data available, return empty dict
+            self.logger.warning(f"No correlation data found for {symbol}")
+            return {}
+            
+        except Exception as e:
+            self.logger.error(f"Error getting correlations for {symbol}: {e}")
+            return {}
+
     def emergency_stop(self):
         """Emergency stop all trading activities"""
         try:
