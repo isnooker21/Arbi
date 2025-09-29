@@ -2379,13 +2379,18 @@ class CorrelationManager:
             
             # Try negative correlations first (with relaxed threshold)
             for pair, correlation_value in correlations.items():
-                # ✅ FILTER 1: Skip pairs with common currency (RELAXED - allow some common currencies)
-                if self._has_common_currency(symbol, pair):
+                # ✅ FILTER 1: Check for common currency but allow strong negative correlations
+                has_common = self._has_common_currency(symbol, pair)
+                
+                if has_common:
                     # Allow JPY pairs to correlate with each other (common in forex)
                     if 'JPY' in symbol and 'JPY' in pair:
                         self.logger.debug(f"✅ Allow {pair}: JPY pairs can correlate with {symbol}")
+                    # RELAXED: Allow strong negative correlations even with common currency
+                    elif correlation_value <= -0.4:
+                        self.logger.info(f"⚠️ {pair}: Common currency BUT strong negative correlation ({correlation_value:.3f}) - ALLOWED")
                     else:
-                        self.logger.debug(f"⏭️ Skip {pair}: common currency with {symbol}")
+                        self.logger.debug(f"⏭️ Skip {pair}: common currency with {symbol} and weak correlation ({correlation_value:.3f})")
                         continue
                 
                 # ✅ FILTER 2: Only accept negative correlations (VERY RELAXED: -0.1 instead of -0.2)
@@ -2402,7 +2407,8 @@ class CorrelationManager:
                 correlation_candidates.append({
                     'symbol': pair,
                     'correlation': correlation_value,
-                    'direction': 'opposite'  # Negative correlation = opposite direction
+                    'direction': 'opposite',  # Negative correlation = opposite direction
+                    'has_common_currency': has_common
                 })
                 
                 self.logger.info(f"VALID: {pair} ({correlation_value:.3f})")
@@ -2412,11 +2418,15 @@ class CorrelationManager:
                 self.logger.warning(f"No negative correlations - using inverse strategy")
                 
                 for pair, correlation_value in correlations.items():
-                    if self._has_common_currency(symbol, pair):
+                    has_common = self._has_common_currency(symbol, pair)
+                    
+                    if has_common:
                         # Allow JPY pairs to correlate with each other (common in forex)
                         if 'JPY' in symbol and 'JPY' in pair:
                             self.logger.debug(f"✅ Allow {pair}: JPY pairs can correlate with {symbol} (inverse)")
-                        else:
+                        # For inverse, also relax common currency rule for strong correlations
+                        elif correlation_value < 0.7:
+                            self.logger.debug(f"⏭️ Skip {pair}: common currency with {symbol} and weak positive correlation ({correlation_value:.3f})")
                             continue
                     
                     # Strong positive correlation (RELAXED: 0.3 instead of 0.7)
@@ -2425,7 +2435,8 @@ class CorrelationManager:
                             'symbol': pair,
                             'correlation': -correlation_value,  # Treat as negative for sorting
                             'direction': 'inverse',
-                            'original_correlation': correlation_value
+                            'original_correlation': correlation_value,
+                            'has_common_currency': has_common
                         })
                         
                         self.logger.info(f"INVERSE: {pair} (positive {correlation_value:.3f})")
@@ -2444,11 +2455,14 @@ class CorrelationManager:
                 best_correlation = 0
                 
                 for pair, correlation_value in correlations.items():
-                    if self._has_common_currency(symbol, pair):
+                    has_common = self._has_common_currency(symbol, pair)
+                    
+                    if has_common:
                         # Allow JPY pairs to correlate with each other
                         if 'JPY' in symbol and 'JPY' in pair:
                             pass  # Allow this pair
-                        else:
+                        # For emergency fallback, also relax common currency rule for strong correlations
+                        elif abs(correlation_value) < 0.4:
                             continue
                     
                     # Find the strongest correlation (absolute value)
@@ -2461,7 +2475,8 @@ class CorrelationManager:
                         'symbol': best_pair,
                         'correlation': -abs(best_correlation),  # Always treat as negative for hedging
                         'direction': 'emergency_fallback',
-                        'original_correlation': best_correlation
+                        'original_correlation': best_correlation,
+                        'has_common_currency': self._has_common_currency(symbol, best_pair)
                     })
                     
                     self.logger.info(f"EMERGENCY FALLBACK: {best_pair} (correlation {best_correlation:.3f})")
