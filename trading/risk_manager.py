@@ -58,28 +58,9 @@ class RiskManager:
             return {}
     
     def should_trigger_stop_loss(self, position: Dict) -> bool:
-        """Check if position should trigger stop loss"""
-        try:
-            current_pnl = position.get('profit', 0)
-            entry_price = position.get('price', 0)
-            current_price = position.get('current_price', entry_price)
-            
-            if entry_price == 0:
-                return False
-            
-            # Calculate percentage loss
-            if position.get('type') == 'BUY':
-                loss_percent = (entry_price - current_price) / entry_price * 100
-            else:  # SELL
-                loss_percent = (current_price - entry_price) / entry_price * 100
-            
-            stop_loss_percent = self.risk_limits.get('stop_loss_percent', 2.0)
-            
-            return loss_percent >= stop_loss_percent
-            
-        except Exception as e:
-            self.logger.error(f"Error checking stop loss: {e}")
-            return False
+        """Check if position should trigger stop loss - DISABLED for Never-Cut-Loss strategy"""
+        # DISABLED: ระบบ Never-Cut-Loss ไม่ใช้ stop loss
+        return False
     
     def should_trigger_take_profit(self, position: Dict) -> bool:
         """Check if position should trigger take profit"""
@@ -184,15 +165,12 @@ class RiskManager:
     def check_daily_limits(self, current_pnl: float) -> bool:
         """Check if daily limits have been exceeded"""
         try:
-            max_daily_loss = self.risk_limits.get('max_daily_loss', 1000)
-            
+            # DISABLED: ระบบ Never-Cut-Loss ไม่ใช้ daily loss limit
             # Update daily PnL
             self.daily_pnl = current_pnl
             
-            # Check if daily loss limit exceeded
-            if current_pnl <= -max_daily_loss:
-                self.logger.warning(f"Daily loss limit exceeded: {current_pnl:.2f}")
-                return True
+            # ไม่มีการตรวจสอบ daily loss limit
+            return False
             
             return False
             
@@ -220,9 +198,9 @@ class RiskManager:
     def should_stop_trading(self) -> bool:
         """Check if trading should be stopped due to risk limits"""
         try:
-            # Check daily loss limit
-            if self.daily_pnl <= -self.risk_limits.get('max_daily_loss', 1000):
-                return True
+            # DISABLED: ระบบ Never-Cut-Loss ไม่ใช้ daily loss limit
+            # if self.daily_pnl <= -self.risk_limits.get('max_daily_loss', 1000):
+            #     return True
             
             # Check maximum drawdown
             if self.max_drawdown >= self.risk_limits.get('max_drawdown_percent', 30):
@@ -451,10 +429,10 @@ class RiskManager:
     def check_circuit_breaker(self, current_pnl: float, account_balance: float) -> bool:
         """ตรวจสอบเงื่อนไข Circuit Breaker"""
         try:
-            # ตรวจสอบการขาดทุนรายวัน
-            if abs(current_pnl) > self.risk_limits.get('max_daily_loss', 1000):
-                self.trip_circuit_breaker("Daily loss limit exceeded")
-                return False
+            # DISABLED: ระบบ Never-Cut-Loss ไม่ใช้ daily loss limit
+            # if abs(current_pnl) > self.risk_limits.get('max_daily_loss', 1000):
+            #     self.trip_circuit_breaker("Daily loss limit exceeded")
+            #     return False
             
             # ตรวจสอบ drawdown
             if account_balance > 0:
@@ -558,7 +536,6 @@ class RiskManager:
                 'current_exposures': self.current_exposures,
                 'active_positions': {symbol: len(positions) for symbol, positions in self.active_positions.items()},
                 'limits': {
-                    'max_daily_loss': self.risk_limits.get('max_daily_loss', 1000),
                     'max_drawdown_percent': self.risk_limits.get('max_drawdown_percent', 30),
                     'max_error_rate': self.risk_limits.get('max_error_rate', 50),
                     'cooldown_minutes': self.cooldown_minutes,

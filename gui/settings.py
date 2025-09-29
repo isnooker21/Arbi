@@ -82,10 +82,7 @@ class SettingsWindow:
                 "position_hold_time": 3600
             },
             "risk_management": {
-                "max_daily_loss": 1000,
-                "max_drawdown_percent": 30,
                 "position_size_multiplier": 1.5,
-                "stop_loss_percent": 2.0,
                 "take_profit_percent": 1.0
             },
             "ai": {
@@ -214,10 +211,7 @@ class SettingsWindow:
         
         # Risk management parameters
         risk_params = [
-            ("Max Daily Loss ($)", "risk_management.max_daily_loss", "float", 100, 10000),
-            ("Max Drawdown %", "risk_management.max_drawdown_percent", "float", 5, 100),
             ("Position Size Multiplier", "risk_management.position_size_multiplier", "float", 0.1, 5.0),
-            ("Stop Loss %", "risk_management.stop_loss_percent", "float", 0.1, 10.0),
             ("Take Profit %", "risk_management.take_profit_percent", "float", 0.1, 10.0)
         ]
         
@@ -529,11 +523,11 @@ class SettingsWindow:
                 elif param_path.endswith('.learning_enabled'):
                     value = value.lower() == 'true'
                 elif param_path.endswith(('.max_triangles', '.max_grid_levels', '.position_hold_time', 
-                                        '.max_daily_loss', '.max_rules_per_category', '.performance_lookback_days')):
+                                        '.max_rules_per_category', '.performance_lookback_days')):
                     value = int(value)
                 elif param_path.endswith(('.base_lot_size', '.min_arbitrage_threshold', '.max_spread',
                                         '.max_drawdown_percent', '.position_size_multiplier', 
-                                        '.stop_loss_percent', '.take_profit_percent', '.confidence_threshold')):
+                                        '.take_profit_percent', '.confidence_threshold')):
                     value = float(value)
                 
                 self.set_nested_value(self.settings, param_path, value)

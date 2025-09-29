@@ -144,19 +144,8 @@ class CorrelationManager:
         self.portfolio_rebalancing = True
         self.multi_timeframe_analysis = True
         
-        # Recovery thresholds - More flexible for all market conditions
-        self.recovery_thresholds = {
-            'min_correlation': 0.5,      # ความสัมพันธ์ขั้นต่ำ 50% (ลดลงเพื่อให้ใช้ได้ทุกคู่)
-            'max_correlation': 0.95,     # ความสัมพันธ์สูงสุด 95%
-            'min_loss_threshold': -0.005, # ขาดทุนขั้นต่ำ -0.5%
-            'max_recovery_time_hours': 24, # เวลาสูงสุด 24 ชั่วโมง
-            'hedge_ratio_range': (0.3, 2.5),  # ขนาด hedge ratio
-            'wait_time_minutes': 0,      # ไม่รอ - แก้ไม้ทันที
-            'base_lot_size': 0.1         # ขนาด lot เริ่มต้น
-        }
-        
-        # Portfolio balance threshold
-        self.portfolio_balance_threshold = 0.1  # 10% imbalance threshold
+        # Load configuration from config file
+        self._load_config_from_file()
         
         # Never-Cut-Loss flag
         self.never_cut_loss = True
@@ -187,6 +176,75 @@ class CorrelationManager:
             self.logger.error(f"Traceback: {traceback.format_exc()}")
         
         self.logger.info("✅ CorrelationManager initialization completed")
+    
+    def _load_config_from_file(self):
+        """โหลดการตั้งค่าจาก config file"""
+        try:
+            import json
+            import os
+            
+            config_path = 'config/adaptive_params.json'
+            
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                
+                # โหลด recovery parameters
+                recovery_params = config.get('recovery_params', {})
+                correlation_thresholds = recovery_params.get('correlation_thresholds', {})
+                loss_thresholds = recovery_params.get('loss_thresholds', {})
+                hedge_ratios = recovery_params.get('hedge_ratios', {})
+                timing = recovery_params.get('timing', {})
+                
+                # ตั้งค่า recovery thresholds
+                self.recovery_thresholds = {
+                    'min_correlation': correlation_thresholds.get('min_correlation', 0.7),
+                    'max_correlation': correlation_thresholds.get('max_correlation', 0.95),
+                    'min_loss_threshold': loss_thresholds.get('min_loss_threshold', -0.002),
+                    'max_recovery_time_hours': timing.get('max_recovery_time_hours', 24),
+                    'hedge_ratio_range': (
+                        hedge_ratios.get('min_ratio', 0.7),
+                        hedge_ratios.get('max_ratio', 1.3)
+                    ),
+                    'wait_time_minutes': timing.get('recovery_check_interval_minutes', 5),
+                    'base_lot_size': 0.05  # ตั้งค่าให้ระมัดระวังมากขึ้น
+                }
+                
+                # โหลด risk management parameters
+                risk_mgmt = config.get('position_sizing', {}).get('risk_management', {})
+                self.portfolio_balance_threshold = risk_mgmt.get('max_portfolio_risk', 0.05)
+                
+                self.logger.info("✅ Configuration loaded from config/adaptive_params.json")
+                self.logger.info(f"   Min correlation: {self.recovery_thresholds['min_correlation']}")
+                self.logger.info(f"   Min loss threshold: {self.recovery_thresholds['min_loss_threshold']}")
+                self.logger.info(f"   Hedge ratio range: {self.recovery_thresholds['hedge_ratio_range']}")
+                self.logger.info(f"   Base lot size: {self.recovery_thresholds['base_lot_size']}")
+                
+            else:
+                self.logger.warning("⚠️ Config file not found, using fallback values")
+                self._set_fallback_config()
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error loading config: {e}")
+            self.logger.info("🔄 Using fallback configuration")
+            self._set_fallback_config()
+    
+    def _set_fallback_config(self):
+        """ตั้งค่า fallback เมื่อไม่สามารถโหลด config ได้"""
+        self.recovery_thresholds = {
+            'min_correlation': 0.7,      # ความสัมพันธ์ขั้นต่ำ 70%
+            'max_correlation': 0.95,     # ความสัมพันธ์สูงสุด 95%
+            'min_loss_threshold': -0.002, # ขาดทุนขั้นต่ำ -0.2% (เริ่มแก้เร็วขึ้น)
+            'max_recovery_time_hours': 24, # เวลาสูงสุด 24 ชั่วโมง
+            'hedge_ratio_range': (0.7, 1.3),  # ขนาด hedge ratio ที่ระมัดระวัง
+            'wait_time_minutes': 5,      # รอ 5 นาทีก่อนแก้ไม้
+            'base_lot_size': 0.05        # ขนาด lot เริ่มต้นที่เล็กกว่า
+        }
+        
+        # Portfolio balance threshold ที่ระมัดระวัง
+        self.portfolio_balance_threshold = 0.05  # 5% imbalance threshold
+        
+        self.logger.info("✅ Fallback configuration applied")
     
     def _initialize_tracker_from_mt5(self):
         """Initialize tracker with existing positions from MT5"""
