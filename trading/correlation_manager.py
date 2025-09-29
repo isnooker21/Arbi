@@ -1322,16 +1322,48 @@ class CorrelationManager:
             self.logger.debug(f"Error initiating correlation recovery: {e}")
     
     def _find_optimal_correlation_pairs(self, base_symbol: str, group_pairs: List[str] = None) -> List[Dict]:
-        """
-        ⚡ CRITICAL: Find optimal correlation pairs for recovery
-        หาคู่เงินที่มี correlation กับคู่ที่กำหนด (ไม่ซ้ำกับคู่ในกลุ่ม)
-        """
+        """Find optimal correlation pairs with negative correlation filter"""
         try:
-            # ใช้ฟังก์ชันสำหรับคู่เงินใดๆ แทน (ไม่ซ้ำกับคู่ในกลุ่ม)
-            return self._find_correlation_pairs_for_any_symbol(base_symbol, group_pairs)
+            # Get correlations from AI engine
+            correlations = self.ai_engine.get_correlations(base_symbol)
+            
+            if not correlations:
+                self.logger.debug(f"No correlations found for {base_symbol}")
+                return []
+            
+            correlation_candidates = []
+            
+            for pair, corr_value in correlations.items():
+                # Skip if pair is in the same group
+                if group_pairs and pair in group_pairs:
+                    continue
+                
+                # ✅ Filter: Common currency
+                if self._has_common_currency(base_symbol, pair):
+                    self.logger.debug(f"⏭️ Skip {pair}: common currency with {base_symbol}")
+                    continue
+                
+                # ✅ Filter: Only negative correlations
+                if -0.95 < corr_value < -0.5:
+                    correlation_candidates.append({
+                        'symbol': pair,
+                        'correlation': corr_value,
+                        'direction': 'opposite'
+                    })
+                    self.logger.debug(f"✅ Valid hedge candidate: {pair} (correlation: {corr_value:.2f})")
+            
+            # ✅ Sort by most negative correlation
+            correlation_candidates.sort(key=lambda x: x['correlation'])
+            
+            if correlation_candidates:
+                self.logger.info(f"🎯 Found {len(correlation_candidates)} optimal negative correlation pairs for {base_symbol}")
+                for i, candidate in enumerate(correlation_candidates[:3], 1):
+                    self.logger.info(f"   {i}. {candidate['symbol']}: {candidate['correlation']:.2f}")
+            
+            return correlation_candidates[:5]  # Top 5 best candidates
             
         except Exception as e:
-            self.logger.debug(f"Error finding optimal correlation pairs for {base_symbol}: {e}")
+            self.logger.error(f"Error finding optimal pairs: {e}")
             return []
     
     def _is_currency_pair(self, symbol: str) -> bool:
@@ -1882,39 +1914,34 @@ class CorrelationManager:
             return 0.1
     
     def _send_correlation_order(self, symbol: str, lot_size: float, group_id: str, original_position: Dict = None) -> Dict:
-        """Send recovery order with clear ticket linkage"""
+        """Send recovery order with SHORT comment format"""
         try:
             original_ticket = str(original_position.get('ticket', '')) if original_position else 'UNKNOWN'
             original_symbol = original_position.get('symbol', 'UNKNOWN') if original_position else 'UNKNOWN'
             
-            # ✅ CRITICAL: Comment must show which ticket is being hedged (MT5 limit ~31 chars)
-            # Format: "R12345_GBP->AUD" (shorter format for MT5 compatibility)
-            comment = f"R{original_ticket}_{original_symbol[:3]}->{symbol[:3]}"
+            # ✅ NEW SHORT FORMAT: "R{ticket}_{recovery_symbol}"
+            # Example: "R3317086_AUDUSD" = 16 chars ✅
             
-            # Ensure comment doesn't exceed MT5 limit (31 characters)
+            # Extract last 7 digits of ticket for uniqueness
+            ticket_short = original_ticket[-7:] if len(original_ticket) > 7 else original_ticket
+            
+            comment = f"R{ticket_short}_{symbol}"
+            
+            # Ensure comment is under 31 characters
             if len(comment) > 31:
-                # Fallback to even shorter format if needed
-                comment = f"R{original_ticket}_{original_symbol[:2]}{symbol[:2]}"
-                if len(comment) > 31:
-                    # Last resort: just use ticket number
-                    comment = f"R{original_ticket}"
+                # Truncate symbol if needed
+                max_symbol_len = 31 - len(f"R{ticket_short}_")
+                comment = f"R{ticket_short}_{symbol[:max_symbol_len]}"
             
-            self.logger.debug(f"📝 Recovery comment: '{comment}' (length: {len(comment)})")
-            # Example: "R12345_GBP->AUD" instead of "RECOVERY_12345_GBPUSD_TO_AUDUSD"
+            self.logger.info(f"📝 Recovery comment: '{comment}' (length: {len(comment)})")
             
             # หา magic number จาก group_id หรือใช้ default
             magic_number = self._get_magic_number_from_group_id(group_id)
             if not magic_number:
                 magic_number = 234000  # Default magic number for recovery orders
             
-            # กำหนดทิศทางที่ถูกต้อง (ใช้ทิศทางเดียวกันกับคู่เดิม)
-            original_direction = original_position.get('type', 'SELL') if original_position else 'SELL'
-            if original_direction == 'BUY':
-                order_type = 'BUY'   # ใช้ทิศทางเดียวกัน
-            elif original_direction == 'SELL':
-                order_type = 'SELL'  # ใช้ทิศทางเดียวกัน
-            else:
-                order_type = 'SELL'  # Default to SELL
+            # Determine direction based on correlation
+            order_type = self._calculate_hedge_direction(original_position, symbol)
             
             # ส่งออเดอร์
             result = self.broker.place_order(
@@ -1958,11 +1985,16 @@ class CorrelationManager:
             }
     
     def check_recovery_positions(self):
-        """Check individual orders needing recovery with comprehensive duplicate prevention"""
+        """Check recovery with smart logging and proper recovery order exclusion"""
         try:
-            self.logger.info("=" * 80)
-            self.logger.info("🔍 RECOVERY SELECTION PROCESS")
-            self.logger.info("=" * 80)
+            # Cooldown check to prevent excessive logging
+            current_time = datetime.now()
+            if hasattr(self, 'last_recovery_check'):
+                elapsed = (current_time - self.last_recovery_check).total_seconds()
+                if elapsed < 30:  # Check every 30 seconds max
+                    return
+            
+            self.last_recovery_check = current_time
             
             # 🔄 STEP 1: Sync individual order tracker with MT5
             sync_results = self.order_tracker.sync_with_mt5()
@@ -1973,12 +2005,22 @@ class CorrelationManager:
             orders_needing_recovery = self.order_tracker.get_orders_needing_recovery()
             
             if not orders_needing_recovery:
-                self.logger.info("📊 No orders needing recovery found")
+                # Only log once per 5 minutes if no orders
+                if not hasattr(self, '_last_no_orders_log'):
+                    self._last_no_orders_log = current_time
+                elif (current_time - self._last_no_orders_log).total_seconds() > 300:
+                    self.logger.info("ℹ️ All orders are hedged or profitable")
+                    self._last_no_orders_log = current_time
                 return
             
-            self.logger.info(f"📊 Found {len(orders_needing_recovery)} orders needing recovery from tracker")
-            
-            recovery_candidates = []
+            # Find valid candidates with detailed tracking
+            valid_candidates = []
+            skipped_reasons = {
+                'already_recovery': 0,
+                'already_hedged': 0,
+                'insufficient_loss': 0,
+                'not_found_mt5': 0
+            }
             
             for order_info in orders_needing_recovery:
                 ticket = order_info.get('ticket')
@@ -1987,35 +2029,34 @@ class CorrelationManager:
                 # Get actual position from MT5
                 position = self._get_position_by_ticket(ticket)
                 if not position:
-                    self.logger.debug(f"⚠️ Position {ticket}_{symbol} not found in MT5 - skipping")
+                    skipped_reasons['not_found_mt5'] += 1
                     continue
                 
-                profit = position.get('profit', 0)
+                # ✅ CRITICAL FIX: Skip recovery orders completely
+                if self._is_recovery_order(position):
+                    skipped_reasons['already_recovery'] += 1
+                    continue
                 
                 # ✅ CRITICAL: Double-check if this specific ticket is already hedged
                 if self.order_tracker.is_order_hedged(ticket, symbol):
-                    self.logger.debug(f"⏭️ Skip {ticket}_{symbol} - already hedged (${profit:.2f})")
+                    skipped_reasons['already_hedged'] += 1
                     continue
                 
                 # ✅ CRITICAL: Check if this ticket needs recovery
                 if not self.order_tracker.needs_recovery(ticket, symbol):
-                    self.logger.debug(f"⏭️ Skip {ticket}_{symbol} - doesn't need recovery (${profit:.2f})")
+                    skipped_reasons['already_hedged'] += 1
                     continue
                 
                 # Check recovery conditions
-                meets_conditions = self._meets_recovery_conditions(position)
-                
-                if meets_conditions:
-                    recovery_candidates.append(position)
-                    self.logger.info(f"✅ Candidate for recovery: {ticket}_{symbol} (${profit:.2f})")
+                if self._meets_recovery_conditions(position):
+                    valid_candidates.append(position)
                 else:
-                    self.logger.debug(f"❌ {ticket}_{symbol} doesn't meet recovery conditions (${profit:.2f})")
+                    skipped_reasons['insufficient_loss'] += 1
             
-            self.logger.info(f"📊 Selected {len(recovery_candidates)} positions for recovery (not yet hedged)")
-            
-            if recovery_candidates:
-                # Process recovery for best candidate (largest loss)
-                best_candidate = max(recovery_candidates, key=lambda x: abs(x.get('profit', 0)))
+            # Only log if there's something meaningful to report
+            if valid_candidates:
+                self.logger.info(f"🎯 Found {len(valid_candidates)} valid recovery candidates")
+                best_candidate = max(valid_candidates, key=lambda x: abs(x.get('profit', 0)))
                 ticket = best_candidate.get('ticket')
                 symbol = best_candidate.get('symbol')
                 profit = best_candidate.get('profit', 0)
@@ -2025,11 +2066,114 @@ class CorrelationManager:
                 # Start recovery
                 self._start_individual_recovery(best_candidate)
             else:
-                self.logger.info("📊 No valid recovery candidates found")
+                # Log skip reasons only at debug level
+                total_skipped = sum(skipped_reasons.values())
+                if total_skipped > 0:
+                    self.logger.debug(f"⏭️ Skipped {total_skipped} orders: {skipped_reasons}")
                 
+                # Only log "no candidates" once per 5 minutes
+                if not hasattr(self, '_last_no_candidates_log'):
+                    self._last_no_candidates_log = current_time
+                elif (current_time - self._last_no_candidates_log).total_seconds() > 300:
+                    self.logger.info(f"ℹ️ No valid candidates (Reasons: {skipped_reasons})")
+                    self._last_no_candidates_log = current_time
+            
         except Exception as e:
             self.logger.error(f"Error in recovery check: {e}")
     
+    def _has_common_currency(self, symbol1: str, symbol2: str) -> bool:
+        """
+        Check if two currency pairs share a common currency.
+        
+        Example:
+            EURJPY vs AUDJPY → True (both have JPY)
+            EURJPY vs GBPAUD → False (no common currency)
+        
+        Args:
+            symbol1: First currency pair (e.g., "EURJPY")
+            symbol2: Second currency pair (e.g., "AUDJPY")
+            
+        Returns:
+            True if pairs share any currency
+        """
+        # Validate symbol format
+        if len(symbol1) != 6 or len(symbol2) != 6:
+            return False
+        
+        # Extract currencies
+        base1 = symbol1[:3]    # EUR from EURJPY
+        quote1 = symbol1[3:]   # JPY from EURJPY
+        base2 = symbol2[:3]    # AUD from AUDJPY
+        quote2 = symbol2[3:]   # JPY from AUDJPY
+        
+        # Check if any currency matches
+        has_common = (base1 == base2 or base1 == quote2 or 
+                      quote1 == base2 or quote1 == quote2)
+        
+        if has_common:
+            self.logger.debug(f"❌ Common currency: {symbol1} and {symbol2} share currency")
+            return True
+        
+        return False
+
+    def _extract_currencies(self, symbol: str) -> tuple:
+        """
+        Extract base and quote currencies from symbol.
+        
+        Args:
+            symbol: Currency pair (e.g., "EURJPY")
+            
+        Returns:
+            Tuple of (base, quote) or (None, None) if invalid
+        """
+        if len(symbol) != 6:
+            return (None, None)
+        
+        base = symbol[:3]
+        quote = symbol[3:]
+        return (base, quote)
+
+    def _is_recovery_order(self, position: Dict) -> bool:
+        """Check if position is a recovery order - updated for short format"""
+        comment = position.get('comment', '')
+        magic = position.get('magic', 0)
+        
+        # ✅ NEW: Check for short format "R{ticket}_{symbol}"
+        if comment.startswith('R') and '_' in comment:
+            return True
+        
+        # Legacy: Check for old format "R12345_GBP->AUD"
+        if comment and ('R' == comment[0] and '_' in comment and '->' in comment):
+            return True
+        
+        # Check by old comment format (if any still exist)
+        if 'RECOVERY' in comment:
+            return True
+        
+        # Check by magic number (if using different magic for recovery)
+        recovery_magic_numbers = [234000, 234100, 234101, 234102, 234103]  # Add more if needed
+        if magic in recovery_magic_numbers:
+            return True
+        
+        return False
+
+    def _calculate_hedge_direction(self, original_position: Dict, hedge_symbol: str) -> str:
+        """
+        Calculate hedge direction based on negative correlation.
+        
+        For negative correlation pairs:
+        - If original is BUY and losing → hedge with opposite direction
+        - If original is SELL and losing → hedge with opposite direction
+        """
+        original_direction = original_position.get('type', 'BUY')
+        
+        # For negative correlation, use SAME direction
+        # (because they move opposite, same direction = opposite effect)
+        if original_direction == 'BUY':
+            return 'BUY'
+        else:
+            return 'SELL'
+
     def _get_position_by_ticket(self, ticket: str) -> Optional[Dict]:
         """Get position from MT5 by ticket number"""
         try:
@@ -2043,36 +2187,57 @@ class CorrelationManager:
             return None
     
     def _meets_recovery_conditions(self, position: Dict) -> bool:
-        """Check if position meets recovery conditions"""
+        """Check if position meets recovery conditions with detailed logging"""
         try:
-            profit = position.get('profit', 0)
             ticket = str(position.get('ticket', ''))
             symbol = position.get('symbol', '')
+            profit = position.get('profit', 0)
+            comment = position.get('comment', '')
+            
+            # Skip if it's already a recovery order
+            if self._is_recovery_order(position):
+                self.logger.debug(f"❌ {ticket}_{symbol}: Is recovery order")
+                return False
             
             # Check if position already has recovery orders
             order_info = self.order_tracker.get_order_info(ticket, symbol)
             if order_info:
                 recovery_orders = order_info.get('recovery_orders', [])
                 if recovery_orders:
-                    # Position already has recovery orders - don't create new ones
+                    self.logger.debug(f"❌ {ticket}_{symbol}: Already has {len(recovery_orders)} recovery orders")
                     return False
             
+            # Check if position is already hedged
+            if self.order_tracker.is_order_hedged(ticket, symbol):
+                self.logger.debug(f"❌ {ticket}_{symbol}: Already hedged")
+                return False
+            
             # Check loss threshold
-            loss_threshold = self.recovery_thresholds.get('min_loss_threshold', -0.005)
             balance = self.broker.get_account_balance() or 10000
             loss_percent = profit / balance
+            min_loss_threshold = self.recovery_thresholds.get('min_loss_threshold', -0.005)
             
-            meets_loss = loss_percent <= loss_threshold
+            meets_loss = loss_percent <= min_loss_threshold
+            
+            if not meets_loss:
+                self.logger.debug(f"❌ {ticket}_{symbol}: Loss {loss_percent:.4f}% not enough (need <= {min_loss_threshold:.4f}%)")
+                return False
             
             # Check if position is losing money
             meets_profit_loss = profit < 0
+            if not meets_profit_loss:
+                self.logger.debug(f"❌ {ticket}_{symbol}: Not losing money (${profit:.2f})")
+                return False
             
             # Check minimum loss amount (e.g., at least $10 loss)
             min_loss_amount = -10.0  # $10 minimum loss
             meets_min_loss = profit <= min_loss_amount
+            if not meets_min_loss:
+                self.logger.debug(f"❌ {ticket}_{symbol}: Loss ${profit:.2f} too small (need <= ${min_loss_amount})")
+                return False
             
-            # All conditions must be met
-            return meets_loss and meets_profit_loss and meets_min_loss
+            self.logger.debug(f"✅ {ticket}_{symbol}: Meets all conditions (${profit:.2f}, {loss_percent:.4f}%)")
+            return True
             
         except Exception as e:
             self.logger.error(f"Error checking recovery conditions: {e}")
@@ -2186,34 +2351,62 @@ class CorrelationManager:
             self.logger.error(f"Error displaying recovery chain: {e}")
     
     def _find_correlation_pairs_for_symbol(self, symbol: str) -> List[Dict]:
-        """Find correlation pairs for a specific symbol"""
+        """
+        Find correlation pairs for symbol with improved filtering.
+        
+        Filters:
+        1. Remove pairs with common currency
+        2. Select only negative correlations (-0.5 to -0.95)
+        3. Rank by strongest negative correlation
+        """
         try:
-            # Get all available currency pairs
-            all_pairs = self._get_all_currency_pairs_from_mt5()
+            # Get correlations from AI engine
+            correlations = self.ai_engine.get_correlations(symbol)
             
-            # Remove the symbol itself from the list
-            other_pairs = [pair for pair in all_pairs if pair != symbol]
+            if not correlations:
+                self.logger.debug(f"No correlations found for {symbol}")
+                return []
             
             correlation_candidates = []
             
-            # For now, use simple correlation based on common currency pairs
-            # This is a simplified version - in production you'd calculate actual correlations
-            for other_symbol in other_pairs[:10]:  # Check top 10 pairs
-                # Simple correlation estimation based on currency overlap
-                correlation = self._estimate_correlation(symbol, other_symbol)
+            for pair, correlation_value in correlations.items():
+                # ✅ FILTER 1: Skip pairs with common currency
+                if self._has_common_currency(symbol, pair):
+                    self.logger.debug(f"⏭️ Skip {pair}: common currency with {symbol}")
+                    continue
                 
-                if correlation > 0.5:  # Minimum correlation threshold
-                    correlation_candidates.append({
-                        'symbol': other_symbol,
-                        'correlation': correlation,
-                        'hedge_ratio': 1.0  # Simplified hedge ratio
-                    })
+                # ✅ FILTER 2: Only accept negative correlations
+                # Negative correlation means pairs move in opposite directions
+                if correlation_value >= -0.5:
+                    self.logger.debug(f"⏭️ Skip {pair}: correlation {correlation_value:.2f} not negative enough")
+                    continue
+                
+                # Strong negative correlation (good for hedging)
+                if correlation_value <= -0.95:
+                    self.logger.debug(f"⏭️ Skip {pair}: correlation {correlation_value:.2f} too perfect (suspicious)")
+                    continue
+                
+                correlation_candidates.append({
+                    'symbol': pair,
+                    'correlation': correlation_value,
+                    'direction': 'opposite'  # Negative correlation = opposite direction
+                })
+                
+                self.logger.debug(f"✅ Valid hedge candidate: {pair} (correlation: {correlation_value:.2f})")
             
-            # Sort by correlation (highest first)
-            correlation_candidates.sort(key=lambda x: x['correlation'], reverse=True)
+            # ✅ SORT: Rank by strongest negative correlation
+            # Most negative first (e.g., -0.85, -0.75, -0.65)
+            correlation_candidates.sort(key=lambda x: x['correlation'])
+            
+            if correlation_candidates:
+                self.logger.info(f"🎯 Found {len(correlation_candidates)} valid negative correlation pairs for {symbol}")
+                for i, candidate in enumerate(correlation_candidates[:3], 1):
+                    self.logger.info(f"   {i}. {candidate['symbol']}: {candidate['correlation']:.2f}")
+            else:
+                self.logger.warning(f"⚠️ No valid negative correlation pairs found for {symbol}")
             
             return correlation_candidates
-                        
+            
         except Exception as e:
             self.logger.error(f"Error finding correlation pairs for {symbol}: {e}")
             return []
