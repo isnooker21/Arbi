@@ -120,6 +120,7 @@ class CorrelationManager:
         self.correlation_matrix = {}
         self.recovery_positions = {}
         self.recovery_chains = {}  # ✅ ADD: Initialize recovery_chains dictionary
+        self.persistence_file = "data/recovery_positions.json"  # ✅ ADD: Initialize persistence file path
         self.is_running = False
         self.logger = logging.getLogger(__name__)
         
@@ -654,6 +655,25 @@ class CorrelationManager:
             
         except Exception as e:
             self.logger.error(f"Error checking hedge status: {e}")
+            return False
+    
+    def _is_position_hedged_from_mt5(self, group_id: str, symbol: str) -> bool:
+        """Check if position is hedged by querying MT5 directly"""
+        try:
+            # Get all positions for the group
+            positions = self.order_tracker.get_positions_by_group(group_id)
+            
+            # Check if any position for this symbol is hedged
+            for position in positions:
+                if position.get('symbol') == symbol:
+                    ticket = str(position.get('ticket', ''))
+                    if ticket and self.order_tracker.is_order_hedged(ticket, symbol):
+                        return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Error checking hedge status from MT5: {e}")
             return False
     
     def _check_hedge_status_from_tracking(self, group_id: str, original_symbol: str) -> bool:
