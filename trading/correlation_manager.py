@@ -86,15 +86,28 @@ class CorrelationManager:
     def _get_all_currency_pairs_from_mt5(self) -> List[str]:
         """ดึงคู่เงินทั้งหมดจาก MT5 จริงๆ"""
         try:
-            # ใช้ predefined list เพื่อให้มีคู่เงินครบถ้วน
+            # ใช้ predefined list เพื่อให้มีคู่เงินครบถ้วน (Expanded for Correlation Trading!)
             all_pairs = [
-                'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'USDNZD',
-                'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY', 'CHFJPY', 'NZDJPY',
-                'EURCHF', 'GBPCHF', 'AUDCHF', 'CADCHF', 'NZDCHF',
-                'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'AUDNZD',
-                'EURNZD', 'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD',
-                'EURCAD', 'GBPCAD', 'USDCAD', 'AUDCAD', 'CADCHF',
-                'GBPCHF', 'NZDCHF', 'NZDJPY', 'NZDCHF'
+                # Major Pairs (USD-based)
+                'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD',
+                
+                # EUR Crosses
+                'EURGBP', 'EURJPY', 'EURCHF', 'EURAUD', 'EURCAD', 'EURNZD',
+                
+                # GBP Crosses
+                'GBPJPY', 'GBPCHF', 'GBPAUD', 'GBPCAD', 'GBPNZD',
+                
+                # JPY Crosses
+                'AUDJPY', 'CADJPY', 'CHFJPY', 'NZDJPY',
+                
+                # AUD Crosses
+                'AUDCAD', 'AUDCHF', 'AUDNZD',
+                
+                # NZD Crosses
+                'NZDCAD', 'NZDCHF',
+                
+                # CAD Crosses
+                'CADCHF'
             ]
             
             # ลบคู่ที่ซ้ำ
@@ -106,14 +119,22 @@ class CorrelationManager:
             
         except Exception as e:
             self.logger.error(f"Error getting all currency pairs: {e}")
-            # Fallback to basic list if error
+            # Fallback to comprehensive list if error (28 pairs total!)
             return [
-                'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
-                'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY',
-                'EURCHF', 'GBPCHF', 'USDCHF', 'AUDCHF', 'CADCHF',
-                'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'EURNZD',
-                'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD', 'CHFJPY',
-                'EURCAD', 'GBPCAD'
+                # Major Pairs
+                'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD',
+                # EUR Crosses
+                'EURGBP', 'EURJPY', 'EURCHF', 'EURAUD', 'EURCAD', 'EURNZD',
+                # GBP Crosses
+                'GBPJPY', 'GBPCHF', 'GBPAUD', 'GBPCAD', 'GBPNZD',
+                # JPY Crosses
+                'AUDJPY', 'CADJPY', 'CHFJPY', 'NZDJPY',
+                # AUD Crosses
+                'AUDCAD', 'AUDCHF', 'AUDNZD',
+                # NZD Crosses
+                'NZDCAD', 'NZDCHF',
+                # CAD Crosses
+                'CADCHF'
             ]
     
     def _is_recovery_comment(self, comment: str) -> bool:

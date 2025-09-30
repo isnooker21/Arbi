@@ -89,24 +89,23 @@ class TriangleArbitrageDetector:
         # Initialize pairs and combinations after logger is set
         self.available_pairs = self._get_available_pairs()
         
-        # ใช้ 6 สามเหลี่ยม Arbitrage แยกกัน
+        # ใช้ 6 สามเหลี่ยม Arbitrage แยกกัน (Optimized - ทุกคู่ซ้ำ Hedged!)
         self.arbitrage_pairs = [
             'EURUSD', 'GBPUSD', 'EURGBP',  # Group 1
-            'USDJPY', 'EURJPY',            # Group 2, 3
-            'GBPJPY',                      # Group 3
-            'AUDUSD', 'EURAUD',            # Group 4, 6
-            'USDCAD', 'EURCAD',            # Group 5
-            'GBPAUD'                       # Group 6
+            'USDCHF', 'EURCHF',            # Group 2, 5
+            'USDJPY', 'GBPJPY',            # Group 3
+            'AUDUSD', 'USDCAD', 'AUDCAD',  # Group 4
+            'NZDUSD', 'NZDCHF', 'AUDNZD'   # Group 5, 6
         ]
         
-        # 6 สามเหลี่ยม arbitrage แยกกัน
+        # 6 สามเหลี่ยม arbitrage แยกกัน (Optimized Setup - No Same-Direction Duplicates!)
         self.triangle_combinations = [
-            ('EURUSD', 'GBPUSD', 'EURGBP'),    # Group 1: EUR/USD, GBP/USD, EUR/GBP
-            ('USDJPY', 'EURUSD', 'EURJPY'),    # Group 2: USD/JPY, EUR/USD, EUR/JPY
-            ('USDJPY', 'GBPUSD', 'GBPJPY'),    # Group 3: USD/JPY, GBP/USD, GBP/JPY
-            ('AUDUSD', 'EURUSD', 'EURAUD'),    # Group 4: AUD/USD, EUR/USD, EUR/AUD
-            ('USDCAD', 'EURUSD', 'EURCAD'),    # Group 5: USD/CAD, EUR/USD, EUR/CAD
-            ('AUDUSD', 'GBPUSD', 'GBPAUD')     # Group 6: AUD/USD, GBP/USD, GBP/AUD
+            ('EURUSD', 'GBPUSD', 'EURGBP'),    # Group 1: EUR/USD(BUY), GBP/USD(SELL), EUR/GBP
+            ('EURUSD', 'USDCHF', 'EURCHF'),    # Group 2: EUR/USD(SELL), USD/CHF(BUY), EUR/CHF ✅ Hedged
+            ('GBPUSD', 'USDJPY', 'GBPJPY'),    # Group 3: GBP/USD(BUY), USD/JPY(SELL), GBP/JPY ✅ Hedged
+            ('AUDUSD', 'USDCAD', 'AUDCAD'),    # Group 4: AUD/USD(BUY), USD/CAD(SELL), AUD/CAD
+            ('NZDUSD', 'USDCHF', 'NZDCHF'),    # Group 5: NZD/USD(BUY), USD/CHF(SELL), NZD/CHF ✅ Hedged
+            ('AUDUSD', 'NZDUSD', 'AUDNZD')     # Group 6: AUD/USD(SELL), NZD/USD(SELL), AUD/NZD ✅ Hedged
         ]
         
         # เริ่มต้นตัวนับกลุ่มสำหรับแต่ละสามเหลี่ยม
@@ -116,14 +115,14 @@ class TriangleArbitrageDetector:
             self.is_arbitrage_paused[triangle_name] = False
             self.used_currency_pairs[triangle_name] = set()
         
-        # Magic numbers สำหรับแต่ละสามเหลี่ยม
+        # Magic numbers สำหรับแต่ละสามเหลี่ยม (Optimized - All Hedged!)
         self.triangle_magic_numbers = {
-            'triangle_1': 234001,  # EURUSD, GBPUSD, EURGBP
-            'triangle_2': 234002,  # USDJPY, EURUSD, EURJPY
-            'triangle_3': 234003,  # USDJPY, GBPUSD, GBPJPY
-            'triangle_4': 234004,  # AUDUSD, EURUSD, EURAUD
-            'triangle_5': 234005,  # USDCAD, EURUSD, EURCAD
-            'triangle_6': 234006   # AUDUSD, GBPUSD, GBPAUD
+            'triangle_1': 234001,  # EURUSD(BUY), GBPUSD(SELL), EURGBP
+            'triangle_2': 234002,  # EURUSD(SELL), USDCHF(BUY), EURCHF ✅
+            'triangle_3': 234003,  # GBPUSD(BUY), USDJPY(SELL), GBPJPY ✅
+            'triangle_4': 234004,  # AUDUSD(BUY), USDCAD(SELL), AUDCAD
+            'triangle_5': 234005,  # NZDUSD(BUY), USDCHF(SELL), NZDCHF ✅
+            'triangle_6': 234006   # AUDUSD(SELL), NZDUSD(SELL), AUDNZD ✅
         }
         
         # ใช้ lot size ปกติ 0.1 สำหรับทุกคู่เงิน
