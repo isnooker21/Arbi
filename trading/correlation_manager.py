@@ -734,7 +734,11 @@ class CorrelationManager:
             # จำกัด min/max
             hedge_lot = max(0.1, min(hedge_lot, 2.0))
             
-            self.logger.info(f"📊 Dynamic Hedge: PnL=${original_pnl:.2f}, Target Recovery=${target_recovery_pnl:.2f}, Lot={hedge_lot:.4f}")
+            # ✅ Round to valid lot size (0.01 increment)
+            from utils.calculations import TradingCalculations
+            hedge_lot = TradingCalculations.round_to_valid_lot_size(hedge_lot)
+            
+            self.logger.info(f"📊 Dynamic Hedge: PnL=${original_pnl:.2f}, Target Recovery=${target_recovery_pnl:.2f}, Lot={hedge_lot:.2f}")
             
             return float(hedge_lot)
             
@@ -1219,6 +1223,10 @@ class CorrelationManager:
                 hedge_lot = self._calculate_dynamic_hedge_lot(
                     original_pnl, correlation, original_symbol, hedge_symbol
                 )
+                
+                # ✅ Ensure lot size is valid (round to 0.01)
+                from utils.calculations import TradingCalculations
+                hedge_lot = TradingCalculations.round_to_valid_lot_size(hedge_lot)
                 
                 self.logger.info(f"📊 Using Dynamic Hedge Calculation: Original PnL=${original_pnl:.2f}, Hedge Lot={hedge_lot:.4f}")
                 return hedge_lot
