@@ -254,10 +254,10 @@ class AdaptiveEngine:
             
             # self.logger.info(f"💰 Account Status - Balance: {balance:.2f}, Equity: {equity:.2f}, Free Margin: {free_margin:.2f}")  # DISABLED - too verbose
             
-            # Calculate balance multiplier for uniform pip value
+            # Calculate balance multiplier for uniform pip value (reduced for lower risk)
             base_balance = 10000.0
             balance_multiplier = balance / base_balance
-            target_pip_value = 10.0 * balance_multiplier
+            target_pip_value = 5.0 * balance_multiplier  # Reduced from 10.0 to 5.0
             
             # self.logger.info(f"📊 Uniform pip value: Base=${10.0:.2f}, Multiplier={balance_multiplier:.2f}x, Target=${target_pip_value:.2f}")  # DISABLED - too verbose
             

@@ -532,7 +532,7 @@ class TriangleArbitrageDetector:
             lot_sizes = TradingCalculations.get_uniform_triangle_lots(
                 triangle_symbols=triangle_symbols,
                 balance=balance,
-                target_pip_value=10.0,  # $10 pip value base
+                target_pip_value=5.0,  # $5 pip value base (reduced from $10 for lower risk)
                 broker_api=self.broker  # ส่ง broker API สำหรับดึงอัตราแลกเปลี่ยน
             )
             

@@ -1460,10 +1460,10 @@ class CorrelationManager:
             if original_symbol and hedge_symbol:
                 original_pip_value = TradingCalculations.calculate_pip_value(original_symbol, original_lot, self.broker)
                 
-                # คำนวณ target pip value ตาม balance (base $10K = $10 pip value)
+                # คำนวณ target pip value ตาม balance (base $10K = $5 pip value - reduced for lower risk)
                 base_balance = 10000.0
                 balance_multiplier = balance / base_balance
-                target_pip_value = 10.0 * balance_multiplier
+                target_pip_value = 5.0 * balance_multiplier
                 
                 # คำนวณ lot size ที่ให้ pip value เท่ากับ target
                 # ใช้ correlation เพื่อปรับขนาด hedge
@@ -1481,8 +1481,8 @@ class CorrelationManager:
                 # Round to valid lot size
                 hedge_lot = TradingCalculations.round_to_valid_lot_size(hedge_lot)
                 
-                # จำกัดขนาด lot
-                hedge_lot = min(hedge_lot, 1.0)  # สูงสุด 1 lot
+                # จำกัดขนาด lot (reduced for lower risk)
+                hedge_lot = min(hedge_lot, 0.5)  # สูงสุด 0.5 lot (reduced from 1.0)
                 hedge_lot = max(hedge_lot, 0.1)  # ต่ำสุด 0.1 lot
                 
                 self.logger.info(f"📊 Hedge lot calculation: Original={original_lot:.4f}, Target Pip=${target_pip_value:.2f}, Hedge Lot={hedge_lot:.4f}")
