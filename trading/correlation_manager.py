@@ -158,6 +158,34 @@ class CorrelationManager:
         # Individual Order Tracking System - New and Improved
         self.order_tracker = IndividualOrderTracker(broker_api)
         
+        # 🤖 ML-Ready Systems (Optional - won't break if disabled)
+        try:
+            from data.ml_logger import MLRecoveryLogger
+            from data.pair_selector_bandit import PairSelectorBandit
+            
+            ml_logging_enabled = getattr(self, 'ml_logging_enabled', True)
+            bandit_enabled = getattr(self, 'bandit_enabled', True)
+            
+            if ml_logging_enabled:
+                self.ml_logger = MLRecoveryLogger()
+                self.logger.info("🤖 ML Logger initialized")
+            else:
+                self.ml_logger = None
+                
+            if bandit_enabled:
+                self.pair_bandit = PairSelectorBandit(
+                    exploration_rate=getattr(self, 'bandit_exploration_rate', 0.2),
+                    learning_rate=getattr(self, 'bandit_learning_rate', 0.1)
+                )
+                self.logger.info("🎰 Multi-Armed Bandit initialized")
+            else:
+                self.pair_bandit = None
+                
+        except Exception as e:
+            self.logger.warning(f"⚠️ ML systems not available: {e}")
+            self.ml_logger = None
+            self.pair_bandit = None
+        
         # Log startup completion
         self.logger.info("🚀 Individual Order Tracker initialized")
         self.order_tracker.log_status_summary()
@@ -222,6 +250,32 @@ class CorrelationManager:
                 self.min_price_distance_pips = loss_thresholds.get('min_price_distance_pips', 10)
                 self.min_position_age_seconds = timing.get('min_position_age_seconds', 60)
                 
+                # โหลด trend analysis settings
+                trend_settings = recovery_params.get('trend_analysis', {})
+                self.trend_analysis_enabled = trend_settings.get('enabled', True)
+                self.trend_periods = trend_settings.get('periods', 50)
+                self.trend_confidence_threshold = trend_settings.get('confidence_threshold', 0.4)
+                self.enable_chain_on_low_confidence = trend_settings.get('enable_chain_on_low_confidence', True)
+                
+                # โหลด ML logging settings
+                ml_settings = recovery_params.get('ml_logging', {})
+                self.ml_logging_enabled = ml_settings.get('enabled', True)
+                self.log_market_features = ml_settings.get('log_market_features', True)
+                
+                # โหลด multi-armed bandit settings
+                bandit_settings = recovery_params.get('multi_armed_bandit', {})
+                self.bandit_enabled = bandit_settings.get('enabled', True)
+                self.bandit_exploration_rate = bandit_settings.get('exploration_rate', 0.2)
+                self.bandit_learning_rate = bandit_settings.get('learning_rate', 0.1)
+                
+                # โหลด chain recovery settings
+                chain_settings = recovery_params.get('chain_recovery', {})
+                self.chain_recovery_enabled = chain_settings.get('enabled', True)
+                self.chain_recovery_mode = chain_settings.get('mode', 'conditional')
+                self.max_chain_depth = chain_settings.get('max_chain_depth', 2)
+                self.min_loss_percent_for_chain = chain_settings.get('min_loss_percent_for_chain', -0.006)
+                self.chain_only_when_trend_uncertain = chain_settings.get('only_when_trend_uncertain', True)
+                
                 # โหลด risk management parameters
                 risk_mgmt = config.get('position_sizing', {}).get('risk_management', {})
                 self.portfolio_balance_threshold = risk_mgmt.get('max_portfolio_risk', 0.05)
@@ -249,6 +303,15 @@ class CorrelationManager:
                     for bal in [5000, 10000, 50000]:
                         amount = bal * self.min_loss_percent_for_chain
                         self.logger.info(f"   - Balance ${bal:,}: >= ${abs(amount):.2f}")
+                
+                # แสดง ML systems status
+                if self.trend_analysis_enabled:
+                    self.logger.info(f"📈 Trend Analysis: ENABLED (confidence threshold: {self.trend_confidence_threshold:.1%})")
+                if self.ml_logging_enabled:
+                    self.logger.info(f"🤖 ML Logging: ENABLED (ready for training)")
+                if self.bandit_enabled:
+                    self.logger.info(f"🎰 Pair Bandit: ENABLED (explore: {self.bandit_exploration_rate:.1%})")
+                
                 self.logger.info(f"📦 Hedge Ratio: {self.recovery_thresholds['hedge_ratio_range'][0]} - {self.recovery_thresholds['hedge_ratio_range'][1]}")
                 self.logger.info(f"🎯 Max Symbol Usage: {self.max_symbol_usage} times")
                 self.logger.info(f"📏 Base Lot Size: {self.recovery_thresholds['base_lot_size']}")
@@ -1925,22 +1988,93 @@ class CorrelationManager:
             self.logger.debug(f"Error checking positive correlation: {e}")
             return False
     
-    def _determine_recovery_direction(self, base_symbol: str, target_symbol: str, correlation: float, original_position: Dict = None) -> str:
-        """กำหนดทิศทางการ recovery ตาม correlation (ไม่ใช่ BUY/SELL ตรงข้าม)"""
+    def _analyze_trend(self, symbol: str) -> Dict:
+        """
+        วิเคราะห์ trend ของคู่เงิน (NEW - for ML and smart direction)
+        
+        Returns:
+            Dict with trend, strength, confidence
+        """
         try:
-            # ตรวจสอบทิศทางของคู่เดิม
+            # Get historical data
+            periods = getattr(self, 'trend_periods', 50)
+            historical_data = self.broker.get_historical_data(symbol, 'M5', periods)
+            
+            if historical_data is None or len(historical_data) < 20:
+                return {'trend': 'UNKNOWN', 'strength': 0, 'confidence': 0}
+            
+            # Calculate moving averages
+            closes = historical_data['close'].values
+            ma_fast = closes[-10:].mean()  # MA 10
+            ma_slow = closes[-20:].mean()  # MA 20
+            current_price = closes[-1]
+            
+            # Calculate slope
+            import numpy as np
+            x = np.arange(len(closes))
+            slope = np.polyfit(x, closes, 1)[0]
+            
+            # Determine trend
+            if ma_fast > ma_slow * 1.001 and slope > 0:
+                trend = 'UP'
+                strength = abs((ma_fast - ma_slow) / ma_slow)
+            elif ma_fast < ma_slow * 0.999 and slope < 0:
+                trend = 'DOWN'
+                strength = abs((ma_fast - ma_slow) / ma_slow)
+            else:
+                trend = 'SIDEWAYS'
+                strength = abs((ma_fast - ma_slow) / ma_slow)
+            
+            # Confidence (0-1)
+            confidence = min(strength * 100, 1.0)
+            
+            return {
+                'trend': trend,
+                'strength': strength,
+                'confidence': confidence,
+                'ma_fast': ma_fast,
+                'ma_slow': ma_slow,
+                'current_price': current_price,
+                'slope': slope
+            }
+            
+        except Exception as e:
+            self.logger.debug(f"Error analyzing trend for {symbol}: {e}")
+            return {'trend': 'UNKNOWN', 'strength': 0, 'confidence': 0}
+    
+    def _determine_recovery_direction(self, base_symbol: str, target_symbol: str, correlation: float, original_position: Dict = None) -> str:
+        """กำหนดทิศทางการ recovery โดยใช้ Trend Analysis (ENHANCED - backward compatible)"""
+        try:
+            # 🆕 STEP 1: ถ้าเปิด Trend Analysis → ใช้ trend
+            if getattr(self, 'trend_analysis_enabled', False):
+                trend_analysis = self._analyze_trend(target_symbol)
+                trend = trend_analysis['trend']
+                confidence = trend_analysis['confidence']
+                threshold = getattr(self, 'trend_confidence_threshold', 0.4)
+                
+                self.logger.info(f"📈 Trend: {target_symbol} = {trend} (confidence: {confidence:.1%})")
+                
+                # ถ้า trend ชัดเจน → เชื่อใจได้
+                if confidence >= threshold:
+                    if trend == 'UP':
+                        self.logger.info(f"   ✅ Uptrend → BUY {target_symbol}")
+                        return 'BUY'
+                    elif trend == 'DOWN':
+                        self.logger.info(f"   ✅ Downtrend → SELL {target_symbol}")
+                        return 'SELL'
+                else:
+                    self.logger.info(f"   ⚠️ Low confidence or sideways → using correlation method")
+            
+            # ⚡ FALLBACK: ใช้วิธีเดิม (correlation based) - backward compatible!
             original_direction = None
             if original_position:
-                original_direction = original_position.get('type', 'SELL')  # BUY หรือ SELL
+                original_direction = original_position.get('type', 'SELL')
             
-            # ใช้ทิศทางเดียวกันกับคู่เดิม แต่เลือกคู่ที่มี correlation ติดลบ
-            # เพื่อให้เมื่อคู่เดิมติดลบ คู่ correlation จะกำไร
             if original_direction == 'BUY':
-                return 'BUY'   # ใช้ทิศทางเดียวกัน
+                return 'BUY'
             elif original_direction == 'SELL':
-                return 'SELL'  # ใช้ทิศทางเดียวกัน
+                return 'SELL'
             else:
-                # หากไม่ทราบทิศทางเดิม ใช้ SELL เป็นหลัก
                 return 'SELL'
                 
         except Exception as e:

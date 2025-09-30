@@ -81,14 +81,14 @@
       "min_correlation": 0.6,
       "max_correlation": 0.95,
       "optimal_correlation": 0.8,
-      "description": "Lowered min correlation from 0.7 to 0.6 for more recovery opportunities"
+      "description": "Correlation thresholds for pair selection"
     },
     "loss_thresholds": {
       "min_loss_percent": -0.005,
       "min_price_distance_pips": 10,
       "recovery_target": 0.0,
       "use_percentage_based": true,
-      "description": "Loss threshold: 0.5% of balance AND 10 pips distance (percentage-based for fair scaling)"
+      "description": "0.5% of balance AND 10 pips distance triggers recovery"
     },
     "timing": {
       "max_recovery_time_hours": 24,
@@ -96,7 +96,7 @@
       "cooldown_between_checks": 10,
       "min_position_age_seconds": 60,
       "rebalancing_frequency_hours": 6,
-      "description": "Wait at least 60 seconds and 10 pips before recovery"
+      "description": "Wait 60s and 10 pips before recovery"
     },
     "hedge_ratios": {
       "min_ratio": 0.7,
@@ -109,26 +109,49 @@
       "min_hedge_lot": 0.1,
       "max_hedge_lot": 3.0
     },
+    "trend_analysis": {
+      "enabled": true,
+      "periods": 50,
+      "confidence_threshold": 0.4,
+      "use_for_direction": true,
+      "enable_chain_on_low_confidence": true,
+      "description": "Trend analysis for smart direction selection. Enable chain if confidence < 40%"
+    },
     "diversification": {
       "max_usage_per_symbol": 3,
       "enforce_limit": true,
-      "description": "Increased from 2 to 3 for more flexibility"
+      "description": "Max 3 times per symbol"
     },
     "chain_recovery": {
       "enabled": true,
-      "max_chain_depth": 3,
-      "min_loss_percent_for_chain": -0.004,
-      "wait_time_multiplier": 1.5,
-      "description": "Chain recovery: 0.4% loss triggers chain recovery. Max 3 levels deep. Percentage-based for fair scaling."
+      "mode": "conditional",
+      "max_chain_depth": 2,
+      "min_loss_percent_for_chain": -0.006,
+      "only_when_trend_uncertain": true,
+      "description": "Conditional chain recovery: enabled only when trend confidence < 40% or as safety net"
+    },
+    "multi_armed_bandit": {
+      "enabled": true,
+      "exploration_rate": 0.2,
+      "learning_rate": 0.1,
+      "description": "Online learning for pair selection optimization"
+    },
+    "ml_logging": {
+      "enabled": true,
+      "log_to_database": true,
+      "log_market_features": true,
+      "log_decision_process": true,
+      "upload_to_central": false,
+      "description": "Comprehensive logging for ML training"
     },
     "auto_registration": {
       "enabled": true,
       "register_on_startup": true,
       "register_on_new_orders": true,
       "sync_interval_seconds": 30,
-      "description": "Automatically register orders for recovery tracking"
+      "description": "Auto register orders for tracking"
     },
-    "description": "Correlation recovery parameters - optimized for faster response and lower thresholds"
+    "description": "Smart recovery with trend analysis, conditional chain recovery, and ML-ready logging"
   },
   "arbitrage_params": {
     "detection": {
