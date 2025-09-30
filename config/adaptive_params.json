@@ -84,17 +84,19 @@
       "description": "Lowered min correlation from 0.7 to 0.6 for more recovery opportunities"
     },
     "loss_thresholds": {
-      "min_loss_threshold": -0.003,
-      "min_loss_amount": -5.0,
+      "min_loss_percent": -0.005,
+      "min_price_distance_pips": 10,
       "recovery_target": 0.0,
-      "description": "Lowered thresholds: 0.3% of balance or $5 loss triggers recovery"
+      "use_percentage_based": true,
+      "description": "Loss threshold: 0.5% of balance AND 10 pips distance (percentage-based for fair scaling)"
     },
     "timing": {
       "max_recovery_time_hours": 24,
       "recovery_check_interval_seconds": 10,
       "cooldown_between_checks": 10,
+      "min_position_age_seconds": 60,
       "rebalancing_frequency_hours": 6,
-      "description": "Increased check frequency from 5 min to 10 seconds for faster response"
+      "description": "Wait at least 60 seconds and 10 pips before recovery"
     },
     "hedge_ratios": {
       "min_ratio": 0.7,
@@ -111,6 +113,13 @@
       "max_usage_per_symbol": 3,
       "enforce_limit": true,
       "description": "Increased from 2 to 3 for more flexibility"
+    },
+    "chain_recovery": {
+      "enabled": true,
+      "max_chain_depth": 3,
+      "min_loss_percent_for_chain": -0.004,
+      "wait_time_multiplier": 1.5,
+      "description": "Chain recovery: 0.4% loss triggers chain recovery. Max 3 levels deep. Percentage-based for fair scaling."
     },
     "auto_registration": {
       "enabled": true,

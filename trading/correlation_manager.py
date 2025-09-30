@@ -192,36 +192,63 @@ class CorrelationManager:
                 hedge_ratios = recovery_params.get('hedge_ratios', {})
                 timing = recovery_params.get('timing', {})
                 
-                # ตั้งค่า recovery thresholds จาก config
+                # ตั้งค่า recovery thresholds จาก config (% based)
                 self.recovery_thresholds = {
                     'min_correlation': correlation_thresholds.get('min_correlation', 0.6),
                     'max_correlation': correlation_thresholds.get('max_correlation', 0.95),
-                    'min_loss_threshold': loss_thresholds.get('min_loss_threshold', -0.003),
-                    'min_loss_amount': loss_thresholds.get('min_loss_amount', -5.0),  # NEW: ขาดทุนขั้นต่ำเป็นเงิน
+                    'min_loss_percent': loss_thresholds.get('min_loss_percent', -0.005),  # % based
+                    'use_percentage_based': loss_thresholds.get('use_percentage_based', True),
                     'max_recovery_time_hours': timing.get('max_recovery_time_hours', 24),
                     'hedge_ratio_range': (
                         hedge_ratios.get('min_ratio', 0.7),
                         hedge_ratios.get('max_ratio', 1.3)
                     ),
                     'wait_time_minutes': timing.get('recovery_check_interval_minutes', 5),
-                    'cooldown_between_checks': timing.get('cooldown_between_checks', 10),  # NEW: cooldown
-                    'base_lot_size': 0.05  # ตั้งค่าให้ระมัดระวังมากขึ้น
+                    'cooldown_between_checks': timing.get('cooldown_between_checks', 10),
+                    'base_lot_size': 0.05
                 }
                 
                 # โหลด diversification settings
                 diversification = recovery_params.get('diversification', {})
                 self.max_symbol_usage = diversification.get('max_usage_per_symbol', 3)
                 
+                # โหลด chain recovery settings (% based)
+                chain_recovery = recovery_params.get('chain_recovery', {})
+                self.chain_recovery_enabled = chain_recovery.get('enabled', True)
+                self.max_chain_depth = chain_recovery.get('max_chain_depth', 3)
+                self.min_loss_percent_for_chain = chain_recovery.get('min_loss_percent_for_chain', -0.004)  # % based
+                
+                # โหลด price distance และ position age
+                self.min_price_distance_pips = loss_thresholds.get('min_price_distance_pips', 10)
+                self.min_position_age_seconds = timing.get('min_position_age_seconds', 60)
+                
                 # โหลด risk management parameters
                 risk_mgmt = config.get('position_sizing', {}).get('risk_management', {})
                 self.portfolio_balance_threshold = risk_mgmt.get('max_portfolio_risk', 0.05)
                 
                 self.logger.info("=" * 60)
-                self.logger.info("✅ RECOVERY CONFIG LOADED")
+                self.logger.info("✅ RECOVERY CONFIG LOADED (% BASED)")
                 self.logger.info("=" * 60)
                 self.logger.info(f"📊 Correlation: {self.recovery_thresholds['min_correlation']:.1%} - {self.recovery_thresholds['max_correlation']:.1%}")
-                self.logger.info(f"💰 Loss Threshold: {self.recovery_thresholds['min_loss_threshold']:.3%} of balance OR ${abs(self.recovery_thresholds['min_loss_amount'])}")
+                self.logger.info(f"💡 Loss Threshold: {abs(self.recovery_thresholds['min_loss_percent']):.3%} of balance (dynamic)")
+                
+                # แสดงตัวอย่างสำหรับ balance ต่างๆ
+                example_balances = [5000, 10000, 50000, 100000]
+                self.logger.info(f"   Examples:")
+                for bal in example_balances:
+                    amount = bal * self.recovery_thresholds['min_loss_percent']
+                    self.logger.info(f"   - Balance ${bal:,}: Loss >= ${abs(amount):.2f} triggers recovery")
+                
+                self.logger.info(f"📏 Min Distance: {self.min_price_distance_pips} pips")
+                self.logger.info(f"⏱️  Min Age: {self.min_position_age_seconds}s before recovery")
                 self.logger.info(f"⏱️  Cooldown: {self.recovery_thresholds['cooldown_between_checks']}s between checks")
+                self.logger.info(f"🔗 Chain Recovery: {'ENABLED' if self.chain_recovery_enabled else 'DISABLED'}")
+                if self.chain_recovery_enabled:
+                    self.logger.info(f"   Max Depth: {self.max_chain_depth} levels")
+                    self.logger.info(f"   Min Loss for Chain: {abs(self.min_loss_percent_for_chain):.3%} of balance")
+                    for bal in [5000, 10000, 50000]:
+                        amount = bal * self.min_loss_percent_for_chain
+                        self.logger.info(f"   - Balance ${bal:,}: >= ${abs(amount):.2f}")
                 self.logger.info(f"📦 Hedge Ratio: {self.recovery_thresholds['hedge_ratio_range'][0]} - {self.recovery_thresholds['hedge_ratio_range'][1]}")
                 self.logger.info(f"🎯 Max Symbol Usage: {self.max_symbol_usage} times")
                 self.logger.info(f"📏 Base Lot Size: {self.recovery_thresholds['base_lot_size']}")
@@ -237,21 +264,30 @@ class CorrelationManager:
             self._set_fallback_config()
     
     def _set_fallback_config(self):
-        """ตั้งค่า fallback เมื่อไม่สามารถโหลด config ได้"""
+        """ตั้งค่า fallback เมื่อไม่สามารถโหลด config ได้ (% based)"""
         self.recovery_thresholds = {
-            'min_correlation': 0.6,      # ความสัมพันธ์ขั้นต่ำ 60% (ลดจาก 70%)
+            'min_correlation': 0.6,      # ความสัมพันธ์ขั้นต่ำ 60%
             'max_correlation': 0.95,     # ความสัมพันธ์สูงสุด 95%
-            'min_loss_threshold': -0.003, # ขาดทุนขั้นต่ำ -0.3% (ลดจาก -0.5%)
-            'min_loss_amount': -5.0,     # ขาดทุนขั้นต่ำ $5 (ลดจาก $10)
+            'min_loss_percent': -0.005,  # ขาดทุนขั้นต่ำ -0.5% ของ balance (% based)
+            'use_percentage_based': True, # ใช้ % based
             'max_recovery_time_hours': 24, # เวลาสูงสุด 24 ชั่วโมง
-            'hedge_ratio_range': (0.7, 1.3),  # ขนาด hedge ratio ที่ระมัดระวัง
+            'hedge_ratio_range': (0.7, 1.3),  # ขนาด hedge ratio
             'wait_time_minutes': 5,      # รอ 5 นาทีก่อนแก้ไม้
-            'cooldown_between_checks': 10,  # เช็คทุก 10 วินาที (ลดจาก 30)
-            'base_lot_size': 0.05        # ขนาด lot เริ่มต้นที่เล็กกว่า
+            'cooldown_between_checks': 10,  # เช็คทุก 10 วินาที
+            'base_lot_size': 0.05        # ขนาด lot เริ่มต้น
         }
         
         # Diversification settings
         self.max_symbol_usage = 3  # ใช้ symbol เดียวกันได้สูงสุด 3 ครั้ง
+        
+        # Chain recovery settings (% based)
+        self.chain_recovery_enabled = True  # เปิด chain recovery
+        self.max_chain_depth = 3  # แก้ได้ลึกสุด 3 ระดับ
+        self.min_loss_percent_for_chain = -0.004  # Recovery ต้องขาดทุน >= 0.4% ของ balance
+        
+        # Price distance และ position age
+        self.min_price_distance_pips = 10  # ต้องห่าง >= 10 pips
+        self.min_position_age_seconds = 60  # ต้องเปิดมา >= 60 วินาที
         
         # Portfolio balance threshold ที่ระมัดระวัง
         self.portfolio_balance_threshold = 0.05  # 5% imbalance threshold
@@ -2392,6 +2428,95 @@ class CorrelationManager:
         quote = symbol[3:]
         return (base, quote)
 
+    def _get_recovery_chain_depth(self, ticket: str, symbol: str) -> int:
+        """คำนวณความลึกของ chain recovery"""
+        try:
+            depth = 0
+            current_key = f"{ticket}_{symbol}"
+            
+            # ย้อนกลับไปหา original order
+            while current_key:
+                order_info = self.order_tracker.get_order_info(ticket, symbol)
+                if not order_info:
+                    break
+                
+                # ถ้าเป็น recovery order
+                if order_info.get('type') == 'RECOVERY':
+                    depth += 1
+                    # ไปหา order ที่มันกำลัง hedge
+                    hedging_for = order_info.get('hedging_for', '')
+                    if hedging_for and '_' in hedging_for:
+                        parts = hedging_for.rsplit('_', 1)
+                        if len(parts) == 2:
+                            ticket, symbol = parts[0], parts[1]
+                            current_key = hedging_for
+                        else:
+                            break
+                    else:
+                        break
+                else:
+                    # เจอ original order แล้ว
+                    break
+            
+            return depth
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating chain depth: {e}")
+            return 0
+    
+    def _calculate_price_distance_pips(self, position: Dict) -> float:
+        """คำนวณระยะห่างจาก entry price (pips)"""
+        try:
+            symbol = position.get('symbol', '')
+            entry_price = position.get('price', 0)
+            
+            if not symbol or entry_price == 0:
+                return 0.0
+            
+            current_price = self.broker.get_current_price(symbol)
+            if not current_price:
+                return 0.0
+            
+            # คำนวณ pips
+            if 'JPY' in symbol:
+                pips = abs(current_price - entry_price) * 100
+            else:
+                pips = abs(current_price - entry_price) * 10000
+            
+            return pips
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating price distance: {e}")
+            return 0.0
+    
+    def _get_position_age_seconds(self, position: Dict) -> float:
+        """คำนวณอายุของ position (วินาที)"""
+        try:
+            ticket = str(position.get('ticket', ''))
+            symbol = position.get('symbol', '')
+            
+            # ลองดึงจาก order_tracker
+            order_info = self.order_tracker.get_order_info(ticket, symbol)
+            if order_info and 'created_at' in order_info:
+                created_at = order_info['created_at']
+                if isinstance(created_at, datetime):
+                    age = (datetime.now() - created_at).total_seconds()
+                    return age
+            
+            # Fallback: ดึงจาก MT5 open time
+            open_time = position.get('time', None)
+            if open_time:
+                if isinstance(open_time, datetime):
+                    age = (datetime.now() - open_time).total_seconds()
+                    return age
+            
+            # ถ้าไม่มีข้อมูล ให้ถือว่าเก่าพอแล้ว
+            return 999999.0
+            
+        except Exception as e:
+            self.logger.error(f"Error getting position age: {e}")
+            return 999999.0
+    
     def _is_recovery_order(self, position: Dict) -> bool:
         """Check if position is a recovery order - updated for short format"""
         comment = position.get('comment', '')
@@ -2453,10 +2578,32 @@ class CorrelationManager:
             profit = position.get('profit', 0)
             comment = position.get('comment', '')
             
-            # Skip if it's already a recovery order
+            # 🔗 Check if it's a recovery order (Chain Recovery Logic)
             if self._is_recovery_order(position):
-                self.logger.debug(f"❌ {ticket}_{symbol}: Is recovery order")
-                return False
+                # เช็คว่าเปิด chain recovery ไหม
+                if not self.chain_recovery_enabled:
+                    self.logger.debug(f"❌ {ticket}_{symbol}: Is recovery order (chain recovery disabled)")
+                    return False
+                
+                # เช็ค chain depth
+                chain_depth = self._get_recovery_chain_depth(ticket, symbol)
+                if chain_depth >= self.max_chain_depth:
+                    self.logger.debug(f"❌ {ticket}_{symbol}: Max chain depth {self.max_chain_depth} reached (current: {chain_depth})")
+                    return False
+                
+                # เช็คว่าขาดทุนมากพอไหม (% based สำหรับ chain)
+                balance = self.broker.get_account_balance() or 10000
+                loss_percent = profit / balance
+                min_chain_percent = getattr(self, 'min_loss_percent_for_chain', -0.004)
+                min_chain_amount = balance * min_chain_percent  # Dynamic! เช่น $10k * -0.4% = -$40
+                
+                if loss_percent > min_chain_percent:
+                    self.logger.debug(f"❌ {ticket}_{symbol}: Chain loss {loss_percent:.4f}% not enough (need <= {min_chain_percent:.4f}% = ${min_chain_amount:.2f})")
+                    return False
+                
+                self.logger.info(f"🔗 {ticket}_{symbol}: Is recovery order - Chain recovery ENABLED!")
+                self.logger.info(f"   Chain depth: {chain_depth}/{self.max_chain_depth}")
+                # ทำต่อได้! ไม่ return False
             
             # Check if position already has recovery orders
             order_info = self.order_tracker.get_order_info(ticket, symbol)
@@ -2471,37 +2618,51 @@ class CorrelationManager:
                 self.logger.debug(f"❌ {ticket}_{symbol}: Already hedged")
                 return False
             
-            # Check loss threshold
-            balance = self.broker.get_account_balance() or 10000
-            loss_percent = profit / balance
-            min_loss_threshold = self.recovery_thresholds.get('min_loss_threshold', -0.005)
-            
-            meets_loss = loss_percent <= min_loss_threshold
-            
-            if not meets_loss:
-                self.logger.debug(f"❌ {ticket}_{symbol}: Loss {loss_percent:.4f}% not enough (need <= {min_loss_threshold:.4f}%)")
-                return False
-            
             # Check if position is losing money
-            meets_profit_loss = profit < 0
-            if not meets_profit_loss:
+            if profit >= 0:
                 self.logger.debug(f"❌ {ticket}_{symbol}: Not losing money (${profit:.2f})")
                 return False
             
-            # Check minimum loss amount (อ่านจาก config)
-            min_loss_amount = self.recovery_thresholds.get('min_loss_amount', -5.0)
-            meets_min_loss = profit <= min_loss_amount
-            if not meets_min_loss:
-                self.logger.debug(f"❌ {ticket}_{symbol}: Loss ${profit:.2f} too small (need <= ${min_loss_amount})")
+            # 💡 Percentage-based loss check (ยุติธรรมกับทุกขนาด balance)
+            balance = self.broker.get_account_balance() or 10000
+            loss_percent = profit / balance
+            min_loss_percent = self.recovery_thresholds.get('min_loss_percent', -0.005)
+            
+            # คำนวณ minimum loss amount จาก % (dynamic!)
+            min_loss_amount = balance * min_loss_percent  # เช่น $10k * -0.5% = -$50
+            
+            # เช็คว่าขาดทุนมากพอไหม
+            meets_loss = loss_percent <= min_loss_percent
+            
+            if not meets_loss:
+                self.logger.debug(f"❌ {ticket}_{symbol}: Loss {loss_percent:.4f}% not enough (need <= {min_loss_percent:.4f}% = ${min_loss_amount:.2f})")
+                return False
+            
+            # 🆕 Check price distance (ต้องห่างจาก entry >= 10 pips)
+            price_distance_pips = self._calculate_price_distance_pips(position)
+            min_distance = getattr(self, 'min_price_distance_pips', 10)
+            
+            if price_distance_pips < min_distance:
+                self.logger.debug(f"⏳ {ticket}_{symbol}: Distance {price_distance_pips:.1f} pips < {min_distance} pips (waiting...)")
+                return False
+            
+            # 🆕 Check position age (ต้องเปิดมาแล้ว >= 60 วินาที)
+            position_age = self._get_position_age_seconds(position)
+            min_age = getattr(self, 'min_position_age_seconds', 60)
+            
+            if position_age < min_age:
+                self.logger.debug(f"⏳ {ticket}_{symbol}: Age {position_age:.0f}s < {min_age}s (waiting...)")
                 return False
             
             # ✅ All conditions met - log details
             self.logger.info(f"✅ {ticket}_{symbol}: READY FOR RECOVERY!")
-            self.logger.info(f"   💰 Loss: ${profit:.2f} ({loss_percent:.4f}% of balance)")
-            self.logger.info(f"   ✓ Loss % check: {loss_percent:.4f}% <= {min_loss_threshold:.4f}%")
-            self.logger.info(f"   ✓ Loss $ check: ${profit:.2f} <= ${min_loss_amount}")
+            self.logger.info(f"   💰 Loss: ${profit:.2f} ({abs(loss_percent):.3%} of ${balance:,.0f} balance)")
+            self.logger.info(f"   📏 Distance: {price_distance_pips:.1f} pips (>= {min_distance})")
+            self.logger.info(f"   ⏱️  Age: {position_age:.0f}s (>= {min_age}s)")
+            self.logger.info(f"   ✓ Loss threshold: {abs(loss_percent):.3%} >= {abs(min_loss_percent):.3%} (= ${abs(min_loss_amount):.2f})")
+            self.logger.info(f"   ✓ Price moved enough: {price_distance_pips:.1f} >= {min_distance} pips")
+            self.logger.info(f"   ✓ Position aged enough: {position_age:.0f}s >= {min_age}s")
             self.logger.info(f"   ✓ Not hedged: True")
-            self.logger.info(f"   ✓ Not recovery order: True")
             return True
             
         except Exception as e:
