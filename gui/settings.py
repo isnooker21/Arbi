@@ -2,11 +2,6 @@
 หน้าต่างตั้งค่าระบบเทรด - Adaptive Parameters
 ===============================================
 
-ไฟล์นี้ทำหน้าที่:
-- แสดงและแก้ไขการตั้งค่า Adaptive Parameters
-- จัดการพารามิเตอร์การแก้ไม้, Trailing Stop, Position Sizing
-- บันทึกและโหลดการตั้งค่าจากไฟล์ JSON
-
 Author: AI Trading System
 Version: 2.0 - Simplified & Beautiful
 """
@@ -125,7 +120,7 @@ class SettingsWindow:
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
         
-        # === Create 2-column layout for better space usage ===
+        # === Create 2-column layout ===
         left_column = tk.Frame(scrollable_frame, bg='#1e1e1e')
         left_column.pack(side='left', fill='both', expand=True, padx=(0, 10))
         
@@ -134,114 +129,94 @@ class SettingsWindow:
         
         # === LEFT COLUMN ===
         
-        # 1. Recovery Parameters (การแก้ไม้)
+        # 1. Recovery Parameters
         self.create_section(left_column, "🔧 Recovery Parameters (การแก้ไม้)", [
             ("ขาดทุนขั้นต่ำ (%)", "recovery_params.loss_thresholds.min_loss_percent", 
              "float", -0.02, 0.0, "เช่น -0.005 = ขาดทุน 0.5% ของ balance จึงแก้ไม้"),
-            
             ("ระยะทางขั้นต่ำ (pips)", "recovery_params.loss_thresholds.min_price_distance_pips", 
-             "int", 5, 50, "เช่น 10 = ราคาต้องห่าง 10 pips จากจุดเปิดไม้จึงแก้ไม้"),
-            
+             "int", 5, 50, "เช่น 10 = ราคาต้องห่าง 10 pips จากจุดเปิดไม้"),
             ("อายุไม้ขั้นต่ำ (วินาที)", "recovery_params.timing.min_position_age_seconds", 
-             "int", 30, 300, "เช่น 60 = รอให้ไม้อายุครบ 60 วินาทีจึงแก้ไม้"),
-            
+             "int", 30, 300, "เช่น 60 = รอให้ไม้อายุครบ 60 วินาที"),
             ("ช่วงเช็คระบบ (วินาที)", "recovery_params.timing.cooldown_between_checks", 
              "int", 5, 60, "เช่น 10 = ระบบเช็คทุก 10 วินาที"),
-            
             ("Correlation ขั้นต่ำ", "recovery_params.correlation_thresholds.min_correlation", 
              "float", 0.3, 0.95, "เช่น 0.6 = คู่เงินต้องมี correlation >= 60%")
         ])
         
-        # 2. Chain Recovery (แก้ไม้ต่อเนื่อง)
+        # 2. Chain Recovery
         self.create_section(left_column, "🔗 Chain Recovery (แก้ไม้ต่อเนื่อง)", [
-            ("เปิดใช้งาน Chain Recovery", "recovery_params.chain_recovery.enabled", 
+            ("เปิดใช้งาน", "recovery_params.chain_recovery.enabled", 
              "bool", "เปิด = ถ้าไม้ recovery ติดลบจะแก้ไม้ต่อให้อีก"),
-            
-            ("ความลึกสูงสุด (ชั้น)", "recovery_params.chain_recovery.max_chain_depth", 
-             "int", 1, 5, "เช่น 2 = แก้ไม้ได้ลึก 2 ชั้น (Original → R1 → R2)"),
-            
+            ("ความลึกสูงสุด", "recovery_params.chain_recovery.max_chain_depth", 
+             "int", 1, 5, "เช่น 2 = แก้ไม้ได้ลึก 2 ชั้น"),
             ("ขาดทุนสำหรับ Chain (%)", "recovery_params.chain_recovery.min_loss_percent_for_chain", 
-             "float", -0.02, 0.0, "เช่น -0.006 = ไม้ recovery ขาดทุน 0.6% จึงแก้ไม้ต่อ")
+             "float", -0.02, 0.0, "เช่น -0.006 = ไม้ recovery ขาดทุน 0.6%")
         ])
         
-        # 3. Trailing Stop (ล็อคกำไร)
+        # 3. Trailing Stop
         self.create_section(left_column, "🔒 Trailing Stop (ล็อคกำไร)", [
-            ("เปิดใช้งาน Trailing Stop", "arbitrage_params.closing.trailing_stop_enabled", 
+            ("เปิดใช้งาน", "arbitrage_params.closing.trailing_stop_enabled", 
              "bool", "เปิด = ล็อคกำไรอัตโนมัติเมื่อราคากลับ"),
-            
             ("ระยะ Stop (USD)", "arbitrage_params.closing.trailing_stop_distance", 
-             "float", 5.0, 50.0, "เช่น 10 = ถ้ากำไรลดจาก peak $10 ก็ปิดทั้ง group"),
-            
-            ("กำไรขั้นต่ำ Base (USD)", "arbitrage_params.closing.min_profit_base", 
-             "float", 1.0, 50.0, "เช่น 5 = ต้องกำไร $5 ถึงเริ่ม trailing (@ balance $10K)"),
-            
+             "float", 5.0, 50.0, "เช่น 10 = ถ้ากำไรลดจาก peak $10 ก็ปิด"),
+            ("กำไรขั้นต่ำ (USD)", "arbitrage_params.closing.min_profit_base", 
+             "float", 1.0, 50.0, "เช่น 5 = ต้องกำไร $5 ถึงเริ่ม trailing"),
             ("Balance ฐาน (USD)", "arbitrage_params.closing.min_profit_base_balance", 
-             "float", 5000.0, 100000.0, "เช่น 10000 = ฐาน $10K, ถ้า balance เพิ่ม 2 เท่า → min profit เพิ่ม 2 เท่า")
+             "float", 5000.0, 100000.0, "เช่น 10000 = ฐาน $10K")
         ])
         
-        # 4. Trend Analysis (วิเคราะห์เทรนด์)
+        # 4. Trend Analysis
         self.create_section(left_column, "📊 Trend Analysis (วิเคราะห์เทรนด์)", [
-            ("เปิดใช้งาน Trend Analysis", "recovery_params.trend_analysis.enabled", 
-             "bool", "เปิด = วิเคราะห์ทิศทางตลาดก่อนแก้ไม้ (แก้ไม้ตามเทรนด์)"),
-            
+            ("เปิดใช้งาน", "recovery_params.trend_analysis.enabled", 
+             "bool", "เปิด = วิเคราะห์ทิศทางตลาดก่อนแก้ไม้"),
             ("จำนวน MA Periods", "recovery_params.trend_analysis.periods", 
-             "int", 20, 200, "เช่น 50 = ใช้ Moving Average 50 periods วิเคราะห์เทรนด์"),
-            
+             "int", 20, 200, "เช่น 50 = ใช้ Moving Average 50 periods"),
             ("Confidence ขั้นต่ำ", "recovery_params.trend_analysis.confidence_threshold", 
-             "float", 0.1, 0.9, "เช่น 0.4 = ต้องมั่นใจ 40% จึงใช้ทิศทาง trend (ต่ำกว่านี้ใช้ chain recovery)")
+             "float", 0.1, 0.9, "เช่น 0.4 = ต้องมั่นใจ 40%")
         ])
         
         # === RIGHT COLUMN ===
         
-        # 5. Position Sizing (ขนาดไม้)
+        # 5. Position Sizing
         self.create_section(right_column, "💰 Position Sizing (ขนาดไม้)", [
             ("Lot Multiplier", "position_sizing.account_tiers.medium.lot_multiplier", 
-             "float", 0.5, 3.0, "เช่น 1.0 = ขนาดปกติ, 0.5 = ลดครึ่ง, 2.0 = เพิ่ม 2 เท่า"),
-            
+             "float", 0.5, 3.0, "เช่น 1.0 = ขนาดปกติ, 0.5 = ลดครึ่ง"),
             ("Base Lot Size", "position_sizing.account_tiers.medium.base_lot_size", 
-             "float", 0.01, 1.0, "เช่น 0.1 = เปิดไม้ arbitrage ขนาด 0.1 lot"),
-            
+             "float", 0.01, 1.0, "เช่น 0.1 = เปิดไม้ 0.1 lot"),
             ("Lot สูงสุด (Recovery)", "recovery_params.dynamic_hedge.max_hedge_lot", 
-             "float", 0.1, 5.0, "เช่น 3.0 = ไม้ recovery เปิดได้สูงสุด 3.0 lot"),
-            
+             "float", 0.1, 5.0, "เช่น 3.0 = recovery สูงสุด 3.0 lot"),
             ("Lot ต่ำสุด (Recovery)", "recovery_params.dynamic_hedge.min_hedge_lot", 
-             "float", 0.01, 1.0, "เช่น 0.1 = ไม้ recovery เปิดได้ต่ำสุด 0.1 lot")
+             "float", 0.01, 1.0, "เช่น 0.1 = recovery ต่ำสุด 0.1 lot")
         ])
         
-        # 6. Arbitrage Settings (การตั้งค่า Arbitrage)
-        self.create_section(right_column, "⚡ Arbitrage Settings (โอกาส Arbitrage)", [
+        # 6. Arbitrage Settings
+        self.create_section(right_column, "⚡ Arbitrage Settings", [
             ("Threshold ขั้นต่ำ", "arbitrage_params.detection.min_threshold", 
-             "float", 0.00001, 0.01, "เช่น 0.0001 = ต้องมีส่วนต่างราคา >= 0.01% จึงเปิดไม้"),
-            
-            ("Triangle สูงสุด (Groups)", "arbitrage_params.triangles.max_active_triangles", 
-             "int", 1, 10, "เช่น 4 = เปิดได้สูงสุด 4 arbitrage groups พร้อมกัน"),
-            
+             "float", 0.00001, 0.01, "เช่น 0.0001 = ต้องมีส่วนต่าง >= 0.01%"),
+            ("Triangle สูงสุด", "arbitrage_params.triangles.max_active_triangles", 
+             "int", 1, 10, "เช่น 4 = เปิดได้สูงสุด 4 groups"),
             ("Spread Tolerance", "arbitrage_params.detection.spread_tolerance", 
-             "float", 0.1, 2.0, "เช่น 0.5 = ยอมรับ spread สูงสุด 0.5 pips")
+             "float", 0.1, 2.0, "เช่น 0.5 = ยอมรับ spread 0.5 pips")
         ])
         
-        # 7. Multi-Armed Bandit (ML - เรียนรู้อัตโนมัติ)
-        self.create_section(right_column, "🤖 Multi-Armed Bandit (ML - เรียนรู้อัตโนมัติ)", [
+        # 7. Multi-Armed Bandit
+        self.create_section(right_column, "🤖 Multi-Armed Bandit (ML)", [
             ("เปิดใช้งาน ML", "recovery_params.multi_armed_bandit.enabled", 
-             "bool", "เปิด = ระบบเรียนรู้และเลือก pair ที่ดีที่สุดอัตโนมัติ"),
-            
+             "bool", "เปิด = ระบบเรียนรู้เลือก pair อัตโนมัติ"),
             ("Exploration Rate", "recovery_params.multi_armed_bandit.exploration_rate", 
-             "float", 0.0, 1.0, "เช่น 0.2 = ทดลอง pair ใหม่ 20%, ใช้ pair ที่รู้จักดี 80%"),
-            
+             "float", 0.0, 1.0, "เช่น 0.2 = ทดลอง pair ใหม่ 20%"),
             ("Learning Rate", "recovery_params.multi_armed_bandit.learning_rate", 
-             "float", 0.0, 1.0, "เช่น 0.1 = เรียนรู้ช้าๆ แต่มั่นคง (ค่าสูง = เรียนรู้เร็วแต่ไม่เสถียร)")
+             "float", 0.0, 1.0, "เช่น 0.1 = เรียนรู้ช้าๆ แต่มั่นคง")
         ])
         
-        # 8. Advanced Settings (ขั้นสูง)
-        self.create_section(right_column, "🎯 Advanced Settings (ขั้นสูง)", [
-            ("Max Hedge Lot", "position_sizing.account_tiers.medium.max_position_size", 
-             "float", 1.0, 20.0, "เช่น 5.0 = เปิดไม้ได้สูงสุด 5.0 lot"),
-            
+        # 8. Advanced Settings
+        self.create_section(right_column, "🎯 Advanced Settings", [
+            ("Max Position Size", "position_sizing.account_tiers.medium.max_position_size", 
+             "float", 1.0, 20.0, "เช่น 5.0 = เปิดได้สูงสุด 5.0 lot"),
             ("Risk per Trade (%)", "position_sizing.risk_management.risk_per_trade", 
              "float", 0.001, 0.05, "เช่น 0.015 = เสี่ยง 1.5% ต่อไม้"),
-            
-            ("Max Concurrent Groups", "position_sizing.risk_management.max_concurrent_groups", 
-             "int", 1, 10, "เช่น 4 = เปิดได้สูงสุด 4 groups พร้อมกัน")
+            ("Max Groups", "position_sizing.risk_management.max_concurrent_groups", 
+             "int", 1, 10, "เช่น 4 = เปิดได้สูงสุด 4 groups")
         ])
         
         canvas.pack(side="left", fill="both", expand=True)
@@ -249,7 +224,6 @@ class SettingsWindow:
     
     def create_section(self, parent, title, parameters):
         """สร้าง section พร้อม parameters"""
-        # Section frame
         section_frame = tk.Frame(parent, bg='#2d2d2d', relief='raised', bd=2)
         section_frame.pack(fill='x', pady=(0, 20))
         
@@ -302,15 +276,15 @@ class SettingsWindow:
         input_frame = tk.Frame(row_frame, bg='#2d2d2d', width=150)
         input_frame.pack(side='left')
         input_frame.pack_propagate(False)
-            
-            # Get current value
-            current_value = self.get_nested_value(self.settings, param_path)
+        
+        # Get current value
+        current_value = self.get_nested_value(self.settings, param_path)
         if current_value is None:
             current_value = 0.0 if param_type == "float" else 0 if param_type == "int" else False
-            
-            if param_type == "bool":
+        
+        if param_type == "bool":
             # Boolean checkbox with custom style
-                var = tk.BooleanVar(value=current_value)
+            var = tk.BooleanVar(value=current_value)
             cb = tk.Checkbutton(
                 input_frame,
                 variable=var,
@@ -428,7 +402,6 @@ class SettingsWindow:
         try:
             value = float(var.get())
             value = max(min_val, min(max_val, value))
-            # Format based on magnitude
             if abs(value) < 0.01:
                 var.set(f"{value:.6f}".rstrip('0').rstrip('.'))
             else:
@@ -445,16 +418,14 @@ class SettingsWindow:
                 
                 # Convert value based on type
                 if isinstance(value, bool):
-                    # Already boolean
                     pass
                 elif isinstance(value, str):
-                    # Try to detect type
                     if value.lower() in ['true', 'false', '1', '0']:
                         value = value.lower() in ['true', '1']
                     elif '.' not in value and value.lstrip('-').isdigit():
                         value = int(value)
                     elif value.replace('.', '', 1).replace('-', '', 1).isdigit():
-                    value = float(value)
+                        value = float(value)
                 
                 self.set_nested_value(self.settings, param_path, value)
             
@@ -464,7 +435,7 @@ class SettingsWindow:
             
             messagebox.showinfo(
                 "✅ สำเร็จ", 
-                "บันทึกการตั้งค่าเรียบร้อยแล้ว!\n\n⚠️ กรุณา Restart ระบบเพื่อใช้งานค่าใหม่\n\nปิดระบบ → เปิดใหม่ → ค่าใหม่จะทำงาน!"
+                "บันทึกการตั้งค่าเรียบร้อยแล้ว!\n\n⚠️ กรุณา Restart ระบบเพื่อใช้งานค่าใหม่"
             )
             self.settings_window.destroy()
             
@@ -477,7 +448,7 @@ class SettingsWindow:
             if messagebox.askyesno("⚠️ ยืนยัน", "Reset ค่าทั้งหมดกลับเป็นค่าเดิม?"):
                 self.settings = json.loads(json.dumps(self.original_settings))
                 self.settings_window.destroy()
-                SettingsWindow(self.parent)  # Reopen with reset settings
+                SettingsWindow(self.parent)
                 
         except Exception as e:
             messagebox.showerror("Error", f"ไม่สามารถ reset ได้: {str(e)}")
@@ -488,7 +459,7 @@ class SettingsWindow:
             if messagebox.askyesno("⚠️ ยืนยัน", "มีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก\n\nต้องการปิดหน้าต่างโดยไม่บันทึกใช่หรือไม่?"):
                 self.settings_window.destroy()
         else:
-        self.settings_window.destroy()
+            self.settings_window.destroy()
     
     def show(self):
         """Show the settings window"""
