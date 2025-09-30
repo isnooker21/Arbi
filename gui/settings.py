@@ -22,7 +22,7 @@ class SettingsWindow:
         # Create settings window
         self.settings_window = tk.Toplevel(parent)
         self.settings_window.title("⚙️ การตั้งค่าระบบ - Adaptive Parameters")
-        self.settings_window.geometry("1200x800")
+        self.settings_window.geometry("1600x900")
         self.settings_window.configure(bg='#1e1e1e')
         
         # Load settings
@@ -259,7 +259,7 @@ class SettingsWindow:
         row_frame.pack(fill='x', pady=8)
         
         # Label frame (left side)
-        label_frame = tk.Frame(row_frame, bg='#2d2d2d', width=300)
+        label_frame = tk.Frame(row_frame, bg='#2d2d2d', width=220)
         label_frame.pack(side='left', fill='y')
         label_frame.pack_propagate(False)
         
@@ -273,7 +273,7 @@ class SettingsWindow:
         ).pack(side='left', padx=(0, 10))
         
         # Input frame (middle)
-        input_frame = tk.Frame(row_frame, bg='#2d2d2d', width=150)
+        input_frame = tk.Frame(row_frame, bg='#2d2d2d', width=200)
         input_frame.pack(side='left')
         input_frame.pack_propagate(False)
         
@@ -292,19 +292,20 @@ class SettingsWindow:
                 fg='#FFFFFF',
                 selectcolor='#4CAF50',
                 activebackground='#2d2d2d',
-                font=('Arial', 10)
+                font=('Arial', 11),
+                highlightthickness=0
             )
-            cb.pack(side='left', padx=5)
+            cb.pack(side='left', padx=5, pady=2)
             
             # Status label
             status_label = tk.Label(
                 input_frame,
                 text="✅ เปิด" if current_value else "❌ ปิด",
-                font=('Arial', 9, 'bold'),
+                font=('Arial', 10, 'bold'),
                 bg='#2d2d2d',
                 fg='#4CAF50' if current_value else '#FF5252'
             )
-            status_label.pack(side='left', padx=5)
+            status_label.pack(side='left', padx=8, pady=2)
             
             # Update status when checkbox changes
             def update_status(*args):
@@ -321,15 +322,15 @@ class SettingsWindow:
             entry = tk.Entry(
                 input_frame,
                 textvariable=var,
-                width=15,
-                font=('Consolas', 10),
-                bg='#3d3d3d',
-                fg='#FFFFFF',
-                insertbackground='#FFFFFF',
-                relief='flat',
-                bd=5
+                width=12,
+                font=('Consolas', 11, 'bold'),
+                bg='#FFFFFF',
+                fg='#000000',
+                insertbackground='#000000',
+                relief='solid',
+                bd=1
             )
-            entry.pack(side='left', padx=5)
+            entry.pack(side='left', padx=5, pady=2)
             
             # Add validation with range
             if len(param) > 4:
@@ -343,12 +344,12 @@ class SettingsWindow:
             if len(param) > 4:
                 range_label = tk.Label(
                     input_frame,
-                    text=f"({param[3]} ถึง {param[4]})",
-                    font=('Arial', 8),
+                    text=f"[{param[3]} ถึง {param[4]}]",
+                    font=('Arial', 9, 'italic'),
                     bg='#2d2d2d',
-                    fg='#888888'
+                    fg='#FFA500'
                 )
-                range_label.pack(side='left', padx=5)
+                range_label.pack(side='left', padx=8, pady=2)
         
         # Description frame (right side)
         if len(param) > 5:
@@ -359,10 +360,11 @@ class SettingsWindow:
                 font=('Arial', 9),
                 bg='#2d2d2d',
                 fg='#AAAAAA',
-                wraplength=400,
-                justify='left'
+                wraplength=350,
+                justify='left',
+                anchor='w'
             )
-            desc_label.pack(side='left', padx=15, fill='x', expand=True)
+            desc_label.pack(side='left', padx=10, fill='x', expand=True)
         
         # Store variable reference
         self.parameter_vars[param_path] = var
