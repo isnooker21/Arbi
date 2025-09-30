@@ -593,6 +593,10 @@ class MainWindow:
                 self._show_default_group_status()
                 return
                 
+            # Update enhanced data in active_groups
+            if hasattr(self.trading_system.arbitrage_detector, 'update_active_groups_with_enhanced_data'):
+                self.trading_system.arbitrage_detector.update_active_groups_with_enhanced_data()
+            
             # Get active groups data
             active_groups = self.trading_system.arbitrage_detector.active_groups
             self.log_message(f"📊 Found {len(active_groups)} active groups")

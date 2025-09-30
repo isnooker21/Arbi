@@ -1,12 +1,13 @@
 """
-Group Dashboard - แสดงสถานะของแต่ละ Group
-==========================================
+Group Dashboard - แสดงสถานะของแต่ละ Group (2 Columns Grid + Horizontal Scroll)
+========================================================================================
 
 Dashboard ที่แสดงสถานะของแต่ละ arbitrage group แยกตาม triangle
+พร้อม P&L Breakdown, Trailing Stop Status, และ Min Profit Target
 """
 
 import tkinter as tk
-from tkinter import ttk, scrolledtext
+from tkinter import ttk, scrolledtext, Canvas
 from datetime import datetime
 from .theme import TradingTheme
 
@@ -25,8 +26,8 @@ class GroupDashboard:
         # Header
         self.create_header()
         
-        # Groups grid with positions status
-        self.create_groups_grid()
+        # Groups grid with horizontal scroll (2 columns × 3 rows)
+        self.create_groups_grid_horizontal()
         
         # Summary panel
         self.create_summary_panel()
@@ -52,14 +53,32 @@ class GroupDashboard:
         )
         self.refresh_btn.pack(side='right')
     
-    def create_groups_grid(self):
-        """สร้าง grid สำหรับแสดงแต่ละ group"""
-        # Container for groups
-        self.groups_container = tk.Frame(self.main_frame, bg=TradingTheme.COLORS['secondary_bg'])
-        self.groups_container.pack(fill='both', expand=True, padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['md'])
+    def create_groups_grid_horizontal(self):
+        """สร้าง grid แบบ horizontal scroll (2 columns × 3 rows = 6 groups)"""
+        # Main container with scrollbar
+        container_frame = tk.Frame(self.main_frame, bg=TradingTheme.COLORS['secondary_bg'])
+        container_frame.pack(fill='both', expand=True, padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['md'])
         
-        # Create 6 group cards (2 rows x 3 columns)
-        self.group_cards = {}
+        # Create canvas for scrolling
+        self.canvas = Canvas(
+            container_frame,
+            bg=TradingTheme.COLORS['secondary_bg'],
+            highlightthickness=0
+        )
+        
+        # Horizontal scrollbar
+        h_scrollbar = ttk.Scrollbar(container_frame, orient='horizontal', command=self.canvas.xview)
+        h_scrollbar.pack(side='bottom', fill='x')
+        
+        self.canvas.pack(side='top', fill='both', expand=True)
+        self.canvas.configure(xscrollcommand=h_scrollbar.set)
+        
+        # Create frame inside canvas
+        self.groups_container = tk.Frame(self.canvas, bg=TradingTheme.COLORS['secondary_bg'])
+        self.canvas_frame = self.canvas.create_window((0, 0), window=self.groups_container, anchor='nw')
+        
+        # Bind canvas resize
+        self.groups_container.bind('<Configure>', lambda e: self.canvas.configure(scrollregion=self.canvas.bbox('all')))
         
         # Triangle configurations
         self.triangle_configs = {
@@ -101,32 +120,37 @@ class GroupDashboard:
             }
         }
         
-        # Create group cards
+        # Create group cards in 2×3 grid (2 columns, 3 rows)
+        self.group_cards = {}
         for i, (triangle_id, config) in enumerate(self.triangle_configs.items()):
-            row = i // 3
-            col = i % 3
+            # Calculate position: 2 rows per column, 3 columns total
+            col = i // 2  # 0,0,1,1,2,2 → 0,1,2 (column)
+            row = i % 2   # 0,1,0,1,0,1 → row in column
             
-            card = self.create_group_card(triangle_id, config)
+            card = self.create_enhanced_group_card(triangle_id, config)
             card.grid(row=row, column=col, padx=TradingTheme.SPACING['md'], 
                      pady=TradingTheme.SPACING['md'], sticky='nsew')
             
             self.group_cards[triangle_id] = card
         
-        # Configure grid weights for full expansion
-        for i in range(2):
+        # Configure grid weights
+        for i in range(2):  # 2 rows
             self.groups_container.grid_rowconfigure(i, weight=1)
-        for i in range(3):
-            self.groups_container.grid_columnconfigure(i, weight=1)
+        for i in range(3):  # 3 columns
+            self.groups_container.grid_columnconfigure(i, weight=1, minsize=400)
     
-    def create_group_card(self, triangle_id, config):
-        """สร้าง card สำหรับแต่ละ group"""
+    def create_enhanced_group_card(self, triangle_id, config):
+        """สร้าง enhanced card พร้อม P&L Breakdown, Progress Bar, Trailing Stop"""
         # Main card frame
         card_frame = tk.Frame(
             self.groups_container,
             bg=TradingTheme.COLORS['primary_bg'],
             relief='raised',
-            bd=1
+            bd=2,
+            width=380,
+            height=400
         )
+        card_frame.grid_propagate(False)
         
         # Header
         header_frame = tk.Frame(card_frame, bg=config['color'], height=40)
@@ -136,8 +160,8 @@ class GroupDashboard:
         # Group name
         name_label = tk.Label(
             header_frame,
-            text=config['name'],
-            font=TradingTheme.FONTS['title'],
+            text=f"{config['name']} (G{triangle_id.split('_')[1]})",
+            font=('Arial', 11, 'bold'),
             bg=config['color'],
             fg='white'
         )
@@ -147,131 +171,326 @@ class GroupDashboard:
         if not hasattr(self, 'status_indicators'):
             self.status_indicators = {}
         
-        status_frame = tk.Frame(header_frame, bg=config['color'])
-        status_frame.pack(side='right', padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['sm'])
-        
         status_indicator = tk.Label(
-            status_frame,
-            text="●",
-            font=('Arial', 12),
-            bg=config['color'],
-            fg='#FFD700'  # Gold for active
+            header_frame,
+            text="🔴",
+            font=('Arial', 14),
+            bg=config['color']
         )
-        status_indicator.pack()
+        status_indicator.pack(side='right', padx=TradingTheme.SPACING['md'])
         self.status_indicators[triangle_id] = status_indicator
         
-        # Content area
+        # Content area (scrollable)
         content_frame = tk.Frame(card_frame, bg=TradingTheme.COLORS['primary_bg'])
         content_frame.pack(fill='both', expand=True, padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['md'])
         
-        # Magic number
-        magic_label = tk.Label(
+        # Magic & Pairs
+        info_text = f"Magic: {config['magic']}\n{', '.join(config['pairs'])}"
+        info_label = tk.Label(
             content_frame,
-            text=f"Magic: {config['magic']}",
-            font=TradingTheme.FONTS['body'],
+            text=info_text,
+            font=('Arial', 9),
             bg=TradingTheme.COLORS['primary_bg'],
-            fg=TradingTheme.COLORS['text_secondary']
+            fg=TradingTheme.COLORS['text_secondary'],
+            justify='left'
         )
-        magic_label.pack(anchor='w')
+        info_label.pack(anchor='w', pady=(0, TradingTheme.SPACING['sm']))
         
-        # Pairs
-        pairs_label = tk.Label(
-            content_frame,
-            text=f"Pairs: {', '.join(config['pairs'])}",
-            font=TradingTheme.FONTS['body'],
-            bg=TradingTheme.COLORS['primary_bg'],
-            fg=TradingTheme.COLORS['text_secondary']
-        )
-        pairs_label.pack(anchor='w', pady=(TradingTheme.SPACING['xs'], 0))
+        # Separator
+        ttk.Separator(content_frame, orient='horizontal').pack(fill='x', pady=TradingTheme.SPACING['sm'])
         
-        # Group ID
-        if not hasattr(self, 'group_id_labels'):
-            self.group_id_labels = {}
-        group_id_label = tk.Label(
-            content_frame,
-            text="Group: None",
-            font=TradingTheme.FONTS['body'],
+        # 💰 P&L Breakdown Section
+        pnl_frame = tk.Frame(content_frame, bg=TradingTheme.COLORS['primary_bg'])
+        pnl_frame.pack(fill='x', pady=TradingTheme.SPACING['sm'])
+        
+        pnl_title = tk.Label(
+            pnl_frame,
+            text="💰 P&L Breakdown:",
+            font=('Arial', 10, 'bold'),
             bg=TradingTheme.COLORS['primary_bg'],
             fg=TradingTheme.COLORS['text_primary']
         )
-        group_id_label.pack(anchor='w', pady=(TradingTheme.SPACING['sm'], 0))
-        self.group_id_labels[triangle_id] = group_id_label
+        pnl_title.pack(anchor='w')
         
-        # PnL
-        if not hasattr(self, 'pnl_labels'):
-            self.pnl_labels = {}
-        pnl_label = tk.Label(
-            content_frame,
-            text="PnL: $0.00",
-            font=TradingTheme.FONTS['body'],
+        # Initialize labels
+        if not hasattr(self, 'arb_pnl_labels'):
+            self.arb_pnl_labels = {}
+        if not hasattr(self, 'rec_pnl_labels'):
+            self.rec_pnl_labels = {}
+        if not hasattr(self, 'net_pnl_labels'):
+            self.net_pnl_labels = {}
+        
+        # Arbitrage PnL
+        arb_pnl_label = tk.Label(
+            pnl_frame,
+            text="  Arb (0): $0.00",
+            font=('Consolas', 9),
             bg=TradingTheme.COLORS['primary_bg'],
             fg=TradingTheme.COLORS['text_primary']
         )
-        pnl_label.pack(anchor='w', pady=(TradingTheme.SPACING['xs'], 0))
-        self.pnl_labels[triangle_id] = pnl_label
+        arb_pnl_label.pack(anchor='w')
+        self.arb_pnl_labels[triangle_id] = arb_pnl_label
         
-        # Positions count
-        if not hasattr(self, 'positions_labels'):
-            self.positions_labels = {}
-        positions_label = tk.Label(
-            content_frame,
-            text="Positions: 0",
-            font=TradingTheme.FONTS['body'],
+        # Recovery PnL
+        rec_pnl_label = tk.Label(
+            pnl_frame,
+            text="  Rec (0): $0.00",
+            font=('Consolas', 9),
             bg=TradingTheme.COLORS['primary_bg'],
             fg=TradingTheme.COLORS['text_primary']
         )
-        positions_label.pack(anchor='w', pady=(TradingTheme.SPACING['xs'], 0))
-        self.positions_labels[triangle_id] = positions_label
+        rec_pnl_label.pack(anchor='w')
+        self.rec_pnl_labels[triangle_id] = rec_pnl_label
         
-        # Recovery positions count
-        if not hasattr(self, 'recovery_labels'):
-            self.recovery_labels = {}
-        recovery_label = tk.Label(
-            content_frame,
-            text="Recovery: 0",
-            font=TradingTheme.FONTS['body'],
+        # Net PnL
+        net_pnl_label = tk.Label(
+            pnl_frame,
+            text="  Net: $0.00",
+            font=('Consolas', 10, 'bold'),
             bg=TradingTheme.COLORS['primary_bg'],
             fg=TradingTheme.COLORS['text_primary']
         )
-        recovery_label.pack(anchor='w', pady=(TradingTheme.SPACING['xs'], 0))
-        self.recovery_labels[triangle_id] = recovery_label
+        net_pnl_label.pack(anchor='w', pady=(2, 0))
+        self.net_pnl_labels[triangle_id] = net_pnl_label
         
-        # Positions status text area
-        if not hasattr(self, 'positions_text_areas'):
-            self.positions_text_areas = {}
+        # Separator
+        ttk.Separator(content_frame, orient='horizontal').pack(fill='x', pady=TradingTheme.SPACING['sm'])
         
-        positions_text = scrolledtext.ScrolledText(
-            content_frame,
-            height=8,
-            font=('Consolas', 8),
+        # 🎯 Profit Target Section
+        target_frame = tk.Frame(content_frame, bg=TradingTheme.COLORS['primary_bg'])
+        target_frame.pack(fill='x', pady=TradingTheme.SPACING['sm'])
+        
+        if not hasattr(self, 'target_labels'):
+            self.target_labels = {}
+        if not hasattr(self, 'progress_bars'):
+            self.progress_bars = {}
+        if not hasattr(self, 'progress_labels'):
+            self.progress_labels = {}
+        
+        target_label = tk.Label(
+            target_frame,
+            text="🎯 Target: $5.00",
+            font=('Arial', 9, 'bold'),
+            bg=TradingTheme.COLORS['primary_bg'],
+            fg=TradingTheme.COLORS['text_primary']
+        )
+        target_label.pack(anchor='w')
+        self.target_labels[triangle_id] = target_label
+        
+        # Progress bar frame
+        progress_frame = tk.Frame(target_frame, bg=TradingTheme.COLORS['secondary_bg'], height=20)
+        progress_frame.pack(fill='x', pady=(2, 2))
+        
+        # Progress bar canvas
+        progress_canvas = Canvas(
+            progress_frame,
             bg=TradingTheme.COLORS['secondary_bg'],
-            fg=TradingTheme.COLORS['text_primary'],
-            insertbackground=TradingTheme.COLORS['text_primary'],
-            selectbackground=TradingTheme.COLORS['accent_bg'],
-            state='disabled',
-            wrap='none'
+            height=18,
+            highlightthickness=0
         )
-        positions_text.pack(fill='both', expand=True, pady=(TradingTheme.SPACING['sm'], 0))
-        self.positions_text_areas[triangle_id] = positions_text
+        progress_canvas.pack(fill='x')
+        self.progress_bars[triangle_id] = progress_canvas
         
-        # Last update
-        if not hasattr(self, 'last_update_labels'):
-            self.last_update_labels = {}
-        last_update_label = tk.Label(
-            content_frame,
-            text="Last: Never",
-            font=TradingTheme.FONTS['small'],
+        # Progress text
+        progress_label = tk.Label(
+            target_frame,
+            text="0% (Need $5.00)",
+            font=('Arial', 8),
             bg=TradingTheme.COLORS['primary_bg'],
             fg=TradingTheme.COLORS['text_secondary']
         )
-        last_update_label.pack(anchor='w', pady=(TradingTheme.SPACING['sm'], 0))
-        self.last_update_labels[triangle_id] = last_update_label
+        progress_label.pack(anchor='w')
+        self.progress_labels[triangle_id] = progress_label
+        
+        # Separator
+        ttk.Separator(content_frame, orient='horizontal').pack(fill='x', pady=TradingTheme.SPACING['sm'])
+        
+        # 🔒 Trailing Stop Section
+        trailing_frame = tk.Frame(content_frame, bg=TradingTheme.COLORS['primary_bg'])
+        trailing_frame.pack(fill='x', pady=TradingTheme.SPACING['sm'])
+        
+        if not hasattr(self, 'trailing_status_labels'):
+            self.trailing_status_labels = {}
+        if not hasattr(self, 'trailing_detail_labels'):
+            self.trailing_detail_labels = {}
+        
+        trailing_status = tk.Label(
+            trailing_frame,
+            text="🔓 Trailing: Inactive",
+            font=('Arial', 9, 'bold'),
+            bg=TradingTheme.COLORS['primary_bg'],
+            fg=TradingTheme.COLORS['text_secondary']
+        )
+        trailing_status.pack(anchor='w')
+        self.trailing_status_labels[triangle_id] = trailing_status
+        
+        trailing_detail = tk.Label(
+            trailing_frame,
+            text="(Waiting for profit)",
+            font=('Arial', 8),
+            bg=TradingTheme.COLORS['primary_bg'],
+            fg=TradingTheme.COLORS['text_secondary']
+        )
+        trailing_detail.pack(anchor='w')
+        self.trailing_detail_labels[triangle_id] = trailing_detail
         
         return card_frame
     
+    def update_group_status(self, triangle_id, group_data):
+        """อัปเดตสถานะของ group พร้อมข้อมูลเพิ่มเติม"""
+        if triangle_id not in self.group_cards:
+            return
+        
+        # Update status indicator
+        net_pnl = group_data.get('net_pnl', 0.0)
+        if triangle_id in self.status_indicators:
+            if net_pnl > 0:
+                self.status_indicators[triangle_id].config(text="🟢")
+            elif net_pnl < 0:
+                self.status_indicators[triangle_id].config(text="🔴")
+            else:
+                self.status_indicators[triangle_id].config(text="🟡")
+        
+        # Update P&L Breakdown
+        arb_pnl = group_data.get('arbitrage_pnl', 0.0)
+        rec_pnl = group_data.get('recovery_pnl', 0.0)
+        arb_count = group_data.get('arbitrage_count', 0)
+        rec_count = group_data.get('recovery_count', 0)
+        
+        if triangle_id in self.arb_pnl_labels:
+            arb_color = TradingTheme.COLORS['success'] if arb_pnl > 0 else TradingTheme.COLORS['danger'] if arb_pnl < 0 else TradingTheme.COLORS['text_primary']
+            self.arb_pnl_labels[triangle_id].config(
+                text=f"  Arb ({arb_count}): ${arb_pnl:.2f}",
+                fg=arb_color
+            )
+        
+        if triangle_id in self.rec_pnl_labels:
+            rec_color = TradingTheme.COLORS['success'] if rec_pnl > 0 else TradingTheme.COLORS['danger'] if rec_pnl < 0 else TradingTheme.COLORS['text_primary']
+            self.rec_pnl_labels[triangle_id].config(
+                text=f"  Rec ({rec_count}): ${rec_pnl:.2f}",
+                fg=rec_color
+            )
+        
+        if triangle_id in self.net_pnl_labels:
+            net_color = TradingTheme.COLORS['success'] if net_pnl > 0 else TradingTheme.COLORS['danger'] if net_pnl < 0 else TradingTheme.COLORS['text_primary']
+            self.net_pnl_labels[triangle_id].config(
+                text=f"  Net: ${net_pnl:.2f}",
+                fg=net_color
+            )
+        
+        # Update Profit Target & Progress Bar
+        min_profit = group_data.get('min_profit_target', 5.0)
+        progress_pct = (net_pnl / min_profit * 100) if min_profit > 0 else 0
+        progress_pct = max(0, min(100, progress_pct))
+        
+        if triangle_id in self.target_labels:
+            self.target_labels[triangle_id].config(text=f"🎯 Target: ${min_profit:.2f}")
+        
+        if triangle_id in self.progress_bars:
+            canvas = self.progress_bars[triangle_id]
+            canvas.delete('all')
+            width = canvas.winfo_width() if canvas.winfo_width() > 1 else 300
+            fill_width = int(width * progress_pct / 100)
+            
+            # Background
+            canvas.create_rectangle(0, 0, width, 18, fill=TradingTheme.COLORS['secondary_bg'], outline='')
+            
+            # Progress fill
+            if progress_pct > 0:
+                fill_color = TradingTheme.COLORS['success'] if progress_pct >= 100 else '#FFA500'
+                canvas.create_rectangle(0, 0, fill_width, 18, fill=fill_color, outline='')
+        
+        if triangle_id in self.progress_labels:
+            if net_pnl >= min_profit:
+                self.progress_labels[triangle_id].config(
+                    text=f"{progress_pct:.0f}% ✅ TARGET REACHED!",
+                    fg=TradingTheme.COLORS['success']
+                )
+            elif net_pnl > 0:
+                need_more = min_profit - net_pnl
+                self.progress_labels[triangle_id].config(
+                    text=f"{progress_pct:.0f}% (Need ${need_more:.2f})",
+                    fg='#FFA500'
+                )
+            else:
+                need_total = min_profit - net_pnl
+                self.progress_labels[triangle_id].config(
+                    text=f"0% (Need ${need_total:.2f})",
+                    fg=TradingTheme.COLORS['text_secondary']
+                )
+        
+        # Update Trailing Stop Status
+        trailing_active = group_data.get('trailing_active', False)
+        trailing_peak = group_data.get('trailing_peak', 0.0)
+        trailing_stop = group_data.get('trailing_stop', 0.0)
+        
+        if triangle_id in self.trailing_status_labels:
+            if trailing_active:
+                distance_from_stop = net_pnl - trailing_stop
+                if distance_from_stop <= 2.0:
+                    status_text = "🔒 Trailing: ACTIVE 🚨"
+                    status_color = TradingTheme.COLORS['danger']
+                else:
+                    status_text = "🔒 Trailing: ACTIVE 💎"
+                    status_color = TradingTheme.COLORS['success']
+                
+                self.trailing_status_labels[triangle_id].config(
+                    text=status_text,
+                    fg=status_color
+                )
+                
+                if triangle_id in self.trailing_detail_labels:
+                    detail_text = f"Peak ${trailing_peak:.2f} | Stop ${trailing_stop:.2f}\nNow ${net_pnl:.2f}"
+                    if distance_from_stop <= 2.0:
+                        detail_text += f" (${distance_from_stop:.2f} away!)"
+                    else:
+                        detail_text += " (Safe)"
+                    
+                    self.trailing_detail_labels[triangle_id].config(
+                        text=detail_text,
+                        fg=status_color
+                    )
+            elif net_pnl > 0 and net_pnl >= min_profit * 0.8:
+                self.trailing_status_labels[triangle_id].config(
+                    text="⏳ Trailing: Near Target",
+                    fg='#FFA500'
+                )
+                if triangle_id in self.trailing_detail_labels:
+                    self.trailing_detail_labels[triangle_id].config(
+                        text=f"(Need ${min_profit - net_pnl:.2f} more)",
+                        fg='#FFA500'
+                    )
+            else:
+                self.trailing_status_labels[triangle_id].config(
+                    text="🔓 Trailing: Inactive",
+                    fg=TradingTheme.COLORS['text_secondary']
+                )
+                if triangle_id in self.trailing_detail_labels:
+                    self.trailing_detail_labels[triangle_id].config(
+                        text="(Waiting for profit)",
+                        fg=TradingTheme.COLORS['text_secondary']
+                    )
+    
+    def update_summary(self, groups_data):
+        """อัปเดต summary"""
+        total_groups = len(groups_data)
+        active_groups = sum(1 for g in groups_data.values() if g.get('status') == 'active')
+        total_net_pnl = sum(g.get('net_pnl', 0.0) for g in groups_data.values())
+        total_positions = sum(g.get('arbitrage_count', 0) for g in groups_data.values())
+        total_recovery = sum(g.get('recovery_count', 0) for g in groups_data.values())
+        
+        self.total_groups_label.config(text=f"Total Groups: {total_groups}")
+        self.active_groups_label.config(text=f"Active: {active_groups}")
+        
+        pnl_color = TradingTheme.COLORS['success'] if total_net_pnl > 0 else TradingTheme.COLORS['danger'] if total_net_pnl < 0 else TradingTheme.COLORS['text_primary']
+        self.total_pnl_label.config(text=f"Total Net PnL: ${total_net_pnl:.2f}", fg=pnl_color)
+        
+        self.total_positions_label.config(text=f"Total Positions: {total_positions}")
+        self.total_recovery_label.config(text=f"Total Recovery: {total_recovery}")
+    
     def create_summary_panel(self):
         """สร้าง summary panel"""
-        summary_frame = tk.Frame(self.main_frame, bg=TradingTheme.COLORS['secondary_bg'], height=80)
+        summary_frame = tk.Frame(self.main_frame, bg=TradingTheme.COLORS['secondary_bg'], height=60)
         summary_frame.pack(fill='x', padx=TradingTheme.SPACING['md'], pady=(TradingTheme.SPACING['md'], 0))
         summary_frame.pack_propagate(False)
         
@@ -302,7 +521,7 @@ class GroupDashboard:
         # Total PnL
         self.total_pnl_label = tk.Label(
             metrics_frame,
-            text="Total PnL: $0.00",
+            text="Total Net PnL: $0.00",
             font=TradingTheme.FONTS['body'],
             bg=TradingTheme.COLORS['secondary_bg'],
             fg=TradingTheme.COLORS['text_primary']
@@ -329,72 +548,6 @@ class GroupDashboard:
         )
         self.total_recovery_label.pack(side='left')
     
-    def update_group_status(self, triangle_id, group_data):
-        """อัปเดตสถานะของ group"""
-        if triangle_id not in self.group_cards:
-            return
-        
-        # Update status indicator
-        if triangle_id in self.status_indicators:
-            if group_data.get('status') == 'active':
-                self.status_indicators[triangle_id].config(fg='#00FF00')  # Green
-            else:
-                self.status_indicators[triangle_id].config(fg='#FFD700')  # Gold
-        
-        # Update group ID
-        if triangle_id in self.group_id_labels:
-            group_id = group_data.get('group_id', 'None')
-            self.group_id_labels[triangle_id].config(text=f"Group: {group_id}")
-        
-        # Update PnL
-        if triangle_id in self.pnl_labels:
-            pnl = group_data.get('total_pnl', 0.0)
-            pnl_color = TradingTheme.COLORS['success'] if pnl > 0 else TradingTheme.COLORS['danger'] if pnl < 0 else TradingTheme.COLORS['text_primary']
-            self.pnl_labels[triangle_id].config(text=f"PnL: ${pnl:.2f}", fg=pnl_color)
-        
-        # Update positions count
-        if triangle_id in self.positions_labels:
-            positions_count = len(group_data.get('positions', []))
-            self.positions_labels[triangle_id].config(text=f"Positions: {positions_count}")
-        
-        # Update recovery count
-        if triangle_id in self.recovery_labels:
-            recovery_count = len(group_data.get('recovery_chain', []))
-            self.recovery_labels[triangle_id].config(text=f"Recovery: {recovery_count}")
-        
-        # Update last update time
-        if triangle_id in self.last_update_labels:
-            last_update = datetime.now().strftime("%H:%M:%S")
-            self.last_update_labels[triangle_id].config(text=f"Last: {last_update}")
-        
-        # Update positions status text area
-        if hasattr(self, 'positions_text_areas') and triangle_id in self.positions_text_areas:
-            positions_text = self.positions_text_areas[triangle_id]
-            positions_text.config(state='normal')
-            positions_text.delete(1.0, tk.END)
-            
-            # Format positions data for this group
-            positions_data = self.format_group_positions_status(group_data)
-            positions_text.insert(tk.END, positions_data)
-            positions_text.config(state='disabled')
-    
-    def update_summary(self, groups_data):
-        """อัปเดต summary"""
-        total_groups = len(groups_data)
-        active_groups = sum(1 for g in groups_data.values() if g.get('status') == 'active')
-        total_pnl = sum(g.get('total_pnl', 0.0) for g in groups_data.values())
-        total_positions = sum(len(g.get('positions', [])) for g in groups_data.values())
-        total_recovery = sum(len(g.get('recovery_chain', [])) for g in groups_data.values())
-        
-        self.total_groups_label.config(text=f"Total Groups: {total_groups}")
-        self.active_groups_label.config(text=f"Active: {active_groups}")
-        
-        pnl_color = TradingTheme.COLORS['success'] if total_pnl > 0 else TradingTheme.COLORS['danger'] if total_pnl < 0 else TradingTheme.COLORS['text_primary']
-        self.total_pnl_label.config(text=f"Total PnL: ${total_pnl:.2f}", fg=pnl_color)
-        
-        self.total_positions_label.config(text=f"Total Positions: {total_positions}")
-        self.total_recovery_label.config(text=f"Total Recovery: {total_recovery}")
-    
     def refresh_groups(self):
         """รีเฟรชข้อมูล groups"""
         # Find the main window and call update_group_dashboard
@@ -404,227 +557,3 @@ class GroupDashboard:
         
         if hasattr(main_window, 'update_group_dashboard'):
             main_window.update_group_dashboard()
-    
-    def create_positions_status_panel(self):
-        """สร้าง panel แสดงสถานะไม้แบบละเอียด"""
-        # Main positions status frame
-        self.positions_status_frame = tk.Frame(
-            self.main_frame, 
-            bg=TradingTheme.COLORS['secondary_bg'],
-            relief='raised',
-            bd=1
-        )
-        self.positions_status_frame.pack(fill='both', expand=True, padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['md'])
-        
-        # Title
-        title_label = tk.Label(
-            self.positions_status_frame,
-            text="📊 POSITIONS STATUS",
-            font=TradingTheme.FONTS['subheader'],
-            bg=TradingTheme.COLORS['secondary_bg'],
-            fg=TradingTheme.COLORS['text_primary']
-        )
-        title_label.pack(anchor='w', padx=TradingTheme.SPACING['md'], pady=(TradingTheme.SPACING['md'], TradingTheme.SPACING['sm']))
-        
-        # Create scrollable text widget for positions status
-        self.positions_text = scrolledtext.ScrolledText(
-            self.positions_status_frame,
-            height=25,
-            font=('Consolas', 9),
-            bg=TradingTheme.COLORS['primary_bg'],
-            fg=TradingTheme.COLORS['text_primary'],
-            insertbackground=TradingTheme.COLORS['text_primary'],
-            selectbackground=TradingTheme.COLORS['accent_bg'],
-            state='disabled',
-            wrap='none'
-        )
-        self.positions_text.pack(fill='both', expand=True, padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['sm'])
-    
-    def update_positions_status(self, positions_data):
-        """อัปเดตสถานะไม้แบบละเอียด"""
-        if not hasattr(self, 'positions_text'):
-            return
-        
-        # Clear existing content
-        self.positions_text.config(state='normal')
-        self.positions_text.delete(1.0, tk.END)
-        
-        try:
-            # Format positions data
-            status_text = self.format_positions_status(positions_data)
-            self.positions_text.insert(tk.END, status_text)
-            
-        except Exception as e:
-            self.positions_text.insert(tk.END, f"❌ Error updating positions status: {e}")
-        
-        # Disable editing
-        self.positions_text.config(state='disabled')
-    
-    def format_positions_status(self, positions_data):
-        """จัดรูปแบบข้อมูลสถานะไม้แบ่งตาม Group"""
-        output = []
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        output.append(f"🕐 Last Update: {timestamp}\n")
-        output.append("=" * 100 + "\n")
-        
-        # แบ่งตาม Group
-        groups_data = positions_data.get('groups', {})
-        
-        for group_id in sorted(groups_data.keys()):
-            group_data = groups_data[group_id]
-            group_name = group_id.replace('group_triangle_', 'G').replace('_', ' ')
-            
-            output.append(f"\n📊 {group_name.upper()} STATUS:\n")
-            output.append("-" * 80 + "\n")
-            
-            # Profit Arbitrage Positions
-            profit_arbitrage = group_data.get('profit_arbitrage', [])
-            if profit_arbitrage:
-                output.append("🟢 PROFIT ARBITRAGE POSITIONS:\n")
-                for i, pos in enumerate(profit_arbitrage, 1):
-                    symbol = pos.get('symbol', 'Unknown')
-                    order_id = pos.get('order_id', 'N/A')
-                    pnl = pos.get('pnl', 0)
-                    risk = pos.get('risk_percent', 0)
-                    distance = pos.get('price_distance', 0)
-                    
-                    output.append(f"     {i}. {symbol:<8} (Order: {order_id}) - ✅ HEDGED | PnL: ${pnl:>8.2f}\n")
-                    output.append(f"         Risk: {risk:>6.2f}% (info only)\n")
-                    output.append(f"         Distance: {distance:>6.1f} pips (≥10) ✅\n")
-            else:
-                output.append("🟢 PROFIT ARBITRAGE POSITIONS: None\n")
-            
-            output.append("\n")
-            
-            # Losing Arbitrage Positions
-            losing_arbitrage = group_data.get('losing_arbitrage', [])
-            if losing_arbitrage:
-                output.append("🔴 LOSING ARBITRAGE POSITIONS:\n")
-                for i, pos in enumerate(losing_arbitrage, 1):
-                    symbol = pos.get('symbol', 'Unknown')
-                    order_id = pos.get('order_id', 'N/A')
-                    pnl = pos.get('pnl', 0)
-                    risk = pos.get('risk_percent', 0)
-                    distance = pos.get('price_distance', 0)
-                    is_hedged = pos.get('is_hedged', False)
-                    
-                    hedged_status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
-                    distance_status = "✅" if distance >= 10 else "❌"
-                    
-                    output.append(f"     {i}. {symbol:<8} (Order: {order_id}) - {hedged_status} | PnL: ${pnl:>8.2f}\n")
-                    output.append(f"         Risk: {risk:>6.2f}% (info only)\n")
-                    output.append(f"         Distance: {distance:>6.1f} pips (≥10) {distance_status}\n")
-            else:
-                output.append("🔴 LOSING ARBITRAGE POSITIONS: None\n")
-            
-            output.append("\n")
-            
-            # Profit Correlation Positions
-            profit_correlation = group_data.get('profit_correlation', [])
-            if profit_correlation:
-                output.append("🟢 PROFIT CORRELATION POSITIONS:\n")
-                for i, pos in enumerate(profit_correlation, 1):
-                    symbol = pos.get('symbol', 'Unknown')
-                    order_id = pos.get('order_id', 'N/A')
-                    pnl = pos.get('pnl', 0)
-                    output.append(f"     {i}. {symbol:<8} (Order: {order_id}) - PnL: ${pnl:>8.2f}\n")
-            else:
-                output.append("🟢 PROFIT CORRELATION POSITIONS: None\n")
-            
-            output.append("\n")
-            
-            # Losing Correlation Positions
-            losing_correlation = group_data.get('losing_correlation', [])
-            if losing_correlation:
-                output.append("🔴 LOSING CORRELATION POSITIONS:\n")
-                for i, pos in enumerate(losing_correlation, 1):
-                    symbol = pos.get('symbol', 'Unknown')
-                    order_id = pos.get('order_id', 'N/A')
-                    pnl = pos.get('pnl', 0)
-                    output.append(f"     {i}. {symbol:<8} (Order: {order_id}) - PnL: ${pnl:>8.2f}\n")
-            else:
-                output.append("🔴 LOSING CORRELATION POSITIONS: None\n")
-            
-            output.append("\n")
-            
-            # Existing Correlation Positions
-            existing_correlation = group_data.get('existing_correlation', [])
-            if existing_correlation:
-                output.append("🔄 EXISTING CORRELATION POSITIONS:\n")
-                for i, pos in enumerate(existing_correlation, 1):
-                    symbol = pos.get('symbol', 'Unknown')
-                    order_id = pos.get('order_id', 'N/A')
-                    pnl = pos.get('pnl', 0)
-                    output.append(f"     {i}. {symbol:<8} (Order: {order_id}) - PnL: ${pnl:>8.2f}\n")
-            else:
-                output.append("🔄 EXISTING CORRELATION POSITIONS: None\n")
-            
-            output.append("\n" + "=" * 100 + "\n")
-        
-        return ''.join(output)
-    
-    def format_group_positions_status(self, group_data):
-        """จัดรูปแบบข้อมูลสถานะไม้สำหรับแต่ละ Group"""
-        output = []
-        
-        # Profit Arbitrage Positions
-        profit_arbitrage = group_data.get('profit_arbitrage', [])
-        if profit_arbitrage:
-            output.append("🟢 PROFIT ARBITRAGE:\n")
-            for i, pos in enumerate(profit_arbitrage, 1):
-                symbol = pos.get('symbol', 'Unknown')
-                order_id = pos.get('order_id', 'N/A')
-                pnl = pos.get('pnl', 0)
-                output.append(f"  {i}. {symbol} (${pnl:.2f})\n")
-        else:
-            output.append("🟢 PROFIT ARBITRAGE: None\n")
-        
-        output.append("\n")
-        
-        # Losing Arbitrage Positions
-        losing_arbitrage = group_data.get('losing_arbitrage', [])
-        if losing_arbitrage:
-            output.append("🔴 LOSING ARBITRAGE:\n")
-            for i, pos in enumerate(losing_arbitrage, 1):
-                symbol = pos.get('symbol', 'Unknown')
-                order_id = pos.get('order_id', 'N/A')
-                pnl = pos.get('pnl', 0)
-                risk = pos.get('risk_percent', 0)
-                distance = pos.get('price_distance', 0)
-                is_hedged = pos.get('is_hedged', False)
-                
-                hedged_status = "✅" if is_hedged else "❌"
-                distance_status = "✅" if distance >= 10 else "❌"
-                
-                output.append(f"  {i}. {symbol} (${pnl:.2f}) {hedged_status}\n")
-                output.append(f"     Risk: {risk:.2f}% | Dist: {distance:.1f}p {distance_status}\n")
-        else:
-            output.append("🔴 LOSING ARBITRAGE: None\n")
-        
-        output.append("\n")
-        
-        # Profit Correlation Positions
-        profit_correlation = group_data.get('profit_correlation', [])
-        if profit_correlation:
-            output.append("🟢 PROFIT CORRELATION:\n")
-            for i, pos in enumerate(profit_correlation, 1):
-                symbol = pos.get('symbol', 'Unknown')
-                pnl = pos.get('pnl', 0)
-                output.append(f"  {i}. {symbol} (${pnl:.2f})\n")
-        else:
-            output.append("🟢 PROFIT CORRELATION: None\n")
-        
-        output.append("\n")
-        
-        # Losing Correlation Positions
-        losing_correlation = group_data.get('losing_correlation', [])
-        if losing_correlation:
-            output.append("🔴 LOSING CORRELATION:\n")
-            for i, pos in enumerate(losing_correlation, 1):
-                symbol = pos.get('symbol', 'Unknown')
-                pnl = pos.get('pnl', 0)
-                output.append(f"  {i}. {symbol} (${pnl:.2f})\n")
-        else:
-            output.append("🔴 LOSING CORRELATION: None\n")
-        
-        return ''.join(output)

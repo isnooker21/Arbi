@@ -2464,3 +2464,102 @@ class TriangleArbitrageDetector:
     def get_profit_threshold_per_lot(self) -> float:
         """ดึงค่าเป้าหมายกำไรต่อ lot ปัจจุบัน"""
         return self.profit_threshold_per_lot
+    
+    def get_enhanced_group_data_for_gui(self, group_id: str) -> Dict:
+        """ดึงข้อมูลเพิ่มเติมสำหรับ GUI (Net PnL, Recovery count, Trailing Stop status)"""
+        try:
+            # Get basic group data
+            group_data = self.active_groups.get(group_id, {})
+            
+            # Calculate Arbitrage PnL
+            arbitrage_pnl = 0.0
+            arbitrage_count = len(group_data.get('positions', []))
+            
+            triangle_type = group_data.get('triangle_type', 'unknown')
+            triangle_magic = self.triangle_magic_numbers.get(triangle_type, 234000)
+            
+            all_positions = self.broker.get_all_positions()
+            for pos in all_positions:
+                if pos.get('magic') == triangle_magic:
+                    arbitrage_pnl += pos.get('profit', 0)
+            
+            # Calculate Recovery PnL
+            recovery_pnl = 0.0
+            recovery_count = 0
+            if self.correlation_manager:
+                recovery_pnl = self._get_recovery_pnl_for_group(group_id)
+                
+                # Count recovery orders
+                all_orders = self.correlation_manager.order_tracker.get_all_orders()
+                for order_key, order_data in all_orders.items():
+                    if order_data.get('type') == 'RECOVERY':
+                        # Check if this recovery belongs to this group
+                        hedging_for = order_data.get('hedging_for', '')
+                        if hedging_for:
+                            # Extract original ticket
+                            original_ticket = hedging_for.split('_')[0] if '_' in hedging_for else None
+                            if original_ticket:
+                                # Check if original ticket belongs to this group
+                                for pos in all_positions:
+                                    if str(pos.get('ticket')) == str(original_ticket) and pos.get('magic') == triangle_magic:
+                                        recovery_count += 1
+                                        break
+            
+            # Calculate Net PnL
+            net_pnl = arbitrage_pnl + recovery_pnl
+            
+            # Calculate Min Profit Target (scaled with balance)
+            balance = self.broker.get_account_balance()
+            if not balance or balance <= 0:
+                balance = 10000.0
+            
+            balance_multiplier = balance / self.min_profit_base_balance
+            min_profit_target = self.min_profit_base * balance_multiplier
+            
+            # Get Trailing Stop Status
+            trailing_active = False
+            trailing_peak = 0.0
+            trailing_stop = 0.0
+            
+            if group_id in self.group_trailing_stops:
+                trailing_data = self.group_trailing_stops[group_id]
+                trailing_active = trailing_data.get('active', False)
+                trailing_peak = trailing_data.get('peak', 0.0)
+                trailing_stop = trailing_data.get('stop', 0.0)
+            
+            # Return enhanced data
+            return {
+                'arbitrage_pnl': arbitrage_pnl,
+                'recovery_pnl': recovery_pnl,
+                'net_pnl': net_pnl,
+                'arbitrage_count': arbitrage_count,
+                'recovery_count': recovery_count,
+                'min_profit_target': min_profit_target,
+                'trailing_active': trailing_active,
+                'trailing_peak': trailing_peak,
+                'trailing_stop': trailing_stop,
+                'balance': balance
+            }
+        except Exception as e:
+            self.logger.error(f"Error getting enhanced group data: {e}")
+            return {
+                'arbitrage_pnl': 0.0,
+                'recovery_pnl': 0.0,
+                'net_pnl': 0.0,
+                'arbitrage_count': 0,
+                'recovery_count': 0,
+                'min_profit_target': 5.0,
+                'trailing_active': False,
+                'trailing_peak': 0.0,
+                'trailing_stop': 0.0,
+                'balance': 10000.0
+            }
+    
+    def update_active_groups_with_enhanced_data(self):
+        """อัปเดตข้อมูลเพิ่มเติมใน active_groups สำหรับ GUI"""
+        try:
+            for group_id in list(self.active_groups.keys()):
+                enhanced_data = self.get_enhanced_group_data_for_gui(group_id)
+                self.active_groups[group_id].update(enhanced_data)
+        except Exception as e:
+            self.logger.error(f"Error updating active groups with enhanced data: {e}")

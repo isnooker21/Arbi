@@ -55,6 +55,11 @@ class SettingsWindow:
                 rules = json.load(f)
                 self.settings['rules'] = rules
             
+            # Load adaptive params
+            with open('config/adaptive_params.json', 'r', encoding='utf-8') as f:
+                adaptive_params = json.load(f)
+                self.settings['adaptive_params'] = adaptive_params
+            
             # Store original settings for comparison
             self.original_settings = json.loads(json.dumps(self.settings))
             
@@ -154,6 +159,9 @@ class SettingsWindow:
         
         # Rules settings tab
         self.create_rules_settings_tab(notebook)
+        
+        # Adaptive Params tab (ค่าที่ใช้จริง!)
+        self.create_adaptive_params_tab(notebook)
         
         # Control buttons
         self.create_control_buttons(main_container)
