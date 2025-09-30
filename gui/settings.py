@@ -276,10 +276,10 @@ class SettingsWindow:
     
     def create_parameter_row(self, parent, param):
         """สร้างแถวสำหรับแต่ละ parameter"""
-            param_name = param[0]
-            param_path = param[1]
-            param_type = param[2]
-            
+        param_name = param[0]
+        param_path = param[1]
+        param_type = param[2]
+        
         # Main row frame
         row_frame = tk.Frame(parent, bg='#2d2d2d')
         row_frame.pack(fill='x', pady=8)

@@ -54,8 +54,8 @@ class GroupDashboard:
         self.refresh_btn.pack(side='right')
     
     def create_groups_grid_horizontal(self):
-        """สร้าง grid แบบ horizontal scroll (2 columns × 3 rows = 6 groups)"""
-        # Main container with scrollbar
+        """สร้าง grid แบบ vertical scroll (3 columns × 2 rows = 6 groups)"""
+        # Main container with vertical scrollbar
         container_frame = tk.Frame(self.main_frame, bg=TradingTheme.COLORS['secondary_bg'])
         container_frame.pack(fill='both', expand=True, padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['md'])
         
@@ -66,12 +66,12 @@ class GroupDashboard:
             highlightthickness=0
         )
         
-        # Horizontal scrollbar
-        h_scrollbar = ttk.Scrollbar(container_frame, orient='horizontal', command=self.canvas.xview)
-        h_scrollbar.pack(side='bottom', fill='x')
+        # Vertical scrollbar (เลื่อนขึ้นลง)
+        v_scrollbar = ttk.Scrollbar(container_frame, orient='vertical', command=self.canvas.yview)
+        v_scrollbar.pack(side='right', fill='y')
         
-        self.canvas.pack(side='top', fill='both', expand=True)
-        self.canvas.configure(xscrollcommand=h_scrollbar.set)
+        self.canvas.pack(side='left', fill='both', expand=True)
+        self.canvas.configure(yscrollcommand=v_scrollbar.set)
         
         # Create frame inside canvas
         self.groups_container = tk.Frame(self.canvas, bg=TradingTheme.COLORS['secondary_bg'])
@@ -79,6 +79,9 @@ class GroupDashboard:
         
         # Bind canvas resize
         self.groups_container.bind('<Configure>', lambda e: self.canvas.configure(scrollregion=self.canvas.bbox('all')))
+        
+        # Bind mouse wheel for scrolling
+        self.canvas.bind_all('<MouseWheel>', lambda e: self.canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
         
         # Triangle configurations
         self.triangle_configs = {
@@ -137,9 +140,9 @@ class GroupDashboard:
         
         # Configure grid weights
         for i in range(2):  # 2 rows
-            self.groups_container.grid_rowconfigure(i, weight=1)
+            self.groups_container.grid_rowconfigure(i, weight=0)
         for i in range(3):  # 3 columns
-            self.groups_container.grid_columnconfigure(i, weight=1, minsize=420)
+            self.groups_container.grid_columnconfigure(i, weight=1, minsize=380)
     
     def create_enhanced_group_card(self, triangle_id, config):
         """สร้าง enhanced card พร้อม P&L Breakdown, Progress Bar, Trailing Stop"""
