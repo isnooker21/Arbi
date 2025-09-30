@@ -680,15 +680,24 @@ class CorrelationManager:
                 group_number = self._get_group_number_from_magic(magic)
                 group_positions = groups_data[magic]
                 
+                # DEBUG: แสดง comment ทั้งหมดใน group
+                self.logger.debug(f"📝 DEBUG Group {group_number} comments:")
+                for pos in group_positions:
+                    comment = pos.get('comment', '')
+                    is_recovery = self._is_recovery_comment(comment)
+                    self.logger.debug(f"   {pos.get('symbol')}: '{comment}' → Recovery={is_recovery}")
+                
                 # แยกประเภทไม้ (รองรับทั้ง 'RECOVERY_' และ 'R' format)
                 arbitrage_positions = [pos for pos in group_positions if not self._is_recovery_comment(pos.get('comment', ''))]
                 recovery_positions = [pos for pos in group_positions if self._is_recovery_comment(pos.get('comment', ''))]
                 
-                # เพิ่ม recovery orders ที่มี magic number อื่น
+                # เพิ่ม recovery orders ที่มี magic number เดียวกับ group นี้
+                # (recovery orders ใช้ magic number เดียวกับ group แต่มี comment ขึ้นต้นด้วย 'R')
                 for recovery_pos in recovery_positions_all:
-                    recovery_comment = recovery_pos.get('comment', '')
-                    if f"G{group_number}_" in recovery_comment:
-                        recovery_positions.append(recovery_pos)
+                    if recovery_pos.get('magic', 0) == magic:
+                        # Magic number ตรงกัน = recovery ของ group นี้
+                        if recovery_pos not in recovery_positions:  # หลีกเลี่ยง duplicate
+                            recovery_positions.append(recovery_pos)
                 
                 
                 # คำนวณ PnL
