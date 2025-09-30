@@ -92,10 +92,20 @@
     },
     "hedge_ratios": {
       "min_ratio": 0.7,
-      "max_ratio": 1.3,
+      "max_ratio": 2.0,
       "default_ratio": 1.0
     },
-    "description": "Correlation recovery parameters - optimized for reducing losses"
+    "dynamic_hedge": {
+      "enabled": true,
+      "recovery_target_ratio": 0.75,
+      "min_hedge_lot": 0.1,
+      "max_hedge_lot": 2.0
+    },
+    "diversification": {
+      "max_usage_per_symbol": 2,
+      "enforce_limit": true
+    },
+    "description": "Correlation recovery parameters - optimized with dynamic hedge and diversification"
   },
   "arbitrage_params": {
     "detection": {

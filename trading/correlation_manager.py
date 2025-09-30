@@ -678,6 +678,135 @@ class CorrelationManager:
         }
         return magic_to_group.get(magic, "GX")
     
+    def _get_recovery_symbol_usage(self) -> Dict[str, int]:
+        """นับว่าแต่ละคู่เงินถูกใช้แก้กี่ครั้งแล้ว"""
+        try:
+            usage = {}
+            all_orders = self.order_tracker.get_all_orders()
+            
+            for order_key, order_info in all_orders.items():
+                if order_info.get('type') == 'RECOVERY' and order_info.get('status') != 'CLOSED':
+                    symbol = order_info.get('symbol')
+                    if symbol:
+                        usage[symbol] = usage.get(symbol, 0) + 1
+            
+            return usage
+        except Exception as e:
+            self.logger.error(f"Error getting recovery symbol usage: {e}")
+            return {}
+    
+    def _is_recovery_symbol_available(self, symbol: str, max_usage: int = 2) -> bool:
+        """เช็คว่าคู่เงินนี้ยังใช้ได้หรือไม่ (จำกัด max 2 ครั้ง)"""
+        try:
+            usage = self._get_recovery_symbol_usage()
+            current_usage = usage.get(symbol, 0)
+            is_available = current_usage < max_usage
+            
+            if not is_available:
+                self.logger.debug(f"Symbol {symbol} not available: used {current_usage}/{max_usage} times")
+            
+            return is_available
+        except Exception as e:
+            self.logger.error(f"Error checking symbol availability: {e}")
+            return True  # Fallback: allow if error
+    
+    def _calculate_dynamic_hedge_lot(self, original_pnl: float, correlation: float, 
+                                       original_symbol: str, hedge_symbol: str) -> float:
+        """คำนวณ hedge lot ตามการขาดทุนจริง (Target: 75% recovery)"""
+        try:
+            # Target: Recovery 75% ของการขาดทุน
+            recovery_target = 0.75
+            target_recovery_pnl = abs(original_pnl) * recovery_target
+            
+            # คำนวณ pip value
+            balance = self.broker.get_account_balance() or 10000
+            balance_multiplier = balance / 10000.0
+            
+            # Simplified: $10 per 0.1 lot for major pairs
+            base_pip_value = 10.0 * balance_multiplier
+            
+            # คำนวณ lot size ที่ต้องการ
+            hedge_lot = target_recovery_pnl / (base_pip_value * 10)
+            
+            # ปรับด้วย correlation
+            hedge_lot = hedge_lot * abs(correlation)
+            
+            # จำกัด min/max
+            hedge_lot = max(0.1, min(hedge_lot, 2.0))
+            
+            self.logger.info(f"📊 Dynamic Hedge: PnL=${original_pnl:.2f}, Target Recovery=${target_recovery_pnl:.2f}, Lot={hedge_lot:.4f}")
+            
+            return float(hedge_lot)
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating dynamic hedge lot: {e}")
+            return 0.5  # Fallback
+    
+    def _calculate_portfolio_exposure(self, group_id: str) -> Dict:
+        """คำนวณ net exposure ของ portfolio"""
+        try:
+            exposure = {
+                'total_pnl': 0.0,
+                'currency_exposure': {},
+                'positions': []
+            }
+            
+            # Get all positions in group
+            all_positions = self.broker.get_all_positions()
+            
+            for pos in all_positions:
+                symbol = pos.get('symbol', '')
+                pnl = pos.get('profit', 0)
+                
+                if len(symbol) >= 6:
+                    base = symbol[:3]
+                    quote = symbol[3:6]
+                    
+                    # Update currency exposure
+                    exposure['currency_exposure'][base] = exposure['currency_exposure'].get(base, 0) + pnl
+                    exposure['currency_exposure'][quote] = exposure['currency_exposure'].get(quote, 0) - pnl
+                
+                exposure['total_pnl'] += pnl
+                exposure['positions'].append({'symbol': symbol, 'pnl': pnl})
+            
+            return exposure
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating portfolio exposure: {e}")
+            return {'total_pnl': 0.0, 'currency_exposure': {}, 'positions': []}
+    
+    def calculate_recovery_metrics(self) -> Dict:
+        """คำนวณ metrics สำหรับวัดผล recovery system"""
+        try:
+            all_orders = self.order_tracker.get_all_orders()
+            
+            metrics = {
+                'total_recovery_orders': 0,
+                'symbol_usage': {},
+                'recovery_efficiency': {},
+                'avg_recovery_rate': 0.0,
+                'symbol_diversity': 0.0,
+            }
+            
+            recovery_orders = []
+            for order_key, order_info in all_orders.items():
+                if order_info.get('type') == 'RECOVERY':
+                    metrics['total_recovery_orders'] += 1
+                    symbol = order_info.get('symbol')
+                    if symbol:
+                        metrics['symbol_usage'][symbol] = metrics['symbol_usage'].get(symbol, 0) + 1
+                    recovery_orders.append(order_info)
+            
+            # Calculate diversity
+            if metrics['total_recovery_orders'] > 0:
+                metrics['symbol_diversity'] = len(metrics['symbol_usage']) / metrics['total_recovery_orders']
+            
+            return metrics
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating recovery metrics: {e}")
+            return {'total_recovery_orders': 0, 'symbol_usage': {}, 'avg_recovery_rate': 0.0}
+    
     def _get_position_pnl(self, position: Dict) -> float:
         """ดึงค่า PnL ของ position จาก broker"""
         try:
@@ -1074,8 +1203,27 @@ class CorrelationManager:
             self.logger.error(f"Error marking position as hedged: {e}")
     
     def _calculate_hedge_lot_size(self, original_lot: float, correlation: float, loss_percent: float, original_symbol: str = None, hedge_symbol: str = None) -> float:
-        """คำนวณขนาด lot สำหรับ hedge position - ใช้ pip value ของคู่เงินที่แก้"""
+        """คำนวณขนาด lot สำหรับ hedge position - ใช้ dynamic calculation"""
         try:
+            # ✅ NEW: Try to get original position PnL for dynamic calculation
+            original_pnl = 0.0
+            if original_symbol:
+                all_positions = self.broker.get_all_positions()
+                for pos in all_positions:
+                    if pos.get('symbol') == original_symbol:
+                        original_pnl = pos.get('profit', 0)
+                        break
+            
+            # ✅ NEW: Use dynamic hedge calculation if PnL is available
+            if abs(original_pnl) > 0 and hedge_symbol:
+                hedge_lot = self._calculate_dynamic_hedge_lot(
+                    original_pnl, correlation, original_symbol, hedge_symbol
+                )
+                
+                self.logger.info(f"📊 Using Dynamic Hedge Calculation: Original PnL=${original_pnl:.2f}, Hedge Lot={hedge_lot:.4f}")
+                return hedge_lot
+            
+            # ✅ Fallback to original calculation if dynamic fails
             # ดึง balance จาก broker
             balance = self.broker.get_account_balance()
             if not balance:
@@ -2146,6 +2294,20 @@ class CorrelationManager:
                 
                 # Start recovery
                 self._start_individual_recovery(best_candidate)
+                
+                # ✅ NEW: Log recovery metrics after processing
+                try:
+                    metrics = self.calculate_recovery_metrics()
+                    if metrics['total_recovery_orders'] > 0:
+                        self.logger.info(f"📊 Recovery Metrics: Diversity={metrics['symbol_diversity']:.2%}, Total Orders={metrics['total_recovery_orders']}")
+                        
+                        # Show top symbol usage
+                        if metrics['symbol_usage']:
+                            top_symbols = sorted(metrics['symbol_usage'].items(), key=lambda x: x[1], reverse=True)[:3]
+                            usage_str = ", ".join([f"{s}:{c}x" for s, c in top_symbols])
+                            self.logger.info(f"📊 Top Symbol Usage: {usage_str}")
+                except:
+                    pass  # Don't fail if metrics calculation fails
             else:
                 # Log skip reasons only at debug level
                 total_skipped = sum(skipped_reasons.values())
@@ -2485,6 +2647,12 @@ class CorrelationManager:
                     self.logger.debug(f"⏭️ Skip {pair}: correlation {correlation_value:.3f} too perfect (suspicious)")
                     continue
                 
+                # ✅ NEW FILTER 3: Check if symbol is not overused (max 2 times)
+                if not self._is_recovery_symbol_available(pair, max_usage=2):
+                    usage = self._get_recovery_symbol_usage()
+                    self.logger.info(f"⏭️ Skip {pair}: Already used {usage.get(pair, 0)} times for recovery (max 2)")
+                    continue
+                
                 correlation_candidates.append({
                     'symbol': pair,
                     'correlation': correlation_value,
@@ -2509,6 +2677,12 @@ class CorrelationManager:
                         elif correlation_value < 0.7:
                             self.logger.debug(f"⏭️ Skip {pair}: common currency with {symbol} and weak positive correlation ({correlation_value:.3f})")
                             continue
+                    
+                    # ✅ NEW FILTER: Check if symbol is not overused (max 2 times)
+                    if not self._is_recovery_symbol_available(pair, max_usage=2):
+                        usage = self._get_recovery_symbol_usage()
+                        self.logger.info(f"⏭️ Skip {pair}: Already used {usage.get(pair, 0)} times for recovery (max 2)")
+                        continue
                     
                     # Strong positive correlation (RELAXED: 0.3 instead of 0.7)
                     if 0.3 <= correlation_value <= 0.98:
