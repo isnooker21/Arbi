@@ -976,9 +976,23 @@ class TriangleArbitrageDetector:
             if not group_positions:
                 return True  # ปิด Group ที่ไม่มี positions
             
-            # ตรวจสอบว่ามีกำไรรวมหรือไม่
+            # ✅ NEW: ดึง recovery PnL และคำนวณ net PnL
+            recovery_pnl = 0.0
+            group_id = f"group_{triangle_type}_1"  # Construct group_id from triangle_type
+            if self.correlation_manager:
+                recovery_pnl = self._get_recovery_pnl_for_group(group_id)
+            
+            net_pnl = total_pnl + recovery_pnl
+            
+            # ✅ NEW: ตรวจสอบ net PnL แทน arbitrage PnL เท่านั้น
+            if net_pnl > 0:
+                self.logger.info(f"💰 Group {triangle_type} has NET profit: ${net_pnl:.2f}")
+                self.logger.info(f"   Arbitrage: ${total_pnl:.2f}, Recovery: ${recovery_pnl:.2f}")
+                return True
+            
+            # FALLBACK: ถ้า arbitrage PnL เดี่ยวมีกำไร
             if total_pnl > 0:
-                self.logger.info(f"💰 Group {triangle_type} has profit: ${total_pnl:.2f} - Ready to close")
+                self.logger.info(f"💰 Group {triangle_type} has arbitrage profit: ${total_pnl:.2f} - Ready to close")
                 return True
             
             # ตรวจสอบ price distance สำหรับการปิด Group
@@ -999,9 +1013,10 @@ class TriangleArbitrageDetector:
                 except Exception as e:
                     continue
             
-            # ถ้าระยะห่างมากกว่า 10 pips และมีกำไร ให้ปิด Group
-            if max_price_distance >= 10 and total_pnl > 0:
-                self.logger.info(f"✅ Group {triangle_type} meets closing criteria - Distance: {max_price_distance:.1f} pips, PnL: ${total_pnl:.2f}")
+            # ✅ NEW: ถ้าระยะห่างมากกว่า 10 pips และ net PnL > 0 ให้ปิด Group
+            if max_price_distance >= 10 and net_pnl > 0:
+                self.logger.info(f"✅ Group {triangle_type} meets price distance criteria:")
+                self.logger.info(f"   Distance: {max_price_distance:.1f} pips, Net PnL: ${net_pnl:.2f}")
                 return True
             
             return False
@@ -1166,9 +1181,24 @@ class TriangleArbitrageDetector:
                 self.logger.warning(f"⚠️ No positions found for group {group_id} (Magic: {triangle_magic})")
                 return True  # ปิด Group ที่ไม่มี positions
             
-            # ตรวจสอบว่ามีกำไรรวมหรือไม่
+            # ✅ NEW: ดึง recovery PnL และคำนวณ net PnL
+            recovery_pnl = 0.0
+            if self.correlation_manager:
+                recovery_pnl = self._get_recovery_pnl_for_group(group_id)
+            
+            net_pnl = total_pnl + recovery_pnl
+            
+            # ✅ NEW: ตรวจสอบ net PnL แทน arbitrage PnL เท่านั้น
+            if net_pnl > 0:
+                self.logger.info(f"💰 Group {group_id} has NET profit: ${net_pnl:.2f}")
+                self.logger.info(f"   Arbitrage PnL: ${total_pnl:.2f}")
+                self.logger.info(f"   Recovery PnL: ${recovery_pnl:.2f}")
+                self.logger.info(f"   Ready to close!")
+                return True
+            
+            # ✅ FALLBACK: ถ้า arbitrage PnL เดี่ยวมีกำไร (เพื่อความปลอดภัย)
             if total_pnl > 0:
-                self.logger.info(f"💰 Group {group_id} has profit: ${total_pnl:.2f} - Ready to close")
+                self.logger.info(f"💰 Group {group_id} has arbitrage profit: ${total_pnl:.2f} - Ready to close")
                 return True
             
             # ตรวจสอบ price distance สำหรับการปิด Group
@@ -1191,10 +1221,27 @@ class TriangleArbitrageDetector:
                     continue
             
             
-            # ถ้าระยะห่างมากกว่า 10 pips และมีกำไร ให้ปิด Group
-            if max_price_distance >= 10 and total_pnl > 0:
-                self.logger.info(f"✅ Group {group_id} meets closing criteria - Distance: {max_price_distance:.1f} pips, PnL: ${total_pnl:.2f}")
+            # ✅ NEW: ถ้าระยะห่างมากกว่า 10 pips และ net PnL > 0 ให้ปิด Group
+            if max_price_distance >= 10 and net_pnl > 0:
+                self.logger.info(f"✅ Group {group_id} meets closing criteria:")
+                self.logger.info(f"   Distance: {max_price_distance:.1f} pips")
+                self.logger.info(f"   Arbitrage PnL: ${total_pnl:.2f}")
+                self.logger.info(f"   Recovery PnL: ${recovery_pnl:.2f}")
+                self.logger.info(f"   Net PnL: ${net_pnl:.2f}")
                 return True
+            
+            # ✅ NEW: ถ้า net PnL ใกล้ Break Even (>= -$10) และเปิดนานกว่า 2 ชม
+            try:
+                opened_at = group_data.get('opened_at')
+                if opened_at:
+                    time_elapsed = (datetime.now() - opened_at).total_seconds() / 3600  # hours
+                    
+                    if time_elapsed > 2 and net_pnl >= -10:
+                        self.logger.info(f"⏰ Time-based close: {time_elapsed:.1f}h, Net PnL=${net_pnl:.2f}")
+                        self.logger.info(f"   Arbitrage: ${total_pnl:.2f}, Recovery: ${recovery_pnl:.2f}")
+                        return True
+            except:
+                pass  # ไม่มี opened_at ก็ข้าม
             
             return False
             
@@ -1512,6 +1559,32 @@ class TriangleArbitrageDetector:
             
         except Exception as e:
             self.logger.error(f"Error closing group {group_id}: {e}")
+    
+    def _get_recovery_pnl_for_group(self, group_id: str) -> float:
+        """ดึง PnL ของ recovery positions ที่เกี่ยวข้องกับกลุ่ม (ไม่ปิด)"""
+        try:
+            if not self.correlation_manager:
+                return 0.0
+            
+            total_recovery_pnl = 0.0
+            all_positions = self.broker.get_all_positions()
+            
+            # หา recovery positions ที่เกี่ยวข้องกับกลุ่มนี้
+            for recovery_id, recovery_data in self.correlation_manager.recovery_positions.items():
+                if recovery_data.get('group_id') == group_id and recovery_data.get('status') == 'active':
+                    # หา PnL จาก MT5
+                    order_id = recovery_data.get('order_id')
+                    if order_id:
+                        for pos in all_positions:
+                            if str(pos.get('ticket')) == str(order_id):
+                                total_recovery_pnl += pos.get('profit', 0)
+                                break
+            
+            return total_recovery_pnl
+            
+        except Exception as e:
+            self.logger.error(f"Error getting recovery PnL for group: {e}")
+            return 0.0
     
     def _close_recovery_positions_for_group(self, group_id: str):
         """ปิด recovery positions ที่เกี่ยวข้องกับกลุ่ม arbitrage และคืนค่า PnL รวม"""

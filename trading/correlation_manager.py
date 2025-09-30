@@ -712,39 +712,85 @@ class CorrelationManager:
     
     def _calculate_dynamic_hedge_lot(self, original_pnl: float, correlation: float, 
                                        original_symbol: str, hedge_symbol: str) -> float:
-        """คำนวณ hedge lot ตามการขาดทุนจริง (Target: 75% recovery)"""
+        """คำนวณ hedge lot ตามการขาดทุนจริง - ใช้ pip value ที่แท้จริง"""
         try:
-            # Target: Recovery 75% ของการขาดทุน
-            recovery_target = 0.75
+            from utils.calculations import TradingCalculations
+            
+            # Target: Recovery 75-80% ของการขาดทุน (ปรับตาม correlation)
+            # Correlation สูง → Target สูง, Correlation ต่ำ → Target ต่ำ
+            base_recovery_target = 0.75
+            correlation_bonus = abs(correlation) * 0.1  # Max +10%
+            recovery_target = min(base_recovery_target + correlation_bonus, 0.85)
+            
             target_recovery_pnl = abs(original_pnl) * recovery_target
             
-            # คำนวณ pip value
-            balance = self.broker.get_account_balance() or 10000
-            balance_multiplier = balance / 10000.0
+            # ✅ ขั้นตอนที่ 1: คำนวณ pip value ของไม้เดิม
+            # หา lot size ของไม้เดิม
+            original_lot = 0.5  # Default fallback
+            all_positions = self.broker.get_all_positions()
+            for pos in all_positions:
+                if pos.get('symbol') == original_symbol:
+                    original_lot = pos.get('volume', 0.5)
+                    break
             
-            # Simplified: $10 per 0.1 lot for major pairs
-            base_pip_value = 10.0 * balance_multiplier
+            # คำนวณ pip value ของไม้เดิม
+            original_pip_value = TradingCalculations.calculate_pip_value(original_symbol, original_lot, self.broker)
             
-            # คำนวณ lot size ที่ต้องการ
-            hedge_lot = target_recovery_pnl / (base_pip_value * 10)
+            # ✅ ขั้นตอนที่ 2: คำนวณ target pip value สำหรับ hedge
+            # ใช้ correlation เพื่อปรับ pip value
+            target_pip_value = original_pip_value * abs(correlation)
             
-            # ปรับด้วย correlation
-            hedge_lot = hedge_lot * abs(correlation)
+            # ✅ ขั้นตอนที่ 3: คำนวณ hedge lot ที่ให้ pip value ตาม target
+            hedge_pip_value_per_01 = TradingCalculations.calculate_pip_value(hedge_symbol, 0.1, self.broker)
             
-            # จำกัด min/max
+            if hedge_pip_value_per_01 > 0:
+                # hedge_lot = (target_pip_value / pip_value_per_01) × 0.1
+                hedge_lot = (target_pip_value / hedge_pip_value_per_01) * 0.1
+            else:
+                # Fallback: ใช้ original lot × correlation
+                hedge_lot = original_lot * abs(correlation)
+            
+            # ✅ ขั้นตอนที่ 4: ปรับ lot size เพิ่มเติมเพื่อให้ถึง recovery target
+            # คำนวณว่า hedge lot ปัจจุบันจะ recover ได้เท่าไหร่
+            if hedge_pip_value_per_01 > 0:
+                expected_recovery_per_pip = (hedge_lot / 0.1) * hedge_pip_value_per_01
+                pips_needed = target_recovery_pnl / expected_recovery_per_pip if expected_recovery_per_pip > 0 else 10
+                
+                # ถ้าต้องการ pips มาก แปลว่า lot ยังเล็กไป
+                if pips_needed > 10:  # ถ้าต้องการมากกว่า 10 pips ถึงจะ recover ได้
+                    # เพิ่ม lot size ขึ้น
+                    hedge_lot = hedge_lot * (pips_needed / 10)
+            
+            # ✅ ขั้นตอนที่ 5: จำกัด min/max และ round
             hedge_lot = max(0.1, min(hedge_lot, 2.0))
-            
-            # ✅ Round to valid lot size (0.01 increment)
-            from utils.calculations import TradingCalculations
             hedge_lot = TradingCalculations.round_to_valid_lot_size(hedge_lot)
             
-            self.logger.info(f"📊 Dynamic Hedge: PnL=${original_pnl:.2f}, Target Recovery=${target_recovery_pnl:.2f}, Lot={hedge_lot:.2f}")
+            self.logger.info(f"📊 Dynamic Hedge Calculation:")
+            self.logger.info(f"   Original: {original_symbol} {original_lot:.2f} lot, PnL=${original_pnl:.2f}")
+            self.logger.info(f"   Original Pip Value: ${original_pip_value:.2f}")
+            self.logger.info(f"   Target Pip Value: ${target_pip_value:.2f} (correlation {correlation:.2f})")
+            self.logger.info(f"   Hedge: {hedge_symbol} {hedge_lot:.2f} lot")
+            self.logger.info(f"   Target Recovery: ${target_recovery_pnl:.2f} ({recovery_target:.1%})")
             
             return float(hedge_lot)
             
         except Exception as e:
             self.logger.error(f"Error calculating dynamic hedge lot: {e}")
-            return 0.5  # Fallback
+            # Fallback: ใช้ original lot × correlation
+            all_positions = self.broker.get_all_positions()
+            original_lot = 0.5
+            for pos in all_positions:
+                if pos.get('symbol') == original_symbol:
+                    original_lot = pos.get('volume', 0.5)
+                    break
+            
+            fallback_lot = original_lot * abs(correlation)
+            fallback_lot = max(0.1, min(fallback_lot, 2.0))
+            
+            from utils.calculations import TradingCalculations
+            fallback_lot = TradingCalculations.round_to_valid_lot_size(fallback_lot)
+            
+            return fallback_lot
     
     def _calculate_portfolio_exposure(self, group_id: str) -> Dict:
         """คำนวณ net exposure ของ portfolio"""
