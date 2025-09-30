@@ -118,10 +118,6 @@ class CorrelationManager:
         self.broker = broker_api
         self.ai_engine = ai_engine  # ✅ Enable AI engine for correlation data
         self.correlation_matrix = {}
-        self.recovery_positions = {}
-        self.recovery_chains = {}  # ✅ ADD: Initialize recovery_chains dictionary
-        self.group_hedge_tracking = {}  # ✅ ADD: Initialize group_hedge_tracking dictionary
-        self.persistence_file = "data/recovery_positions.json"  # ✅ ADD: Initialize persistence file path
         self.is_running = False
         self.logger = logging.getLogger(__name__)
         
@@ -391,8 +387,8 @@ class CorrelationManager:
                 'current_chain': []
             }
             
-            self.recovery_chains[group_id] = recovery_chain
-            self._update_recovery_data()
+            # Legacy recovery_chains removed - using order_tracker now
+            # Recovery tracking is handled by order_tracker.register_recovery_order()
             
             # เลือกคู่ที่เหมาะสมที่สุดสำหรับ recovery (แค่คู่เดียว)
             best_pair = self._select_best_pair_for_recovery(losing_pairs, group_id)
@@ -1365,33 +1361,20 @@ class CorrelationManager:
             return False
     
     def check_recovery_chain(self):
-        """ตรวจสอบ recovery chain และดำเนินการต่อเนื่อง - เฉพาะกลุ่มที่ยังเปิดอยู่"""
+        """ตรวจสอบ recovery chain และดำเนินการต่อเนื่อง (simplified - using order_tracker)"""
         try:
-            # ตรวจสอบว่ามี recovery chains หรือไม่
-            if not self.recovery_chains:
+            # Chain recovery removed - now using single-level recovery via order_tracker
+            # Get orders needing recovery from order_tracker
+            orders_needing_recovery = self.order_tracker.get_orders_needing_recovery()
+            
+            if not orders_needing_recovery:
                 return
             
-            active_chains = 0
-            chains_to_remove = []
+            # Log orders that need recovery
+            self.logger.debug(f"📊 Orders needing recovery: {len(orders_needing_recovery)}")
             
-            for group_id, chain_data in self.recovery_chains.items():
-                if chain_data['status'] != 'active':
-                    continue
-                
-                # ตรวจสอบว่ากลุ่มยังเปิดอยู่จริงหรือไม่
-                # ถ้าไม่มี group_id ใน active_groups แสดงว่ากลุ่มปิดแล้ว
-                active_chains += 1
-                
-                # ตรวจสอบ recovery pairs
-                for recovery_pair in chain_data['recovery_pairs']:
-                    if self._should_continue_recovery(recovery_pair):
-                        self.logger.info(f"🔄 Continuing recovery chain for {recovery_pair['symbol']}")
-                        self._continue_recovery_chain(group_id, recovery_pair)
-                    # ไม่แสดง log ถ้าไม่พร้อม recovery เพื่อลด log spam
-            
-            # แสดง log เฉพาะเมื่อมี recovery chains และมีการเปลี่ยนแปลง
-            if active_chains > 0:
-                self.logger.debug(f"📊 Active recovery chains: {active_chains}")
+            # Recovery logic can be implemented here if needed
+            # For now, just tracking status via order_tracker
                         
         except Exception as e:
             self.logger.debug(f"Error checking recovery chain: {e}")
@@ -1466,62 +1449,9 @@ class CorrelationManager:
             self.logger.error(f"Error checking recovery continuation: {e}")
             return False
     
-    def _continue_recovery_chain(self, group_id: str, recovery_pair: Dict):
-        """ดำเนินการ recovery chain ต่อเนื่อง"""
-        try:
-            symbol = recovery_pair['symbol']
-            order_id = recovery_pair.get('order_id')
-            
-            self.logger.info("=" * 60)
-            self.logger.info(f"🔄 CONTINUING RECOVERY CHAIN FOR {symbol} (Order: {order_id})")
-            self.logger.info("=" * 60)
-            
-            # ตรวจสอบเงื่อนไขการแก้ไม้
-            risk_per_lot = self._calculate_risk_per_lot(recovery_pair)
-            price_distance = self._calculate_price_distance(recovery_pair)
-            
-            self.logger.debug(f"🔍 Checking hedging conditions for {symbol} (Order: {order_id}):")
-            self.logger.info(f"   Risk: {risk_per_lot:.2%} (info only)")
-            self.logger.info(f"   Distance: {price_distance:.1f} pips (need ≥10) {'✅' if price_distance >= 10 else '❌'}")
-            
-            if price_distance < 10:  # ใช้แค่ Distance ≥ 10 pips
-                self.logger.debug(f"⏳ {symbol}: Distance too small ({price_distance:.1f} pips) - waiting for 10 pips")
-                return
-            
-            self.logger.debug(f"✅ {symbol}: All conditions met - continuing recovery")
-            
-            # หาคู่เงินใหม่สำหรับ recovery (ไม่ซ้ำกับคู่ในกลุ่ม)
-            # self.logger.debug(f"🔍 Searching for correlation candidates for {symbol}")
-            group_pairs = self._get_group_pairs_from_mt5(group_id)
-            correlation_candidates = self._find_optimal_correlation_pairs(symbol, group_pairs)
-            
-            if not correlation_candidates:
-                self.logger.debug(f"❌ No correlation candidates found for {symbol}")
-                return
-            
-            # เลือกคู่เงินที่ดีที่สุด
-            best_correlation = correlation_candidates[0]
-            # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
-            if 'triangle_' in group_id:
-                triangle_part = group_id.split('triangle_')[1].split('_')[0]
-                group_number = triangle_part
-            else:
-                group_number = 'X'
-            self.logger.info(f"🎯 Best correlation for G{group_number}: {best_correlation['symbol']} (correlation: {best_correlation['correlation']:.2f})")
-            
-            # ส่งออเดอร์ recovery ใหม่
-            self.logger.info(f"📤 Sending new recovery order for {symbol} -> {best_correlation['symbol']}")
-            success = self._execute_correlation_position(recovery_pair, best_correlation, group_id)
-            
-            if success:
-                # บันทึกว่าไม้นี้แก้แล้ว
-                self._mark_position_as_hedged(recovery_pair, group_id)
-                self.logger.debug(f"✅ Chain recovery continued for {symbol} -> {best_correlation['symbol']}")
-            else:
-                self.logger.debug(f"❌ Failed to continue chain recovery for {symbol} -> {best_correlation['symbol']}")
-                
-        except Exception as e:
-            self.logger.debug(f"Error continuing recovery chain: {e}")
+    # REMOVED: _continue_recovery_chain() - Chain recovery complexity removed
+    # Recovery is now simplified to single-level: Original Order → Recovery Order
+    # Use order_tracker for all hedge status checks instead
     
     def update_recovery_parameters(self, params: Dict):
         """อัพเดทพารามิเตอร์ recovery"""
@@ -1554,14 +1484,15 @@ class CorrelationManager:
             self.logger.debug(f"Error updating recovery parameters: {e}")
     
     def check_recovery_opportunities(self):
-        """ตรวจสอบโอกาสการ recovery"""
+        """ตรวจสอบโอกาสการ recovery (simplified - using order_tracker)"""
         try:
-            # ตรวจสอบ recovery positions ที่มีอยู่
-            for recovery_id, position in self.recovery_positions.items():
-                if position['status'] == 'active':
-                    # ตรวจสอบว่าต้องการ recovery เพิ่มหรือไม่
-                    if self._should_continue_recovery(position):
-                        self._continue_recovery_chain(position['group_id'], position)
+            # Get orders needing recovery from order_tracker
+            orders_needing_recovery = self.order_tracker.get_orders_needing_recovery()
+            
+            for order_info in orders_needing_recovery:
+                # Check if recovery should be initiated for this order
+                # Chain recovery removed - single level recovery only
+                pass  # Recovery logic would go here if needed
                         
         except Exception as e:
             self.logger.debug(f"Error checking recovery opportunities: {e}")
@@ -2116,11 +2047,9 @@ class CorrelationManager:
                     'status': 'active'
                 }
                 
-                recovery_id = f"recovery_{group_id}_{symbol}_{int(datetime.now().timestamp())}"
-                self.recovery_positions[recovery_id] = correlation_position
-                
-                # Legacy recovery positions storage removed - using individual order tracker
-                self._update_recovery_data()
+                # Legacy recovery_positions removed - using order_tracker now
+                # Recovery tracking is handled by order_tracker.register_recovery_order()
+                # No need to manually track recovery positions
                 
                 # บันทึกข้อมูลการแก้ไม้
                 self._log_hedging_action(original_position, correlation_position, correlation_candidate, group_id)
@@ -2949,51 +2878,12 @@ class CorrelationManager:
             self.logger.error(f"Error checking recovery positions with status: {e}")
     
     def _close_recovery_position(self, recovery_id: str):
-        """ปิด recovery position และคืนค่า PnL"""
+        """ปิด recovery position และคืนค่า PnL (DEPRECATED - use order_tracker)"""
         try:
-            if recovery_id not in self.recovery_positions:
-                self.logger.debug(f"Recovery position {recovery_id} not found in tracking data")
-                return 0.0
-            
-            position = self.recovery_positions[recovery_id]
-            symbol = position['symbol']
-            order_id = position.get('order_id')
-            
-            # ตรวจสอบว่าตำแหน่งยังเปิดอยู่จริงหรือไม่ (ใช้ magic number)
-            position_exists = False
-            pnl = 0.0
-            if order_id:
-                all_positions = self.broker.get_all_positions()
-                for pos in all_positions:
-                    if pos['ticket'] == order_id:
-                        position_exists = True
-                        pnl = pos.get('profit', 0.0)
-                        magic = pos.get('magic', 0)
-                        # self.logger.debug(f"🔍 Found recovery position: {symbol} (Order: {order_id}, Magic: {magic}, PnL: {pnl:.2f})")
-                        break
-            
-            if not position_exists:
-                # ตำแหน่งถูกปิดไปแล้ว ให้อัพเดทสถานะ
-                position['status'] = 'closed'
-                position['closed_at'] = datetime.now()
-                position['close_reason'] = 'already_closed'
-                self._update_recovery_data()
-                self.logger.debug(f"✅ Recovery position {symbol} was already closed - updated status")
-                return 0.0
-                
-                # ปิดออเดอร์
-            success = self.broker.close_position(symbol)
-                
-            if success:
-                position['status'] = 'closed'
-                position['closed_at'] = datetime.now()
-                position['close_reason'] = 'manual_close'
-                self._update_recovery_data()
-                self.logger.debug(f"✅ Recovery position closed: {symbol} - PnL: ${pnl:.2f}")
-                return pnl
-            else:
-                self.logger.debug(f"❌ Failed to close recovery position: {symbol}")
-                return 0.0
+            # Legacy method - recovery positions are now tracked by order_tracker
+            # This method is kept for backward compatibility but does nothing
+            self.logger.warning(f"⚠️ _close_recovery_position() is deprecated - use order_tracker instead")
+            return 0.0
                     
         except Exception as e:
             self.logger.debug(f"Error closing recovery position: {e}")
@@ -3004,26 +2894,16 @@ class CorrelationManager:
         return self.correlation_matrix
     
     def get_recovery_positions(self) -> Dict:
-        """Get recovery positions"""
-        return self.recovery_positions
+        """Get recovery positions (DEPRECATED - use order_tracker.get_all_orders())"""
+        # Return order tracker data instead of legacy recovery_positions
+        return self.order_tracker.get_all_orders()
     
     def close_recovery_position(self, recovery_id: str, reason: str = "manual"):
-        """Close recovery position manually"""
+        """Close recovery position manually (DEPRECATED - use broker.close_position directly)"""
         try:
-            if recovery_id in self.recovery_positions:
-                position = self.recovery_positions[recovery_id]
-                
-                # ปิดออเดอร์
-                success = self.broker.close_position(position['symbol'])
-                
-                if success:
-                    position['status'] = 'closed'
-                    position['closed_at'] = datetime.now()
-                    position['close_reason'] = reason
-                    self._update_recovery_data()
-                    self.logger.debug(f"✅ Recovery position closed: {position['symbol']} (reason: {reason})")
-                else:
-                    self.logger.debug(f"❌ Failed to close recovery position: {position['symbol']}")
+            # Legacy method - recovery positions are now tracked by order_tracker
+            # Positions should be closed directly via broker API
+            self.logger.warning(f"⚠️ close_recovery_position() is deprecated - use broker.close_position() directly")
                     
         except Exception as e:
             self.logger.debug(f"Error closing recovery position: {e}")
@@ -3033,61 +2913,69 @@ class CorrelationManager:
         return self.recovery_metrics
     
     def get_active_recovery_engine_status(self) -> Dict:
-        """Get active recovery engine status"""
+        """Get active recovery engine status (simplified - using order_tracker)"""
+        stats = self.order_tracker.get_statistics()
         return {
             'recovery_mode': self.recovery_mode,
             'hedge_ratio_optimization': self.hedge_ratio_optimization,
             'portfolio_rebalancing': self.portfolio_rebalancing,
             'multi_timeframe_analysis': self.multi_timeframe_analysis,
             'never_cut_loss': self.never_cut_loss,
-            'active_recovery_chains': len(self.recovery_chains),
-            'active_recovery_positions': len([p for p in self.recovery_positions.values() if p['status'] == 'active'])
+            'total_tracked_orders': stats.get('total_tracked_orders', 0),
+            'not_hedged_orders': stats.get('not_hedged_orders', 0),  # Orders needing recovery
+            'hedged_orders': stats.get('hedged_orders', 0)  # Orders with active recovery
         }
     
     def _save_recovery_data(self):
-        """บันทึกข้อมูล recovery positions และ chains ลงไฟล์"""
+        """บันทึกข้อมูล recovery metrics (legacy tracking removed - using order_tracker now)"""
         try:
             import json
             import os
             
-            # สร้างโฟลเดอร์ data ถ้าไม่มี
-            os.makedirs(os.path.dirname(self.persistence_file), exist_ok=True)
+            # Note: Individual order tracking is now handled by order_tracker._save_to_file()
+            # This method only saves recovery_metrics for historical tracking
             
-            # เตรียมข้อมูลสำหรับบันทึก
+            persistence_file = "data/recovery_metrics.json"
+            os.makedirs(os.path.dirname(persistence_file), exist_ok=True)
+            
             save_data = {
-                'recovery_positions': self.recovery_positions,
-                'recovery_chains': self.recovery_chains,
                 'recovery_metrics': self.recovery_metrics,
-                'group_hedge_tracking': self.group_hedge_tracking,
                 'saved_at': datetime.now().isoformat()
             }
             
-            # บันทึกลงไฟล์
-            with open(self.persistence_file, 'w') as f:
+            with open(persistence_file, 'w') as f:
                 json.dump(save_data, f, indent=2, default=str)
             
-            self.logger.debug(f"💾 Saved {len(self.recovery_positions)} recovery positions to {self.persistence_file}")
+            self.logger.debug(f"💾 Saved recovery metrics to {persistence_file}")
             
         except Exception as e:
             self.logger.debug(f"Error saving recovery data: {e}")
     
     def _load_recovery_data(self):
-        """โหลดข้อมูล recovery positions และ chains จากไฟล์"""
+        """โหลดข้อมูล recovery metrics (legacy tracking removed - using order_tracker now)"""
         try:
             import json
             import os
-            from datetime import datetime
             
-            if not os.path.exists(self.persistence_file):
-                self.logger.debug("No recovery persistence file found, starting fresh")
+            # Note: Individual order tracking is now handled by order_tracker._load_from_file()
+            # This method only loads recovery_metrics for historical tracking
+            
+            persistence_file = "data/recovery_metrics.json"
+            
+            if not os.path.exists(persistence_file):
+                self.logger.debug("No recovery metrics file found, starting fresh")
+                self.recovery_metrics = {
+                    'total_recoveries': 0,
+                    'successful_recoveries': 0,
+                    'failed_recoveries': 0,
+                    'avg_recovery_time_hours': 0,
+                    'total_recovered_amount': 0.0
+                }
                 return
             
-            with open(self.persistence_file, 'r') as f:
+            with open(persistence_file, 'r') as f:
                 save_data = json.load(f)
             
-            # โหลดข้อมูลกลับมา
-            self.recovery_positions = save_data.get('recovery_positions', {})
-            self.recovery_chains = save_data.get('recovery_chains', {})
             self.recovery_metrics = save_data.get('recovery_metrics', {
                 'total_recoveries': 0,
                 'successful_recoveries': 0,
@@ -3095,24 +2983,12 @@ class CorrelationManager:
                 'avg_recovery_time_hours': 0,
                 'total_recovered_amount': 0.0
             })
-            self.group_hedge_tracking = save_data.get('group_hedge_tracking', {})
             
             saved_at = save_data.get('saved_at', 'Unknown')
-            
-            if self.recovery_positions or self.recovery_chains or self.group_hedge_tracking:
-                self.logger.info(f"📂 Loaded recovery data from {self.persistence_file}")
-                self.logger.info(f"   Recovery positions: {len(self.recovery_positions)}")
-                self.logger.info(f"   Recovery chains: {len(self.recovery_chains)}")
-                self.logger.info(f"   Group hedge tracking: {len(self.group_hedge_tracking)}")
-                self.logger.info(f"   Saved at: {saved_at}")
-            else:
-                self.logger.debug("No recovery data found in persistence file")
+            self.logger.info(f"📂 Loaded recovery metrics from {persistence_file} (Saved at: {saved_at})")
                 
         except Exception as e:
             self.logger.debug(f"Error loading recovery data: {e}")
-            # เริ่มต้นใหม่ถ้าโหลดไม่ได้
-            self.recovery_positions = {}
-            self.recovery_chains = {}
             self.recovery_metrics = {
                 'total_recoveries': 0,
                 'successful_recoveries': 0,
@@ -3120,44 +2996,23 @@ class CorrelationManager:
                 'avg_recovery_time_hours': 0,
                 'total_recovered_amount': 0.0
             }
-            self.group_hedge_tracking = {}
     
-    def _update_recovery_data(self):
-        """อัปเดตข้อมูล recovery และบันทึกลงไฟล์"""
-        try:
-            self._save_recovery_data()
-        except Exception as e:
-            self.logger.debug(f"Error updating recovery data: {e}")
+    # REMOVED: _update_recovery_data() - Legacy method removed
+    # Recovery data is now automatically handled by order_tracker
     
-    def _remove_recovery_data(self, recovery_id: str):
-        """ลบข้อมูล recovery และบันทึกลงไฟล์"""
-        try:
-            if recovery_id in self.recovery_positions:
-                del self.recovery_positions[recovery_id]
-            self._save_recovery_data()
-        except Exception as e:
-            self.logger.debug(f"Error removing recovery data: {e}")
+    # REMOVED: _remove_recovery_data() - Legacy method removed  
+    # Order removal is now handled by order_tracker.sync_with_mt5()
     
     def clear_hedged_data_for_group(self, group_id: str):
-        """ล้างข้อมูลการแก้ไม้สำหรับกลุ่มที่ปิดแล้ว (รองรับการแยกตาม Group)"""
+        """ล้างข้อมูลการแก้ไม้สำหรับกลุ่มที่ปิดแล้ว (simplified - using only order_tracker)"""
         try:
-            # ลบข้อมูลการแก้ไม้ที่เกี่ยวข้องกับกลุ่มนี้ (global)
-            positions_to_remove = []
-            for order_id, hedged_info in self.hedged_positions.items():
-                if hedged_info.get('group_id') == group_id:
-                    positions_to_remove.append(order_id)
+            # Use order tracker to sync with MT5 - this will automatically clean up closed orders
+            sync_results = self.order_tracker.sync_with_mt5()
             
-            # ใช้ระบบ tracking ใหม่
-            self.reset_group_hedge_tracking(group_id)
+            removed_count = sync_results.get('orders_removed', 0)
             
-            # Legacy recovery positions by group removed - using individual order tracker
-            
-            if positions_to_remove:
-                self.logger.info(f"🗑️ Cleared {len(positions_to_remove)} hedged positions for group {group_id}")
-                self._update_recovery_data()
-                
-            # แสดงสรุปสถานะ recovery positions หลังจากล้างข้อมูล
-            self.log_recovery_positions_summary()
+            if removed_count > 0:
+                self.logger.info(f"🗑️ Cleared {removed_count} closed orders from tracking")
             
             # Log individual order tracker status
             self.order_tracker.log_status_summary()
@@ -3165,95 +3020,32 @@ class CorrelationManager:
         except Exception as e:
             self.logger.debug(f"Error clearing hedged data for group {group_id}: {e}")
     
-    def cleanup_closed_recovery_positions(self):
-        """ทำความสะอาด recovery positions ที่ปิดไปแล้วและไม้ซ้ำ"""
-        try:
-            positions_to_remove = []
-            seen_positions = {}  # เก็บข้อมูลไม้ที่เห็นแล้ว
-            
-            # สร้าง copy ของ dictionary keys เพื่อป้องกัน "dictionary changed size during iteration"
-            recovery_ids = list(self.recovery_positions.keys())
-            
-            for recovery_id in recovery_ids:
-                if recovery_id not in self.recovery_positions:
-                    continue  # ถ้า position ถูกลบไปแล้วระหว่างการ iterate
-                    
-                position = self.recovery_positions[recovery_id]
-                symbol = position.get('symbol')
-                order_id = position.get('order_id')
-                
-                # ลบไม้ที่ปิดไปแล้ว
-                if position.get('status') == 'closed':
-                    # ตรวจสอบว่าเป็น positions เก่าที่ปิดไปนานแล้วหรือไม่
-                    closed_at = position.get('closed_at')
-                    if closed_at:
-                        if isinstance(closed_at, str):
-                            closed_at = datetime.fromisoformat(closed_at)
-                        
-                        # ลบ positions ที่ปิดไปแล้วมากกว่า 1 ชั่วโมง
-                        if (datetime.now() - closed_at).total_seconds() > 3600:
-                            positions_to_remove.append(recovery_id)
-                
-                # ลบไม้ซ้ำ (ไม้เดียวกันที่มี order_id เดียวกัน)
-                if symbol and order_id and order_id != 'N/A':
-                    key = f"{symbol}_{order_id}"
-                    if key in seen_positions:
-                        # ไม้ซ้ำ - ลบไม้เก่า
-                        old_recovery_id = seen_positions[key]
-                        if old_recovery_id not in positions_to_remove:
-                            positions_to_remove.append(old_recovery_id)
-                        self.logger.info(f"🗑️ Removing duplicate position: {symbol} (Order: {order_id})")
-                    else:
-                        seen_positions[key] = recovery_id
-            
-            # ลบ positions เก่าและไม้ซ้ำ
-            for recovery_id in positions_to_remove:
-                if recovery_id in self.recovery_positions:
-                    del self.recovery_positions[recovery_id]
-            
-            if positions_to_remove:
-                self.logger.info(f"🗑️ Cleaned up {len(positions_to_remove)} old/duplicate recovery positions")
-                self._update_recovery_data()
-            
-        except Exception as e:
-            self.logger.debug(f"Error cleaning up closed recovery positions: {e}")
+    # REMOVED: cleanup_closed_recovery_positions() - Legacy method removed
+    # Cleanup is now handled automatically by order_tracker.sync_with_mt5()
     
     def get_hedging_status(self) -> Dict:
-        """ดึงสถานะการแก้ไม้ทั้งหมด"""
+        """ดึงสถานะการแก้ไม้ทั้งหมด (simplified - using order_tracker)"""
         try:
+            # Return order tracker statistics instead of legacy structures
+            stats = self.order_tracker.get_statistics()
             return {
-                'group_hedge_tracking': self.group_hedge_tracking,
-                'tracking_groups_count': len(self.group_hedge_tracking),
-                'hedged_groups': self.hedged_groups
+                'total_tracked_orders': stats.get('total_tracked_orders', 0),
+                'original_orders': stats.get('original_orders', 0),
+                'recovery_orders': stats.get('recovery_orders', 0),
+                'hedged_orders': stats.get('hedged_orders', 0),
+                'not_hedged_orders': stats.get('not_hedged_orders', 0),
+                'orphaned_orders': stats.get('orphaned_orders', 0),
+                'last_sync': stats.get('last_sync')
             }
         except Exception as e:
             self.logger.debug(f"Error getting hedging status: {e}")
             return {}
     
     def log_recovery_positions_summary(self):
-        """แสดงสรุปสถานะ recovery positions"""
+        """แสดงสรุปสถานะ recovery positions (now using order_tracker)"""
         try:
-            if not self.recovery_positions:
-                self.logger.debug("📊 No recovery positions found")
-                return
-            
-            active_count = 0
-            closed_count = 0
-            
-            for position in self.recovery_positions.values():
-                if position.get('status') == 'active':
-                    active_count += 1
-                elif position.get('status') == 'closed':
-                    closed_count += 1
-            
-            self.logger.info("=" * 60)
-            self.logger.info("📊 RECOVERY POSITIONS SUMMARY")
-            self.logger.info("=" * 60)
-            self.logger.info(f"Total Recovery Positions: {len(self.recovery_positions)}")
-            self.logger.info(f"Active Positions: {active_count}")
-            self.logger.info(f"Closed Positions: {closed_count}")
-            self.logger.info(f"Group Hedge Tracking: {len(self.group_hedge_tracking)}")
-            self.logger.info("=" * 60)
+            # Delegate to order_tracker for accurate individual order tracking
+            self.order_tracker.log_status_summary()
             
         except Exception as e:
             self.logger.debug(f"Error logging recovery positions summary: {e}")
