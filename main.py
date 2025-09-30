@@ -188,7 +188,7 @@ class TradingSystem:
         
         # Configure logging
         logging.basicConfig(
-            level=logging.DEBUG,
+            level=logging.DEBUGอัพ,
             handlers=[file_handler, console_handler]
         )
         

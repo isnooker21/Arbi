@@ -137,6 +137,14 @@ class TriangleArbitrageDetector:
         # การตั้งค่าการปิดกลุ่ม
         self.profit_threshold_per_lot = 1.0  # 1 USD ต่อ lot เดี่ยว
         
+        # 🆕 Trailing Stop System (Group-Level)
+        self.group_trailing_stops = {}  # {group_id: {'peak': float, 'stop': float, 'active': bool}}
+        self.trailing_stop_distance = 10.0  # $10 distance from peak
+        
+        # 🆕 Min Profit Threshold (Scale with Balance)
+        self.min_profit_base = 5.0  # $5 for $10K balance
+        self.min_profit_base_balance = 10000.0  # Base balance
+        
         # If no triangles generated, create fallback triangles
         if len(self.triangle_combinations) == 0 and len(self.available_pairs) > 0:
             self.logger.warning("No triangles generated, creating fallback triangles...")
@@ -1195,47 +1203,64 @@ class TriangleArbitrageDetector:
             
             net_pnl = total_pnl + recovery_pnl
             
-            # ✅ NEW: ตรวจสอบ net PnL แทน arbitrage PnL เท่านั้น
-            if net_pnl > 0:
-                self.logger.info(f"💰 Group {group_id} has NET profit: ${net_pnl:.2f}")
+            # 🆕 STEP 1: คำนวณ Min Profit Threshold (Scale with Balance)
+            balance = self.broker.get_account_balance()
+            if not balance or balance <= 0:
+                balance = 10000.0  # Fallback
+            
+            balance_multiplier = balance / self.min_profit_base_balance
+            min_profit_threshold = self.min_profit_base * balance_multiplier
+            
+            self.logger.debug(f"💰 {group_id}: Balance=${balance:.2f}, Min Profit=${min_profit_threshold:.2f} (Base $5 @ $10K)")
+            
+            # 🆕 STEP 2: Trailing Stop Logic
+            if group_id not in self.group_trailing_stops:
+                self.group_trailing_stops[group_id] = {
+                    'peak': 0.0,
+                    'stop': 0.0,
+                    'active': False
+                }
+            
+            trailing_data = self.group_trailing_stops[group_id]
+            
+            # ถ้ากำไรเกิน min_profit → เริ่ม trailing stop
+            if net_pnl >= min_profit_threshold:
+                if not trailing_data['active']:
+                    # เริ่ม trailing stop
+                    trailing_data['active'] = True
+                    trailing_data['peak'] = net_pnl
+                    trailing_data['stop'] = net_pnl - self.trailing_stop_distance
+                    self.logger.info(f"🎯 {group_id} Trailing Stop ACTIVATED: Peak=${net_pnl:.2f}, Stop=${trailing_data['stop']:.2f}")
+                else:
+                    # อัปเดต peak ถ้ากำไรเพิ่ม
+                    if net_pnl > trailing_data['peak']:
+                        trailing_data['peak'] = net_pnl
+                        trailing_data['stop'] = net_pnl - self.trailing_stop_distance
+                        self.logger.info(f"📈 {group_id} Peak Updated: ${net_pnl:.2f}, Stop=${trailing_data['stop']:.2f}")
+                    
+                    # เช็คว่า hit trailing stop ไหม
+                    if net_pnl < trailing_data['stop']:
+                        self.logger.info(f"🚨 {group_id} TRAILING STOP HIT!")
+                        self.logger.info(f"   Peak: ${trailing_data['peak']:.2f}")
+                        self.logger.info(f"   Stop: ${trailing_data['stop']:.2f}")
+                        self.logger.info(f"   Current Net: ${net_pnl:.2f}")
+                        self.logger.info(f"   Locking profit: ${net_pnl:.2f} ✅")
+                        return True
+            
+            # 🆕 STEP 3: เช็ค Min Profit (ไม่มี trailing stop)
+            if net_pnl >= min_profit_threshold and not trailing_data['active']:
+                self.logger.info(f"💰 Group {group_id} reached Min Profit: ${net_pnl:.2f} >= ${min_profit_threshold:.2f}")
                 self.logger.info(f"   Arbitrage PnL: ${total_pnl:.2f}")
                 self.logger.info(f"   Recovery PnL: ${recovery_pnl:.2f}")
                 self.logger.info(f"   Ready to close!")
                 return True
             
-            # ✅ FALLBACK: ถ้า arbitrage PnL เดี่ยวมีกำไร (เพื่อความปลอดภัย)
-            if total_pnl > 0:
-                self.logger.info(f"💰 Group {group_id} has arbitrage profit: ${total_pnl:.2f} - Ready to close")
-                return True
-            
-            # ตรวจสอบ price distance สำหรับการปิด Group
-            max_price_distance = 0
-            for pos in group_positions:
-                symbol = pos.get('symbol', '')
-                entry_price = pos.get('price', 0)
-                
-                try:
-                    current_price = self.broker.get_current_price(symbol)
-                    if entry_price > 0 and current_price > 0:
-                        if 'JPY' in symbol:
-                            price_distance = abs(current_price - entry_price) * 100
-                        else:
-                            price_distance = abs(current_price - entry_price) * 10000
-                        
-                        max_price_distance = max(max_price_distance, price_distance)
-                except Exception as e:
-                    self.logger.warning(f"Could not get price for {symbol}: {e}")
-                    continue
-            
-            
-            # ✅ NEW: ถ้าระยะห่างมากกว่า 10 pips และ net PnL > 0 ให้ปิด Group
-            if max_price_distance >= 10 and net_pnl > 0:
-                self.logger.info(f"✅ Group {group_id} meets closing criteria:")
-                self.logger.info(f"   Distance: {max_price_distance:.1f} pips")
-                self.logger.info(f"   Arbitrage PnL: ${total_pnl:.2f}")
-                self.logger.info(f"   Recovery PnL: ${recovery_pnl:.2f}")
-                self.logger.info(f"   Net PnL: ${net_pnl:.2f}")
-                return True
+            # ✅ FALLBACK: แสดงสถานะถ้ากำไรแต่ยังไม่ถึง threshold
+            if net_pnl > 0:
+                self.logger.debug(f"💰 Group {group_id} profitable but below threshold:")
+                self.logger.debug(f"   Net PnL: ${net_pnl:.2f} < Min ${min_profit_threshold:.2f}")
+                if trailing_data['active']:
+                    self.logger.debug(f"   Trailing: Peak=${trailing_data['peak']:.2f}, Stop=${trailing_data['stop']:.2f}")
             
             # ✅ Never Cut Loss: ไม่ปิดถ้ายังติดลบ (เฉพาะปิดเมื่อกำไรเท่านั้น)
             return False
