@@ -120,12 +120,14 @@ class GroupDashboard:
             }
         }
         
-        # Create group cards in 2×3 grid (2 columns, 3 rows)
+        # Create group cards in 2×3 grid (2 rows, 3 columns) - Horizontal layout
         self.group_cards = {}
         for i, (triangle_id, config) in enumerate(self.triangle_configs.items()):
-            # Calculate position: 2 rows per column, 3 columns total
-            col = i // 2  # 0,0,1,1,2,2 → 0,1,2 (column)
-            row = i % 2   # 0,1,0,1,0,1 → row in column
+            # Calculate position: แนวนอนก่อน (row-first)
+            # i=0→G1: col=0,row=0 | i=1→G2: col=1,row=0 | i=2→G3: col=2,row=0
+            # i=3→G4: col=0,row=1 | i=4→G5: col=1,row=1 | i=5→G6: col=2,row=1
+            col = i % 3   # 0,1,2,0,1,2 (horizontal first)
+            row = i // 3  # 0,0,0,1,1,1 (then go to next row)
             
             card = self.create_enhanced_group_card(triangle_id, config)
             card.grid(row=row, column=col, padx=TradingTheme.SPACING['md'], 
@@ -137,7 +139,7 @@ class GroupDashboard:
         for i in range(2):  # 2 rows
             self.groups_container.grid_rowconfigure(i, weight=1)
         for i in range(3):  # 3 columns
-            self.groups_container.grid_columnconfigure(i, weight=1, minsize=400)
+            self.groups_container.grid_columnconfigure(i, weight=1, minsize=420)
     
     def create_enhanced_group_card(self, triangle_id, config):
         """สร้าง enhanced card พร้อม P&L Breakdown, Progress Bar, Trailing Stop"""

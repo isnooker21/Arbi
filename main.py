@@ -165,7 +165,7 @@ class TradingSystem:
         
         # Setup console handler with UTF-8 encoding
         console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(logging.DEBUG)
+        console_handler.setLevel(logging.INFO)
         
         # Try to set UTF-8 encoding for console output
         try:
@@ -188,7 +188,7 @@ class TradingSystem:
         
         # Configure logging
         logging.basicConfig(
-            level=logging.DEBUGอัพ,
+            level=logging.INFO,
             handlers=[file_handler, console_handler]
         )
         
