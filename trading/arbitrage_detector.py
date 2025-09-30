@@ -865,19 +865,24 @@ class TriangleArbitrageDetector:
                         self.logger.warning(f"   No order_id found for position {position['symbol']}")
                         all_positions_profitable = False
                 
-                # คำนวณ PnL ของ recovery positions ที่เกี่ยวข้องกับกลุ่มนี้
+                # คำนวณ PnL ของ recovery positions ที่เกี่ยวข้องกับกลุ่มนี้ (using order_tracker)
                 recovery_pnl = 0.0
                 if self.correlation_manager:
-                    for recovery_id, recovery_data in self.correlation_manager.recovery_positions.items():
-                        if recovery_data.get('group_id') == group_id and recovery_data.get('status') == 'active':
-                            recovery_order_id = recovery_data.get('order_id')
-                            if recovery_order_id:
-                                # ตรวจสอบ PnL ของ recovery position
-                                all_positions = self.broker.get_all_positions()
+                    all_orders = self.correlation_manager.order_tracker.get_all_orders()
+                    all_positions = self.broker.get_all_positions()
+                    
+                    for order_key, order_data in all_orders.items():
+                        # Only count recovery orders for this group
+                        if (order_data.get('type') == 'RECOVERY' and 
+                            order_data.get('group_id') == group_id):
+                            recovery_ticket = order_data.get('ticket')
+                            if recovery_ticket:
+                                # ตรวจสอบ PnL ของ recovery position จาก MT5
                                 for pos in all_positions:
-                                    if pos['ticket'] == recovery_order_id:
-                                        recovery_pnl += pos['profit']
-                                        self.logger.debug(f"   Recovery {recovery_data['symbol']}: PnL = {pos['profit']:.2f} USD")
+                                    if str(pos.get('ticket')) == str(recovery_ticket):
+                                        recovery_pnl += pos.get('profit', 0)
+                                        symbol = order_data.get('symbol', 'N/A')
+                                        self.logger.debug(f"   Recovery {symbol}: PnL = {pos['profit']:.2f} USD")
                                         break
                 
                 # รวม PnL ทั้งหมด (arbitrage + recovery)
@@ -916,11 +921,14 @@ class TriangleArbitrageDetector:
                 # self.logger.info(f"   📊 Profit Percentage: {profit_percentage:.3f}%")  # DISABLED - too verbose
                 
                 # คำนวณกำไรต่อ lot เดี่ยว (รวม recovery positions)
-                # นับจำนวน positions ทั้งหมด (arbitrage + recovery)
+                # นับจำนวน positions ทั้งหมด (arbitrage + recovery) using order_tracker
                 total_positions_count = len(group_data['positions'])
                 if self.correlation_manager:
-                    recovery_count = sum(1 for recovery_data in self.correlation_manager.recovery_positions.values() 
-                                       if recovery_data.get('group_id') == group_id and recovery_data.get('status') == 'active')
+                    all_orders = self.correlation_manager.order_tracker.get_all_orders()
+                    recovery_count = sum(1 for order_data in all_orders.values() 
+                                       if (order_data.get('type') == 'RECOVERY' and 
+                                           order_data.get('group_id') == group_id and 
+                                           order_data.get('status') != 'HEDGED'))
                     total_positions_count += recovery_count
                 
                 # ใช้จำนวน positions จริงในการคำนวณ
@@ -1482,14 +1490,12 @@ class TriangleArbitrageDetector:
             # if comments_to_remove:
             #     self.logger.info(f"   🔄 Comments removed: {comments_to_remove}")
             
-            # ปิด recovery positions ที่เกี่ยวข้องกับกลุ่มนี้
+            # ปิด recovery positions ที่เกี่ยวข้องกับกลุ่มนี้ (using order_tracker)
             correlation_pnl = 0.0
             recovery_positions_closed = 0
             if self.correlation_manager:
-                correlation_pnl = self._close_recovery_positions_for_group(group_id)
-                # นับจำนวน recovery positions ที่ปิด (ใช้ข้อมูลจาก log)
-                recovery_positions_closed = len([r for r in self.correlation_manager.recovery_positions.values() 
-                                               if r.get('status') == 'closed' and r.get('group_id') == group_id])
+                # _close_recovery_positions_for_group returns (pnl, count)
+                correlation_pnl, recovery_positions_closed = self._close_recovery_positions_for_group(group_id)
                 # ล้างข้อมูลการแก้ไม้สำหรับกลุ่มนี้
                 self.correlation_manager.clear_hedged_data_for_group(group_id)
             
@@ -1549,22 +1555,24 @@ class TriangleArbitrageDetector:
             self.logger.error(f"Error closing group {group_id}: {e}")
     
     def _get_recovery_pnl_for_group(self, group_id: str) -> float:
-        """ดึง PnL ของ recovery positions ที่เกี่ยวข้องกับกลุ่ม (ไม่ปิด)"""
+        """ดึง PnL ของ recovery positions ที่เกี่ยวข้องกับกลุ่ม (ไม่ปิด) - using order_tracker"""
         try:
             if not self.correlation_manager:
                 return 0.0
             
             total_recovery_pnl = 0.0
             all_positions = self.broker.get_all_positions()
+            all_orders = self.correlation_manager.order_tracker.get_all_orders()
             
-            # หา recovery positions ที่เกี่ยวข้องกับกลุ่มนี้
-            for recovery_id, recovery_data in self.correlation_manager.recovery_positions.items():
-                if recovery_data.get('group_id') == group_id and recovery_data.get('status') == 'active':
+            # หา recovery orders ที่เกี่ยวข้องกับกลุ่มนี้
+            for order_key, order_data in all_orders.items():
+                if (order_data.get('type') == 'RECOVERY' and 
+                    order_data.get('group_id') == group_id):
                     # หา PnL จาก MT5
-                    order_id = recovery_data.get('order_id')
-                    if order_id:
+                    ticket = order_data.get('ticket')
+                    if ticket:
                         for pos in all_positions:
-                            if str(pos.get('ticket')) == str(order_id):
+                            if str(pos.get('ticket')) == str(ticket):
                                 total_recovery_pnl += pos.get('profit', 0)
                                 break
             
@@ -1575,70 +1583,72 @@ class TriangleArbitrageDetector:
             return 0.0
     
     def _close_recovery_positions_for_group(self, group_id: str):
-        """ปิด recovery positions ที่เกี่ยวข้องกับกลุ่ม arbitrage และคืนค่า PnL รวม"""
+        """ปิด recovery positions ที่เกี่ยวข้องกับกลุ่ม arbitrage (using order_tracker) - returns (pnl, count)"""
         try:
             if not self.correlation_manager:
-                return 0.0
+                return 0.0, 0
             
-            # หา recovery positions ที่เกี่ยวข้องกับกลุ่มนี้
+            # Get all orders from order_tracker
+            all_orders = self.correlation_manager.order_tracker.get_all_orders()
+            all_positions = self.broker.get_all_positions()
+            
+            # หา recovery orders ที่เกี่ยวข้องกับกลุ่มนี้
             group_data = self.active_groups.get(group_id, {})
             group_pairs = set(group_data.get('triangle', []))
             
-            recovery_positions_to_close = []
+            recovery_orders_to_close = []
             total_correlation_pnl = 0.0
             
-            # ตรวจสอบ recovery positions ทั้งหมด
-            for recovery_id, recovery_data in self.correlation_manager.recovery_positions.items():
-                # ตรวจสอบหลายวิธีเพื่อหา original symbol
-                original_symbol = ''
+            # Find recovery orders for this group
+            for order_key, order_data in all_orders.items():
+                if order_data.get('type') == 'RECOVERY':
+                    # Check if this recovery order belongs to this group
+                    # Method 1: Direct group_id match
+                    if order_data.get('group_id') == group_id:
+                        recovery_orders_to_close.append(order_data)
+                        continue
+                    
+                    # Method 2: Check if recovery is hedging an order from this group's pairs
+                    hedging_for = order_data.get('hedging_for', '')
+                    if hedging_for:
+                        # Extract symbol from hedging_for key (format: ticket_symbol)
+                        hedging_symbol = hedging_for.split('_')[-1] if '_' in hedging_for else ''
+                        if hedging_symbol in group_pairs:
+                            recovery_orders_to_close.append(order_data)
+            
+            # Close recovery orders and collect PnL
+            if recovery_orders_to_close:
+                self.logger.info(f"🔄 Closing {len(recovery_orders_to_close)} recovery positions for group {group_id}")
+            
+            for order_data in recovery_orders_to_close:
+                ticket = order_data.get('ticket')
+                symbol = order_data.get('symbol')
                 
-                # วิธีที่ 1: จาก original_pair
-                if 'original_pair' in recovery_data:
-                    original_symbol = recovery_data['original_pair']
-                # วิธีที่ 2: จาก original_position
-                elif 'original_position' in recovery_data:
-                    original_symbol = recovery_data['original_position'].get('symbol', '')
-                # วิธีที่ 3: จาก group_id
-                elif recovery_data.get('group_id') == group_id:
-                    original_symbol = 'MATCH'  # ใช้เป็น flag
-                
-                # ถ้า recovery position นี้เกี่ยวข้องกับกลุ่ม arbitrage นี้
-                if (original_symbol in group_pairs) or (original_symbol == 'MATCH'):
-                    recovery_positions_to_close.append(recovery_id)
+                if ticket and symbol:
+                    # Get current PnL from MT5 before closing
+                    for pos in all_positions:
+                        if str(pos.get('ticket')) == str(ticket):
+                            total_correlation_pnl += pos.get('profit', 0)
+                            break
+                    
+                    # Close the order via broker
+                    success = self.broker.close_position(symbol)
+                    if success:
+                        self.logger.debug(f"   ✅ Closed recovery order: {symbol} (Ticket: {ticket})")
+                    else:
+                        self.logger.warning(f"   ⚠️ Failed to close recovery order: {symbol} (Ticket: {ticket})")
             
-            # ปิด recovery positions ที่เกี่ยวข้องและเก็บ PnL
-            if recovery_positions_to_close:
-                self.logger.info(f"🔄 Closing {len(recovery_positions_to_close)} recovery positions")
-            for recovery_id in recovery_positions_to_close:
-                    pnl = self.correlation_manager._close_recovery_position(recovery_id)
-                    if pnl is not None:
-                        total_correlation_pnl += pnl
-            
-            # ปิด recovery positions ทั้งหมดที่เกี่ยวข้องกับกลุ่มนี้ (เพิ่มเติม)
-            # ตรวจสอบ recovery positions ที่มี group_id ตรงกัน
-            additional_recovery_positions = []
-            for recovery_id, recovery_data in self.correlation_manager.recovery_positions.items():
-                if recovery_data.get('group_id') == group_id and recovery_id not in recovery_positions_to_close:
-                    additional_recovery_positions.append(recovery_id)
-            
-            # ปิด recovery positions เพิ่มเติมและเก็บ PnL
-            if additional_recovery_positions:
-                self.logger.info(f"🔄 Closing {len(additional_recovery_positions)} additional recovery positions")
-            for recovery_id in additional_recovery_positions:
-                    pnl = self.correlation_manager._close_recovery_position(recovery_id)
-                    if pnl is not None:
-                        total_correlation_pnl += pnl
-            
-            total_recovery_closed = len(recovery_positions_to_close) + len(additional_recovery_positions)
+            total_recovery_closed = len(recovery_orders_to_close)
             if total_recovery_closed > 0:
                 self.logger.info(f"✅ Closed {total_recovery_closed} recovery positions for group {group_id}")
                 self.logger.info(f"   💰 Total Correlation PnL: {total_correlation_pnl:.2f} USD")
             
-            return total_correlation_pnl
+            # Return both PnL and count
+            return total_correlation_pnl, total_recovery_closed
             
         except Exception as e:
             self.logger.error(f"Error closing recovery positions for group {group_id}: {e}")
-            return 0.0
+            return 0.0, 0
     
     def _reset_comments_for_group(self, group_id: str):
         """Reset comment สำหรับกลุ่มที่ปิดแล้ว"""
