@@ -42,9 +42,11 @@ class CorrelationManager:
             elif 'triangle_6' in group_id:
                 return 234006
             else:
+                self.logger.warning(f"⚠️ Unknown group_id format: '{group_id}' → using default magic 234000")
                 return 234000  # default
         except Exception as e:
             self.logger.error(f"Error getting magic number from group_id {group_id}: {e}")
+            return 234000  # return default on error
     
     def _extract_group_number(self, group_id: str) -> str:
         """แยก Group number จาก group_id"""
@@ -671,9 +673,20 @@ class CorrelationManager:
                     if magic not in groups_data:
                         groups_data[magic] = []
                     groups_data[magic].append(pos)
-                elif self._is_recovery_comment(comment):
-                    # รวม recovery orders ที่มี magic number อื่น
+                elif magic == 234000 and self._is_recovery_comment(comment):
+                    # Recovery orders ที่มี default magic (234000)
                     recovery_positions_all.append(pos)
+                elif self._is_recovery_comment(comment):
+                    # Recovery orders ที่มี magic number อื่นๆ
+                    recovery_positions_all.append(pos)
+            
+            # DEBUG: แสดง recovery_positions_all
+            if recovery_positions_all:
+                self.logger.info(f"🔍 Found {len(recovery_positions_all)} recovery orders in recovery_positions_all:")
+                for rpos in recovery_positions_all:
+                    self.logger.info(f"   Magic: {rpos.get('magic')} | Symbol: {rpos.get('symbol')} | Comment: '{rpos.get('comment')}'")
+            else:
+                self.logger.info(f"🔍 No recovery orders in recovery_positions_all")
             
             # แสดงสถานะแต่ละ Group เรียงตาม Group
             for magic in sorted(groups_data.keys()):
@@ -2360,6 +2373,8 @@ class CorrelationManager:
             magic_number = self._get_magic_number_from_group_id(group_id)
             if not magic_number:
                 magic_number = 234000  # Default magic number for recovery orders
+            
+            self.logger.info(f"🔢 Recovery magic number: {magic_number} (from group_id: '{group_id}')")
             
             # Determine direction based on correlation
             order_type = self._calculate_hedge_direction(original_position, symbol)
