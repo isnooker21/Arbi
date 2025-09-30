@@ -681,11 +681,11 @@ class CorrelationManager:
                 group_positions = groups_data[magic]
                 
                 # DEBUG: แสดง comment ทั้งหมดใน group
-                self.logger.debug(f"📝 DEBUG Group {group_number} comments:")
+                self.logger.info(f"📝 DEBUG Group {group_number} comments:")
                 for pos in group_positions:
                     comment = pos.get('comment', '')
                     is_recovery = self._is_recovery_comment(comment)
-                    self.logger.debug(f"   {pos.get('symbol')}: '{comment}' → Recovery={is_recovery}")
+                    self.logger.info(f"   {pos.get('symbol')}: '{comment}' → Recovery={is_recovery}")
                 
                 # แยกประเภทไม้ (รองรับทั้ง 'RECOVERY_' และ 'R' format)
                 arbitrage_positions = [pos for pos in group_positions if not self._is_recovery_comment(pos.get('comment', ''))]
