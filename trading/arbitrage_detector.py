@@ -1582,6 +1582,26 @@ class TriangleArbitrageDetector:
             self.logger.error(f"Error getting recovery PnL for group: {e}")
             return 0.0
     
+    def _get_magic_for_group(self, group_id: str) -> int:
+        """Get magic number for a group_id"""
+        try:
+            # Extract triangle number from group_id (e.g., "group_triangle_1_1" -> "1")
+            if 'triangle_' in group_id:
+                triangle_part = group_id.split('triangle_')[1].split('_')[0]
+                magic_map = {
+                    '1': 234001,
+                    '2': 234002,
+                    '3': 234003,
+                    '4': 234004,
+                    '5': 234005,
+                    '6': 234006
+                }
+                return magic_map.get(triangle_part, 234000)
+            return 234000
+        except Exception as e:
+            self.logger.error(f"Error getting magic for group {group_id}: {e}")
+            return 234000
+    
     def _close_recovery_positions_for_group(self, group_id: str):
         """ปิด recovery positions ที่เกี่ยวข้องกับกลุ่ม arbitrage (using order_tracker) - returns (pnl, count)"""
         try:
@@ -1596,25 +1616,34 @@ class TriangleArbitrageDetector:
             group_data = self.active_groups.get(group_id, {})
             group_pairs = set(group_data.get('triangle', []))
             
+            # Get magic number for this group
+            magic_number = self._get_magic_for_group(group_id)
+            
+            # Find all original tickets in this group (from MT5)
+            original_tickets = set()
+            for pos in all_positions:
+                if pos.get('magic') == magic_number:
+                    # Check if it's not a recovery order
+                    comment = pos.get('comment', '')
+                    if not (comment.startswith('R') or comment.startswith('RECOVERY_')):
+                        original_tickets.add(str(pos.get('ticket')))
+            
+            self.logger.info(f"🔍 Found {len(original_tickets)} original tickets in group {group_id} (magic {magic_number})")
+            
             recovery_orders_to_close = []
             total_correlation_pnl = 0.0
             
-            # Find recovery orders for this group
+            # Find recovery orders that hedge these original tickets
             for order_key, order_data in all_orders.items():
                 if order_data.get('type') == 'RECOVERY':
-                    # Check if this recovery order belongs to this group
-                    # Method 1: Direct group_id match
-                    if order_data.get('group_id') == group_id:
-                        recovery_orders_to_close.append(order_data)
-                        continue
-                    
-                    # Method 2: Check if recovery is hedging an order from this group's pairs
+                    # Check if this recovery is hedging any ticket from this group
                     hedging_for = order_data.get('hedging_for', '')
                     if hedging_for:
-                        # Extract symbol from hedging_for key (format: ticket_symbol)
-                        hedging_symbol = hedging_for.split('_')[-1] if '_' in hedging_for else ''
-                        if hedging_symbol in group_pairs:
+                        # Extract ticket from hedging_for key (format: ticket_symbol)
+                        hedging_ticket = hedging_for.split('_')[0] if '_' in hedging_for else hedging_for
+                        if hedging_ticket in original_tickets:
                             recovery_orders_to_close.append(order_data)
+                            self.logger.debug(f"   Found recovery {order_data.get('ticket')} hedging {hedging_ticket}")
             
             # Close recovery orders and collect PnL
             if recovery_orders_to_close:
@@ -1631,10 +1660,10 @@ class TriangleArbitrageDetector:
                             total_correlation_pnl += pos.get('profit', 0)
                             break
                     
-                    # Close the order via broker
-                    success = self.broker.close_position(symbol)
+                    # Close the order via broker using ticket (not symbol!)
+                    success = self.broker.close_position(int(ticket))
                     if success:
-                        self.logger.debug(f"   ✅ Closed recovery order: {symbol} (Ticket: {ticket})")
+                        self.logger.info(f"   ✅ Closed recovery order: {symbol} (Ticket: {ticket})")
                     else:
                         self.logger.warning(f"   ⚠️ Failed to close recovery order: {symbol} (Ticket: {ticket})")
             
