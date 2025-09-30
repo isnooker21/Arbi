@@ -78,18 +78,23 @@
   },
   "recovery_params": {
     "correlation_thresholds": {
-      "min_correlation": 0.7,
+      "min_correlation": 0.6,
       "max_correlation": 0.95,
-      "optimal_correlation": 0.8
+      "optimal_correlation": 0.8,
+      "description": "Lowered min correlation from 0.7 to 0.6 for more recovery opportunities"
     },
     "loss_thresholds": {
-      "min_loss_threshold": -0.05,
-      "recovery_target": 0.0
+      "min_loss_threshold": -0.003,
+      "min_loss_amount": -5.0,
+      "recovery_target": 0.0,
+      "description": "Lowered thresholds: 0.3% of balance or $5 loss triggers recovery"
     },
     "timing": {
       "max_recovery_time_hours": 24,
-      "recovery_check_interval_minutes": 5,
-      "rebalancing_frequency_hours": 6
+      "recovery_check_interval_seconds": 10,
+      "cooldown_between_checks": 10,
+      "rebalancing_frequency_hours": 6,
+      "description": "Increased check frequency from 5 min to 10 seconds for faster response"
     },
     "hedge_ratios": {
       "min_ratio": 0.7,
@@ -103,10 +108,18 @@
       "max_hedge_lot": 3.0
     },
     "diversification": {
-      "max_usage_per_symbol": 2,
-      "enforce_limit": true
+      "max_usage_per_symbol": 3,
+      "enforce_limit": true,
+      "description": "Increased from 2 to 3 for more flexibility"
     },
-    "description": "Correlation recovery parameters - optimized with dynamic hedge and diversification"
+    "auto_registration": {
+      "enabled": true,
+      "register_on_startup": true,
+      "register_on_new_orders": true,
+      "sync_interval_seconds": 30,
+      "description": "Automatically register orders for recovery tracking"
+    },
+    "description": "Correlation recovery parameters - optimized for faster response and lower thresholds"
   },
   "arbitrage_params": {
     "detection": {

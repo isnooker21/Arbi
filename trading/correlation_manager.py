@@ -192,29 +192,40 @@ class CorrelationManager:
                 hedge_ratios = recovery_params.get('hedge_ratios', {})
                 timing = recovery_params.get('timing', {})
                 
-                # ตั้งค่า recovery thresholds
+                # ตั้งค่า recovery thresholds จาก config
                 self.recovery_thresholds = {
-                    'min_correlation': correlation_thresholds.get('min_correlation', 0.7),
+                    'min_correlation': correlation_thresholds.get('min_correlation', 0.6),
                     'max_correlation': correlation_thresholds.get('max_correlation', 0.95),
-                    'min_loss_threshold': loss_thresholds.get('min_loss_threshold', -0.002),
+                    'min_loss_threshold': loss_thresholds.get('min_loss_threshold', -0.003),
+                    'min_loss_amount': loss_thresholds.get('min_loss_amount', -5.0),  # NEW: ขาดทุนขั้นต่ำเป็นเงิน
                     'max_recovery_time_hours': timing.get('max_recovery_time_hours', 24),
                     'hedge_ratio_range': (
                         hedge_ratios.get('min_ratio', 0.7),
                         hedge_ratios.get('max_ratio', 1.3)
                     ),
                     'wait_time_minutes': timing.get('recovery_check_interval_minutes', 5),
+                    'cooldown_between_checks': timing.get('cooldown_between_checks', 10),  # NEW: cooldown
                     'base_lot_size': 0.05  # ตั้งค่าให้ระมัดระวังมากขึ้น
                 }
+                
+                # โหลด diversification settings
+                diversification = recovery_params.get('diversification', {})
+                self.max_symbol_usage = diversification.get('max_usage_per_symbol', 3)
                 
                 # โหลด risk management parameters
                 risk_mgmt = config.get('position_sizing', {}).get('risk_management', {})
                 self.portfolio_balance_threshold = risk_mgmt.get('max_portfolio_risk', 0.05)
                 
-                self.logger.info("✅ Configuration loaded from config/adaptive_params.json")
-                self.logger.info(f"   Min correlation: {self.recovery_thresholds['min_correlation']}")
-                self.logger.info(f"   Min loss threshold: {self.recovery_thresholds['min_loss_threshold']}")
-                self.logger.info(f"   Hedge ratio range: {self.recovery_thresholds['hedge_ratio_range']}")
-                self.logger.info(f"   Base lot size: {self.recovery_thresholds['base_lot_size']}")
+                self.logger.info("=" * 60)
+                self.logger.info("✅ RECOVERY CONFIG LOADED")
+                self.logger.info("=" * 60)
+                self.logger.info(f"📊 Correlation: {self.recovery_thresholds['min_correlation']:.1%} - {self.recovery_thresholds['max_correlation']:.1%}")
+                self.logger.info(f"💰 Loss Threshold: {self.recovery_thresholds['min_loss_threshold']:.3%} of balance OR ${abs(self.recovery_thresholds['min_loss_amount'])}")
+                self.logger.info(f"⏱️  Cooldown: {self.recovery_thresholds['cooldown_between_checks']}s between checks")
+                self.logger.info(f"📦 Hedge Ratio: {self.recovery_thresholds['hedge_ratio_range'][0]} - {self.recovery_thresholds['hedge_ratio_range'][1]}")
+                self.logger.info(f"🎯 Max Symbol Usage: {self.max_symbol_usage} times")
+                self.logger.info(f"📏 Base Lot Size: {self.recovery_thresholds['base_lot_size']}")
+                self.logger.info("=" * 60)
                 
             else:
                 self.logger.warning("⚠️ Config file not found, using fallback values")
@@ -228,14 +239,19 @@ class CorrelationManager:
     def _set_fallback_config(self):
         """ตั้งค่า fallback เมื่อไม่สามารถโหลด config ได้"""
         self.recovery_thresholds = {
-            'min_correlation': 0.7,      # ความสัมพันธ์ขั้นต่ำ 70%
+            'min_correlation': 0.6,      # ความสัมพันธ์ขั้นต่ำ 60% (ลดจาก 70%)
             'max_correlation': 0.95,     # ความสัมพันธ์สูงสุด 95%
-            'min_loss_threshold': -0.002, # ขาดทุนขั้นต่ำ -0.2% (เริ่มแก้เร็วขึ้น)
+            'min_loss_threshold': -0.003, # ขาดทุนขั้นต่ำ -0.3% (ลดจาก -0.5%)
+            'min_loss_amount': -5.0,     # ขาดทุนขั้นต่ำ $5 (ลดจาก $10)
             'max_recovery_time_hours': 24, # เวลาสูงสุด 24 ชั่วโมง
             'hedge_ratio_range': (0.7, 1.3),  # ขนาด hedge ratio ที่ระมัดระวัง
             'wait_time_minutes': 5,      # รอ 5 นาทีก่อนแก้ไม้
+            'cooldown_between_checks': 10,  # เช็คทุก 10 วินาที (ลดจาก 30)
             'base_lot_size': 0.05        # ขนาด lot เริ่มต้นที่เล็กกว่า
         }
+        
+        # Diversification settings
+        self.max_symbol_usage = 3  # ใช้ symbol เดียวกันได้สูงสุด 3 ครั้ง
         
         # Portfolio balance threshold ที่ระมัดระวัง
         self.portfolio_balance_threshold = 0.05  # 5% imbalance threshold
@@ -2199,11 +2215,13 @@ class CorrelationManager:
     def check_recovery_positions(self):
         """Check recovery with smart logging and proper recovery order exclusion"""
         try:
-            # Cooldown check to prevent excessive logging
+            # Cooldown check to prevent excessive logging (อ่านจาก config)
             current_time = datetime.now()
+            cooldown = self.recovery_thresholds.get('cooldown_between_checks', 10)  # Default 10 seconds
+            
             if hasattr(self, 'last_recovery_check'):
                 elapsed = (current_time - self.last_recovery_check).total_seconds()
-                if elapsed < 30:  # Check every 30 seconds max
+                if elapsed < cooldown:
                     return
             
             self.last_recovery_check = current_time
@@ -2213,15 +2231,30 @@ class CorrelationManager:
             if sync_results.get('orders_removed', 0) > 0:
                 self.logger.info(f"🔄 Synced: {sync_results['orders_removed']} orders removed")
             
+            # 🔄 STEP 1.5: Auto-register any new orders that aren't tracked yet
+            self._auto_register_new_orders()
+            
             # Get orders needing recovery from individual order tracker
             orders_needing_recovery = self.order_tracker.get_orders_needing_recovery()
+            
+            # 📊 Log tracker statistics periodically
+            if not hasattr(self, '_last_stats_log'):
+                self._last_stats_log = current_time
+            elif (current_time - self._last_stats_log).total_seconds() > 60:  # Every minute
+                stats = self.order_tracker.get_statistics()
+                self.logger.info(f"📊 Order Tracker: {stats['total_tracked_orders']} total, "
+                               f"{stats['not_hedged_orders']} need recovery, "
+                               f"{stats['hedged_orders']} hedged")
+                self._last_stats_log = current_time
             
             if not orders_needing_recovery:
                 # Only log once per 5 minutes if no orders
                 if not hasattr(self, '_last_no_orders_log'):
                     self._last_no_orders_log = current_time
                 elif (current_time - self._last_no_orders_log).total_seconds() > 300:
-                    self.logger.info("ℹ️ All orders are hedged or profitable")
+                    stats = self.order_tracker.get_statistics()
+                    self.logger.info(f"ℹ️ No orders need recovery (Total tracked: {stats['total_tracked_orders']}, "
+                                   f"Hedged: {stats['hedged_orders']})")
                     self._last_no_orders_log = current_time
                 return
             
@@ -2455,14 +2488,20 @@ class CorrelationManager:
                 self.logger.debug(f"❌ {ticket}_{symbol}: Not losing money (${profit:.2f})")
                 return False
             
-            # Check minimum loss amount (e.g., at least $10 loss)
-            min_loss_amount = -10.0  # $10 minimum loss
+            # Check minimum loss amount (อ่านจาก config)
+            min_loss_amount = self.recovery_thresholds.get('min_loss_amount', -5.0)
             meets_min_loss = profit <= min_loss_amount
             if not meets_min_loss:
                 self.logger.debug(f"❌ {ticket}_{symbol}: Loss ${profit:.2f} too small (need <= ${min_loss_amount})")
                 return False
             
-            self.logger.debug(f"✅ {ticket}_{symbol}: Meets all conditions (${profit:.2f}, {loss_percent:.4f}%)")
+            # ✅ All conditions met - log details
+            self.logger.info(f"✅ {ticket}_{symbol}: READY FOR RECOVERY!")
+            self.logger.info(f"   💰 Loss: ${profit:.2f} ({loss_percent:.4f}% of balance)")
+            self.logger.info(f"   ✓ Loss % check: {loss_percent:.4f}% <= {min_loss_threshold:.4f}%")
+            self.logger.info(f"   ✓ Loss $ check: ${profit:.2f} <= ${min_loss_amount}")
+            self.logger.info(f"   ✓ Not hedged: True")
+            self.logger.info(f"   ✓ Not recovery order: True")
             return True
             
         except Exception as e:
@@ -2516,7 +2555,13 @@ class CorrelationManager:
                 if success:
                     self.logger.info("=" * 60)
                     self.logger.info(f"✅ RECOVERY EXECUTED SUCCESSFULLY")
-                    self.logger.info(f"   {ticket}_{symbol} → {recovery_symbol}")
+                    self.logger.info(f"   Original: {ticket}_{symbol} (${profit:.2f})")
+                    self.logger.info(f"   Recovery: {recovery_symbol}")
+                    self.logger.info(f"   Correlation: {correlation:.3f}")
+                    
+                    # Show tracker stats after recovery
+                    stats = self.order_tracker.get_statistics()
+                    self.logger.info(f"   📊 Tracker: {stats['hedged_orders']} hedged, {stats['not_hedged_orders']} pending")
                     self.logger.info("=" * 60)
                 else:
                     self.logger.warning("=" * 60)
@@ -2764,15 +2809,64 @@ class CorrelationManager:
             return 0.0
     
     
+    def _auto_register_new_orders(self):
+        """Auto-register any new orders that aren't in tracker yet (lightweight check)"""
+        try:
+            # Get all MT5 positions
+            all_positions = self.broker.get_all_positions()
+            if not all_positions:
+                return
+            
+            new_orders_count = 0
+            for pos in all_positions:
+                ticket = str(pos.get('ticket', ''))
+                symbol = pos.get('symbol', '')
+                magic = pos.get('magic', 0)
+                
+                if not ticket or not symbol:
+                    continue
+                
+                # Quick check if already tracked
+                if self.order_tracker.get_order_info(ticket, symbol):
+                    continue
+                
+                # Not tracked yet - register it!
+                group_id = self._get_group_id_from_magic(magic)
+                success = self.order_tracker.register_original_order(ticket, symbol, group_id)
+                
+                if success:
+                    new_orders_count += 1
+                    profit = pos.get('profit', 0)
+                    self.logger.info(f"🆕 Auto-registered new order: {ticket}_{symbol} (${profit:.2f})")
+            
+            if new_orders_count > 0:
+                self.logger.info(f"✅ Auto-registered {new_orders_count} new orders")
+                
+        except Exception as e:
+            self.logger.error(f"Error in auto-register: {e}")
+    
     def register_existing_orders(self):
         """Register all existing MT5 positions as original orders in the tracker"""
         try:
             self.logger.info("🔧 REGISTERING EXISTING ORDERS IN TRACKER")
             
             # Check broker connection
-            if not self.broker or not self.broker.is_connected():
-                self.logger.error("❌ Broker not connected - cannot register orders")
+            if not self.broker:
+                self.logger.error("❌ Broker not initialized - cannot register orders")
                 return
+            
+            # Try to connect if not connected
+            if not self.broker.is_connected():
+                self.logger.warning("⚠️ Broker not connected - attempting to connect...")
+                try:
+                    self.broker.connect()
+                    if not self.broker.is_connected():
+                        self.logger.error("❌ Failed to connect to MT5 - will retry on next check")
+                        return
+                    self.logger.info("✅ Successfully connected to MT5")
+                except Exception as e:
+                    self.logger.error(f"❌ Error connecting to MT5: {e}")
+                    return
             
             # Get all MT5 positions
             all_positions = self.broker.get_all_positions()
