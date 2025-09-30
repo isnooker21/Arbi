@@ -1230,19 +1230,7 @@ class TriangleArbitrageDetector:
                 self.logger.info(f"   Net PnL: ${net_pnl:.2f}")
                 return True
             
-            # ✅ NEW: ถ้า net PnL ใกล้ Break Even (>= -$10) และเปิดนานกว่า 2 ชม
-            try:
-                opened_at = group_data.get('opened_at')
-                if opened_at:
-                    time_elapsed = (datetime.now() - opened_at).total_seconds() / 3600  # hours
-                    
-                    if time_elapsed > 2 and net_pnl >= -10:
-                        self.logger.info(f"⏰ Time-based close: {time_elapsed:.1f}h, Net PnL=${net_pnl:.2f}")
-                        self.logger.info(f"   Arbitrage: ${total_pnl:.2f}, Recovery: ${recovery_pnl:.2f}")
-                        return True
-            except:
-                pass  # ไม่มี opened_at ก็ข้าม
-            
+            # ✅ Never Cut Loss: ไม่ปิดถ้ายังติดลบ (เฉพาะปิดเมื่อกำไรเท่านั้น)
             return False
             
         except Exception as e:

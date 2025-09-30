@@ -38,10 +38,10 @@
       "small": {
         "min_balance": 5000,
         "max_balance": 10000,
-        "lot_multiplier": 0.7,
-        "base_lot_size": 0.05,
-        "max_position_size": 3.0,
-        "description": "Small account - conservative sizing for loss reduction"
+        "lot_multiplier": 1.0,
+        "base_lot_size": 0.1,
+        "max_position_size": 5.0,
+        "description": "Small account - optimized sizing for better recovery"
       },
       "medium": {
         "min_balance": 10000,
@@ -69,10 +69,11 @@
       }
     },
     "risk_management": {
-      "risk_per_trade": 0.01,
-      "max_portfolio_risk": 0.05,
+      "risk_per_trade": 0.015,
+      "max_portfolio_risk": 0.08,
+      "max_concurrent_groups": 4,
       "correlation_limit": 0.8,
-      "description": "Risk management parameters - no cut loss, recovery only"
+      "description": "Risk management parameters - no cut loss, recovery only, optimized for small accounts"
     }
   },
   "recovery_params": {
@@ -82,7 +83,7 @@
       "optimal_correlation": 0.8
     },
     "loss_thresholds": {
-      "min_loss_threshold": -0.002,
+      "min_loss_threshold": -0.05,
       "recovery_target": 0.0
     },
     "timing": {
@@ -97,9 +98,9 @@
     },
     "dynamic_hedge": {
       "enabled": true,
-      "recovery_target_ratio": 0.75,
+      "recovery_target_ratio": 0.80,
       "min_hedge_lot": 0.1,
-      "max_hedge_lot": 2.0
+      "max_hedge_lot": 3.0
     },
     "diversification": {
       "max_usage_per_symbol": 2,
@@ -115,9 +116,13 @@
       "execution_timeout_ms": 1000
     },
     "triangles": {
-      "max_active_triangles": 10,
-      "triangle_hold_time_minutes": 30,
+      "max_active_triangles": 4,
+      "triangle_hold_time_minutes": 120,
       "correlation_check_interval": 60
+    },
+    "closing": {
+      "enable_net_pnl_check": true,
+      "min_profit_to_close": 5
     },
     "execution": {
       "max_slippage": 0.0005,
