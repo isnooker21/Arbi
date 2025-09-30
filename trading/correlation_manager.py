@@ -704,14 +704,38 @@ class CorrelationManager:
                 arbitrage_positions = [pos for pos in group_positions if not self._is_recovery_comment(pos.get('comment', ''))]
                 recovery_positions = [pos for pos in group_positions if self._is_recovery_comment(pos.get('comment', ''))]
                 
+                self.logger.info(f"📊 Group {group_number} initial: {len(arbitrage_positions)} arbitrage, {len(recovery_positions)} recovery (from group_positions)")
+                
                 # เพิ่ม recovery orders ที่มี magic number เดียวกับ group นี้
                 # (recovery orders ใช้ magic number เดียวกับ group แต่มี comment ขึ้นต้นด้วย 'R')
                 for recovery_pos in recovery_positions_all:
-                    if recovery_pos.get('magic', 0) == magic:
-                        # Magic number ตรงกัน = recovery ของ group นี้
-                        if recovery_pos not in recovery_positions:  # หลีกเลี่ยง duplicate
+                    recovery_magic = recovery_pos.get('magic', 0)
+                    recovery_comment = recovery_pos.get('comment', '')
+                    
+                    # Case 1: Magic number ตรงกัน
+                    if recovery_magic == magic:
+                        if recovery_pos not in recovery_positions:
                             recovery_positions.append(recovery_pos)
+                    # Case 2: Magic = 234000 (default) → ใช้ comment เพื่อหา original ticket
+                    elif recovery_magic == 234000 and recovery_comment.startswith('R'):
+                        # Comment format: R{ticket}_{symbol}
+                        try:
+                            # Extract original ticket from comment
+                            ticket_part = recovery_comment.split('_')[0][1:]  # Remove 'R' prefix
+                            
+                            # Find original position with this ticket
+                            for orig_pos in all_positions:
+                                if str(orig_pos.get('ticket', '')).endswith(ticket_part):
+                                    if orig_pos.get('magic', 0) == magic:
+                                        # Original position is in this group!
+                                        if recovery_pos not in recovery_positions:
+                                            recovery_positions.append(recovery_pos)
+                                        self.logger.info(f"   ✅ Matched recovery {recovery_comment} to group {group_number}")
+                                        break
+                        except Exception as e:
+                            self.logger.debug(f"Could not parse recovery comment: {recovery_comment}")
                 
+                self.logger.info(f"📊 Group {group_number} final: {len(arbitrage_positions)} arbitrage, {len(recovery_positions)} recovery (after matching)")
                 
                 # คำนวณ PnL
                 arbitrage_pnl = sum(pos.get('profit', 0) for pos in arbitrage_positions)
@@ -2879,10 +2903,19 @@ class CorrelationManager:
                 self.logger.info(f"   Correlation: {correlation:.3f}")
                 self.logger.info(f"   Recovery Strength: {best_correlation.get('recovery_strength', correlation):.3f}")
                 
-                # Execute recovery - need to get proper group_id
-                # For now, use a default group_id since we're doing individual order recovery
-                group_id = f"recovery_{ticket}_{symbol}"
-                self.logger.info(f"   Group ID: {group_id}")
+                # ✅ Get magic number from original position
+                original_magic = position.get('magic', 234000)
+                self.logger.info(f"   Original Magic: {original_magic}")
+                
+                # Create group_id that matches the magic number format
+                if original_magic in [234001, 234002, 234003, 234004, 234005, 234006]:
+                    group_num = str(original_magic)[-1]  # Extract last digit (1-6)
+                    group_id = f"group_triangle_{group_num}_1"
+                else:
+                    # Fallback for non-standard magic numbers
+                    group_id = f"recovery_{ticket}_{symbol}"
+                
+                self.logger.info(f"   Group ID: {group_id} → Magic: {original_magic}")
                 
                 success = self._execute_correlation_position(position, best_correlation, group_id)
                 if success:
