@@ -114,6 +114,20 @@ class CorrelationManager:
                 'EURCAD', 'GBPCAD'
             ]
     
+    def _is_recovery_comment(self, comment: str) -> bool:
+        """
+        เช็คว่า comment เป็น recovery order ไหม
+        รองรับหลาย format:
+        - 'RECOVERY_...'  (legacy format)
+        - 'R...'          (short format)
+        - ที่มีคำว่า 'RECOVERY' อยู่ในนั้น
+        """
+        if not comment:
+            return False
+        return (comment.startswith('RECOVERY_') or 
+                comment.startswith('R') or
+                'RECOVERY' in comment.upper())
+    
     def __init__(self, broker_api, ai_engine=None):
         self.broker = broker_api
         self.ai_engine = ai_engine  # ✅ Enable AI engine for correlation data
@@ -402,8 +416,8 @@ class CorrelationManager:
                 magic = pos.get('magic', 0)
                 comment = pos.get('comment', '')
                 
-                # ข้าม recovery positions
-                if comment.startswith('RECOVERY_'):
+                # ข้าม recovery positions (รองรับหลาย format)
+                if self._is_recovery_comment(comment):
                     continue
                 
                 if magic not in groups_data:
@@ -460,7 +474,7 @@ class CorrelationManager:
                 # แสดง recovery positions
                 recovery_count = 0
                 for pos in all_positions:
-                    if pos.get('magic', 0) == magic and pos.get('comment', '').startswith('RECOVERY_'):
+                    if pos.get('magic', 0) == magic and self._is_recovery_comment(pos.get('comment', '')):
                         recovery_count += 1
                         symbol = pos['symbol']
                         pnl = pos['profit']
@@ -534,7 +548,7 @@ class CorrelationManager:
                 pnl = pos.get('profit', 0)
                 
                 # ตรวจสอบว่าเป็นไม้ arbitrage ที่ขาดทุน (ไม่ใช่ recovery)
-                if magic == magic_number and not comment.startswith('RECOVERY_') and pnl < 0:
+                if magic == magic_number and not self._is_recovery_comment(comment) and pnl < 0:
                     losing_positions.append({
                         'symbol': pos['symbol'],
                         'order_id': pos['ticket'],
@@ -657,7 +671,7 @@ class CorrelationManager:
                     if magic not in groups_data:
                         groups_data[magic] = []
                     groups_data[magic].append(pos)
-                elif comment.startswith('RECOVERY_'):
+                elif self._is_recovery_comment(comment):
                     # รวม recovery orders ที่มี magic number อื่น
                     recovery_positions_all.append(pos)
             
@@ -666,9 +680,9 @@ class CorrelationManager:
                 group_number = self._get_group_number_from_magic(magic)
                 group_positions = groups_data[magic]
                 
-                # แยกประเภทไม้
-                arbitrage_positions = [pos for pos in group_positions if not pos.get('comment', '').startswith('RECOVERY_')]
-                recovery_positions = [pos for pos in group_positions if pos.get('comment', '').startswith('RECOVERY_')]
+                # แยกประเภทไม้ (รองรับทั้ง 'RECOVERY_' และ 'R' format)
+                arbitrage_positions = [pos for pos in group_positions if not self._is_recovery_comment(pos.get('comment', ''))]
+                recovery_positions = [pos for pos in group_positions if self._is_recovery_comment(pos.get('comment', ''))]
                 
                 # เพิ่ม recovery orders ที่มี magic number อื่น
                 for recovery_pos in recovery_positions_all:
@@ -2650,7 +2664,7 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"Error getting position age: {e}")
             return 999999.0
-    
+
     def _is_recovery_order(self, position: Dict) -> bool:
         """Check if position is a recovery order - updated for short format"""
         comment = position.get('comment', '')
@@ -2717,7 +2731,7 @@ class CorrelationManager:
                 # เช็คว่าเปิด chain recovery ไหม
                 if not self.chain_recovery_enabled:
                     self.logger.debug(f"❌ {ticket}_{symbol}: Is recovery order (chain recovery disabled)")
-                    return False
+                return False
                 
                 # เช็ค chain depth
                 chain_depth = self._get_recovery_chain_depth(ticket, symbol)
@@ -3161,7 +3175,7 @@ class CorrelationManager:
                     self.logger.info("✅ Successfully connected to MT5")
                 except Exception as e:
                     self.logger.error(f"❌ Error connecting to MT5: {e}")
-                    return
+                return
             
             # Get all MT5 positions
             all_positions = self.broker.get_all_positions()

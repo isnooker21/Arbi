@@ -724,7 +724,12 @@ class MainWindow:
                 
                 # Add to appropriate group and category
                 if group_id in groups_data:
-                    if comment.startswith('RECOVERY_'):
+                    # Check if recovery (support multiple formats)
+                    is_recovery = (comment.startswith('RECOVERY_') or 
+                                  comment.startswith('R') or 
+                                  'RECOVERY' in comment.upper())
+                    
+                    if is_recovery:
                         # Recovery positions
                         if pnl > 0:
                             groups_data[group_id]['profit_correlation'].append(position_data)
