@@ -28,8 +28,8 @@ class SettingsWindow:
         
         # Create settings window
         self.settings_window = tk.Toplevel(parent)
-        self.settings_window.title("System Settings")
-        self.settings_window.geometry("800x600")
+        self.settings_window.title("⚙️ System Settings - การตั้งค่าระบบ")
+        self.settings_window.geometry("1000x700")
         self.settings_window.configure(bg='#2b2b2b')
         
         # Load settings
@@ -42,18 +42,21 @@ class SettingsWindow:
         """Load settings from configuration files"""
         try:
             # Load main settings
-            with open('config/settings.json', 'r') as f:
+            with open('config/settings.json', 'r', encoding='utf-8') as f:
                 self.settings = json.load(f)
             
             # Load broker config
-            with open('config/broker_config.json', 'r') as f:
+            with open('config/broker_config.json', 'r', encoding='utf-8') as f:
                 broker_config = json.load(f)
                 self.settings['broker_config'] = broker_config
             
-            # Load rules
-            with open('config/rules.json', 'r') as f:
-                rules = json.load(f)
-                self.settings['rules'] = rules
+            # Load rules (if exists)
+            if os.path.exists('config/rules.json'):
+                with open('config/rules.json', 'r', encoding='utf-8') as f:
+                    rules = json.load(f)
+                    self.settings['rules'] = rules
+            else:
+                self.settings['rules'] = {}
             
             # Load adaptive params
             with open('config/adaptive_params.json', 'r', encoding='utf-8') as f:
@@ -306,10 +309,156 @@ class SettingsWindow:
         
         ttk.Button(rules_controls, text="Reset to Default", 
                   command=self.reset_rules).pack(side=tk.LEFT, padx=5)
+    
+    def create_adaptive_params_tab(self, notebook):
+        """สร้าง Adaptive Parameters tab (ค่าที่ใช้งานจริง)"""
+        adaptive_frame = ttk.Frame(notebook)
+        notebook.add(adaptive_frame, text="⚙️ Adaptive Params")
+        
+        # Create scrollable frame
+        canvas = tk.Canvas(adaptive_frame, bg='#2b2b2b')
+        scrollbar = ttk.Scrollbar(adaptive_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # === 1. Recovery Parameters (การแก้ไม้) ===
+        self.create_section_header(scrollable_frame, "🔧 Recovery Parameters (การแก้ไม้)")
+        recovery_params = [
+            ("ขาดทุนขั้นต่ำ (%)", "adaptive_params.recovery_params.loss_thresholds.min_loss_percent", 
+             "float", -0.02, 0.0, "เช่น -0.005 = ขาดทุน 0.5% ของ balance จึงแก้ไม้"),
+            
+            ("ระยะทาง (pips)", "adaptive_params.recovery_params.loss_thresholds.min_price_distance_pips", 
+             "int", 5, 50, "เช่น 10 = ต้องห่าง 10 pips จึงแก้ไม้"),
+            
+            ("อายุไม้ขั้นต่ำ (วินาที)", "adaptive_params.recovery_params.timing.min_position_age_seconds", 
+             "int", 30, 300, "เช่น 60 = รอ 60 วินาทีก่อนแก้ไม้"),
+            
+            ("ช่วงเช็ค (วินาที)", "adaptive_params.recovery_params.timing.cooldown_between_checks", 
+             "int", 5, 60, "เช่น 10 = เช็คทุก 10 วินาที"),
+            
+            ("Correlation ขั้นต่ำ", "adaptive_params.recovery_params.correlation_thresholds.min_correlation", 
+             "float", 0.3, 0.95, "เช่น 0.6 = ต้องมี correlation >= 60%")
+        ]
+        self.create_parameter_controls(scrollable_frame, recovery_params)
+        
+        # === 2. Chain Recovery (การแก้ไม้ต่อเนื่อง) ===
+        self.create_section_header(scrollable_frame, "🔗 Chain Recovery (แก้ไม้ต่อเนื่อง)")
+        chain_params = [
+            ("เปิดใช้งาน", "adaptive_params.recovery_params.chain_recovery.enabled", 
+             "bool", "เปิด = แก้ไม้ recovery ที่ติดลบต่อได้"),
+            
+            ("ความลึกสูงสุด", "adaptive_params.recovery_params.chain_recovery.max_chain_depth", 
+             "int", 1, 5, "เช่น 2 = แก้ไม้ได้ลึก 2 ชั้น (Original → R1 → R2)"),
+            
+            ("ขาดทุนสำหรับ Chain (%)", "adaptive_params.recovery_params.chain_recovery.min_loss_percent_for_chain", 
+             "float", -0.02, 0.0, "เช่น -0.006 = ขาดทุน 0.6% จึงแก้ไม้ chain")
+        ]
+        self.create_parameter_controls(scrollable_frame, chain_params)
+        
+        # === 3. Trailing Stop (ล็อคกำไร) ===
+        self.create_section_header(scrollable_frame, "🔒 Trailing Stop (ล็อคกำไร)")
+        trailing_params = [
+            ("เปิดใช้งาน", "adaptive_params.arbitrage_params.closing.trailing_stop_enabled", 
+             "bool", "เปิด = ล็อคกำไรเมื่อราคากลับ"),
+            
+            ("ระยะ Stop (USD)", "adaptive_params.arbitrage_params.closing.trailing_stop_distance", 
+             "float", 5.0, 50.0, "เช่น 10 = ปิดเมื่อลดจาก peak $10"),
+            
+            ("กำไรขั้นต่ำ (USD)", "adaptive_params.arbitrage_params.closing.min_profit_base", 
+             "float", 1.0, 50.0, "เช่น 5 = ต้องกำไร $5 @ $10K balance"),
+            
+            ("Balance ฐาน (USD)", "adaptive_params.arbitrage_params.closing.min_profit_base_balance", 
+             "float", 5000.0, 100000.0, "เช่น 10000 = ฐาน $10K, ถ้า balance เพิ่ม → min profit เพิ่มตาม")
+        ]
+        self.create_parameter_controls(scrollable_frame, trailing_params)
+        
+        # === 4. Trend Analysis (วิเคราะห์เทรนด์) ===
+        self.create_section_header(scrollable_frame, "📊 Trend Analysis (วิเคราะห์เทรนด์)")
+        trend_params = [
+            ("เปิดใช้งาน", "adaptive_params.recovery_params.trend_analysis.enabled", 
+             "bool", "เปิด = วิเคราะห์ทิศทางตลาดก่อนแก้ไม้"),
+            
+            ("จำนวน Periods", "adaptive_params.recovery_params.trend_analysis.periods", 
+             "int", 20, 200, "เช่น 50 = ดู MA 50 periods"),
+            
+            ("Confidence ขั้นต่ำ", "adaptive_params.recovery_params.trend_analysis.confidence_threshold", 
+             "float", 0.1, 0.9, "เช่น 0.4 = ต้องมั่นใจ 40% จึงใช้ trend")
+        ]
+        self.create_parameter_controls(scrollable_frame, trend_params)
+        
+        # === 5. Position Sizing (ขนาดไม้) ===
+        self.create_section_header(scrollable_frame, "💰 Position Sizing (ขนาดไม้)")
+        sizing_params = [
+            ("Lot Multiplier", "adaptive_params.position_sizing.account_tiers.medium.lot_multiplier", 
+             "float", 0.5, 3.0, "เช่น 1.0 = ขนาดปกติ, 0.5 = ครึ่งหนึ่ง"),
+            
+            ("Base Lot Size", "adaptive_params.position_sizing.account_tiers.medium.base_lot_size", 
+             "float", 0.01, 1.0, "เช่น 0.1 = ไม้ขนาด 0.1 lot"),
+            
+            ("Lot สูงสุด (Recovery)", "adaptive_params.recovery_params.dynamic_hedge.max_hedge_lot", 
+             "float", 0.1, 5.0, "เช่น 3.0 = recovery ได้สูงสุด 3.0 lot"),
+            
+            ("Lot ต่ำสุด (Recovery)", "adaptive_params.recovery_params.dynamic_hedge.min_hedge_lot", 
+             "float", 0.01, 1.0, "เช่น 0.1 = recovery ต่ำสุด 0.1 lot")
+        ]
+        self.create_parameter_controls(scrollable_frame, sizing_params)
+        
+        # === 6. Arbitrage Settings (การตั้งค่า Arbitrage) ===
+        self.create_section_header(scrollable_frame, "⚡ Arbitrage Settings")
+        arbitrage_params = [
+            ("Threshold ขั้นต่ำ", "adaptive_params.arbitrage_params.detection.min_threshold", 
+             "float", 0.00001, 0.01, "เช่น 0.0001 = ต้องมีโอกาส arbitrage >= 0.01%"),
+            
+            ("Triangle สูงสุด", "adaptive_params.arbitrage_params.triangles.max_active_triangles", 
+             "int", 1, 10, "เช่น 4 = เปิดได้สูงสุด 4 groups พร้อมกัน"),
+            
+            ("กำไรขั้นต่ำปิด (USD)", "adaptive_params.arbitrage_params.closing.min_profit_to_close", 
+             "float", 1.0, 50.0, "เช่น 5 = ปิดเมื่อกำไร >= $5 (ไม่ scale)")
+        ]
+        self.create_parameter_controls(scrollable_frame, arbitrage_params)
+        
+        # === 7. Multi-Armed Bandit (ML) ===
+        self.create_section_header(scrollable_frame, "🤖 Multi-Armed Bandit (ML)")
+        bandit_params = [
+            ("เปิดใช้งาน", "adaptive_params.recovery_params.multi_armed_bandit.enabled", 
+             "bool", "เปิด = ใช้ ML เรียนรู้เลือก pair ที่ดีที่สุด"),
+            
+            ("Exploration Rate", "adaptive_params.recovery_params.multi_armed_bandit.exploration_rate", 
+             "float", 0.0, 1.0, "เช่น 0.2 = ทดลอง pair ใหม่ 20%"),
+            
+            ("Learning Rate", "adaptive_params.recovery_params.multi_armed_bandit.learning_rate", 
+             "float", 0.0, 1.0, "เช่น 0.1 = เรียนรู้ช้าๆ แต่มั่นคง")
+        ]
+        self.create_parameter_controls(scrollable_frame, bandit_params)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+    
+    def create_section_header(self, parent, title):
+        """สร้าง section header"""
+        header_frame = tk.Frame(parent, bg='#3b3b3b', height=30)
+        header_frame.pack(fill='x', padx=5, pady=(15, 5))
+        header_frame.pack_propagate(False)
+        
+        tk.Label(
+            header_frame,
+            text=title,
+            font=('Arial', 11, 'bold'),
+            bg='#3b3b3b',
+            fg='#FFD700'
+        ).pack(side='left', padx=10, pady=5)
         
     def create_parameter_controls(self, parent, parameters):
-        """Create parameter controls for settings"""
-        self.parameter_vars = {}
+        """Create parameter controls for settings with Thai descriptions"""
+        if not hasattr(self, 'parameter_vars'):
+            self.parameter_vars = {}
         
         for i, param in enumerate(parameters):
             param_name = param[0]
@@ -325,11 +474,25 @@ class SettingsWindow:
             
             # Get current value
             current_value = self.get_nested_value(self.settings, param_path)
+            if current_value is None:
+                current_value = 0.0 if param_type == "float" else 0 if param_type == "int" else False
             
             if param_type == "bool":
                 # Boolean checkbox
                 var = tk.BooleanVar(value=current_value)
                 ttk.Checkbutton(param_frame, variable=var).pack(side=tk.LEFT, padx=5)
+                
+                # Description (if provided)
+                if len(param) > 3:
+                    description = param[3]
+                    desc_label = tk.Label(
+                        param_frame,
+                        text=f"({description})",
+                        font=('Arial', 8),
+                        bg='#2b2b2b',
+                        fg='#888888'
+                    )
+                    desc_label.pack(side=tk.LEFT, padx=5)
                 
             elif param_type == "choice":
                 # Choice combobox
@@ -340,20 +503,56 @@ class SettingsWindow:
             elif param_type == "int":
                 # Integer entry
                 var = tk.StringVar(value=str(current_value))
-                entry = ttk.Entry(param_frame, textvariable=var, width=20)
+                entry = ttk.Entry(param_frame, textvariable=var, width=15)
                 entry.pack(side=tk.LEFT, padx=5)
                 
-                # Add validation
-                entry.bind('<FocusOut>', lambda e, v=var: self.validate_int(v))
+                # Add validation with range
+                if len(param) > 4:
+                    min_val, max_val = param[3], param[4]
+                    entry.bind('<FocusOut>', lambda e, v=var, mn=min_val, mx=max_val: self.validate_int_range(v, mn, mx))
+                else:
+                    entry.bind('<FocusOut>', lambda e, v=var: self.validate_int(v))
+                
+                # Description (if provided)
+                if len(param) > 5:
+                    description = param[5]
+                    desc_label = tk.Label(
+                        param_frame,
+                        text=description,
+                        font=('Arial', 8),
+                        bg='#2b2b2b',
+                        fg='#888888',
+                        wraplength=300,
+                        justify='left'
+                    )
+                    desc_label.pack(side=tk.LEFT, padx=5)
                 
             elif param_type == "float":
                 # Float entry
                 var = tk.StringVar(value=str(current_value))
-                entry = ttk.Entry(param_frame, textvariable=var, width=20)
+                entry = ttk.Entry(param_frame, textvariable=var, width=15)
                 entry.pack(side=tk.LEFT, padx=5)
                 
-                # Add validation
-                entry.bind('<FocusOut>', lambda e, v=var: self.validate_float(v))
+                # Add validation with range
+                if len(param) > 4:
+                    min_val, max_val = param[3], param[4]
+                    entry.bind('<FocusOut>', lambda e, v=var, mn=min_val, mx=max_val: self.validate_float_range(v, mn, mx))
+                else:
+                    entry.bind('<FocusOut>', lambda e, v=var: self.validate_float(v))
+                
+                # Description (if provided)
+                if len(param) > 5:
+                    description = param[5]
+                    desc_label = tk.Label(
+                        param_frame,
+                        text=description,
+                        font=('Arial', 8),
+                        bg='#2b2b2b',
+                        fg='#888888',
+                        wraplength=300,
+                        justify='left'
+                    )
+                    desc_label.pack(side=tk.LEFT, padx=5)
             
             # Store variable reference
             self.parameter_vars[param_path] = var
@@ -439,6 +638,15 @@ class SettingsWindow:
         except ValueError:
             var.set("0")
     
+    def validate_int_range(self, var, min_val, max_val):
+        """Validate integer input with range"""
+        try:
+            value = int(var.get())
+            value = max(min_val, min(max_val, value))
+            var.set(str(value))
+        except ValueError:
+            var.set(str(min_val))
+    
     def validate_float(self, var):
         """Validate float input"""
         try:
@@ -446,6 +654,15 @@ class SettingsWindow:
             var.set(str(value))
         except ValueError:
             var.set("0.0")
+    
+    def validate_float_range(self, var, min_val, max_val):
+        """Validate float input with range"""
+        try:
+            value = float(var.get())
+            value = max(min_val, min(max_val, value))
+            var.set(f"{value:.6f}".rstrip('0').rstrip('.'))
+        except ValueError:
+            var.set(str(min_val))
     
     def load_rules_into_text(self):
         """Load rules into text area"""
@@ -520,30 +737,47 @@ class SettingsWindow:
                 value = var.get()
                 
                 # Convert value based on type
-                if param_path.startswith('broker_config.'):
+                if isinstance(value, bool):
+                    # Already boolean
+                    pass
+                elif param_path.startswith('broker_config.'):
                     # Broker config values
-                    if value.lower() in ['true', 'false']:
-                        value = value.lower() == 'true'
-                    elif value.isdigit():
-                        value = int(value)
-                    elif value.replace('.', '').isdigit():
-                        value = float(value)
+                    if isinstance(value, str):
+                        if value.lower() in ['true', 'false']:
+                            value = value.lower() == 'true'
+                        elif value.isdigit():
+                            value = int(value)
+                        elif value.replace('.', '').replace('-', '').isdigit():
+                            value = float(value)
+                elif param_path.startswith('adaptive_params.'):
+                    # Adaptive params values
+                    if isinstance(value, str):
+                        # Check for boolean
+                        if value.lower() in ['true', 'false', '1', '0']:
+                            value = value.lower() in ['true', '1']
+                        # Check for int (no decimal point and no negative sign after first char)
+                        elif '.' not in value and value.lstrip('-').isdigit():
+                            value = int(value)
+                        # Check for float
+                        elif value.replace('.', '').replace('-', '').isdigit():
+                            value = float(value)
                 elif param_path.endswith('.learning_enabled'):
-                    value = value.lower() == 'true'
+                    if isinstance(value, str):
+                        value = value.lower() == 'true'
                 elif param_path.endswith(('.max_triangles', '.max_grid_levels', '.position_hold_time', 
                                         '.max_rules_per_category', '.performance_lookback_days')):
-                    value = int(value)
+                    value = int(value) if isinstance(value, str) else value
                 elif param_path.endswith(('.base_lot_size', '.min_arbitrage_threshold', '.max_spread',
                                         '.max_drawdown_percent', '.position_size_multiplier', 
                                         '.take_profit_percent', '.confidence_threshold')):
-                    value = float(value)
+                    value = float(value) if isinstance(value, str) else value
                 
                 self.set_nested_value(self.settings, param_path, value)
             
             # Save to files
             self.save_settings_to_files()
             
-            messagebox.showinfo("Success", "Settings saved successfully")
+            messagebox.showinfo("สำเร็จ", "บันทึกการตั้งค่าเรียบร้อยแล้ว!\n\n⚠️ กรุณา Restart ระบบเพื่อใช้งานค่าใหม่")
             self.settings_window.destroy()
             
         except Exception as e:
@@ -553,17 +787,22 @@ class SettingsWindow:
         """Save settings to configuration files"""
         try:
             # Save main settings
-            main_settings = {k: v for k, v in self.settings.items() if k not in ['broker_config', 'rules']}
-            with open('config/settings.json', 'w') as f:
-                json.dump(main_settings, f, indent=2)
+            main_settings = {k: v for k, v in self.settings.items() if k not in ['broker_config', 'rules', 'adaptive_params']}
+            with open('config/settings.json', 'w', encoding='utf-8') as f:
+                json.dump(main_settings, f, indent=2, ensure_ascii=False)
             
             # Save broker config
-            with open('config/broker_config.json', 'w') as f:
-                json.dump(self.settings.get('broker_config', {}), f, indent=2)
+            with open('config/broker_config.json', 'w', encoding='utf-8') as f:
+                json.dump(self.settings.get('broker_config', {}), f, indent=2, ensure_ascii=False)
             
-            # Save rules
-            with open('config/rules.json', 'w') as f:
-                json.dump(self.settings.get('rules', {}), f, indent=2)
+            # Save rules (if exists)
+            if self.settings.get('rules'):
+                with open('config/rules.json', 'w', encoding='utf-8') as f:
+                    json.dump(self.settings.get('rules', {}), f, indent=2, ensure_ascii=False)
+            
+            # Save adaptive params
+            with open('config/adaptive_params.json', 'w', encoding='utf-8') as f:
+                json.dump(self.settings.get('adaptive_params', {}), f, indent=2, ensure_ascii=False)
                 
         except Exception as e:
             raise Exception(f"Failed to save settings to files: {str(e)}")

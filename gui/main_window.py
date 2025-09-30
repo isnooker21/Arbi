@@ -565,7 +565,11 @@ class MainWindow:
     
     def show_settings(self):
         """Show settings dialog"""
-        messagebox.showinfo("Settings", "Settings dialog will be implemented here")
+        try:
+            from .settings import SettingsWindow
+            settings_window = SettingsWindow(self.root)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open settings: {str(e)}")
     
     def clear_logs(self):
         """Clear log display"""
