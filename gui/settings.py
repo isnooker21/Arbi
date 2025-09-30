@@ -221,7 +221,7 @@ class SettingsWindow:
         
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-    
+        
     def create_section(self, parent, title, parameters):
         """สร้าง section พร้อม parameters"""
         section_frame = tk.Frame(parent, bg='#2d2d2d', relief='raised', bd=2)
@@ -258,24 +258,20 @@ class SettingsWindow:
         row_frame = tk.Frame(parent, bg='#2d2d2d')
         row_frame.pack(fill='x', pady=8)
         
-        # Label frame (left side)
-        label_frame = tk.Frame(row_frame, bg='#2d2d2d', width=220)
-        label_frame.pack(side='left', fill='y')
-        label_frame.pack_propagate(False)
-        
+        # Label (left side)
         tk.Label(
-            label_frame,
+            row_frame,
             text=param_name,
-            font=('Arial', 10, 'bold'),
+            font=('Arial', 11, 'bold'),
             bg='#2d2d2d',
             fg='#FFFFFF',
-            anchor='w'
-        ).pack(side='left', padx=(0, 10))
+            anchor='w',
+            width=25
+        ).pack(side='left', padx=(0, 15))
         
-        # Input frame (middle)
-        input_frame = tk.Frame(row_frame, bg='#2d2d2d', width=200)
-        input_frame.pack(side='left')
-        input_frame.pack_propagate(False)
+        # Input frame (middle) - ไม่ใช้ pack_propagate(False)
+        input_frame = tk.Frame(row_frame, bg='#2d2d2d')
+        input_frame.pack(side='left', padx=(0, 15))
         
         # Get current value
         current_value = self.get_nested_value(self.settings, param_path)
@@ -322,15 +318,16 @@ class SettingsWindow:
             entry = tk.Entry(
                 input_frame,
                 textvariable=var,
-                width=12,
-                font=('Consolas', 11, 'bold'),
+                width=15,
+                font=('Consolas', 12, 'bold'),
                 bg='#FFFFFF',
                 fg='#000000',
-                insertbackground='#000000',
+                insertbackground='#FF0000',
                 relief='solid',
-                bd=1
+                bd=2,
+                justify='center'
             )
-            entry.pack(side='left', padx=5, pady=2)
+            entry.pack(side='left', padx=5, pady=2, ipady=3)
             
             # Add validation with range
             if len(param) > 4:
