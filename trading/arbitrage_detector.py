@@ -28,6 +28,7 @@ import threading
 # import talib  # ไม่ใช้ในระบบนี้
 import time
 from utils.calculations import TradingCalculations
+from utils.symbol_mapper import SymbolMapper
 
 class TriangleArbitrageDetector:
     def __init__(self, broker_api, ai_engine=None, correlation_manager=None):
@@ -89,6 +90,9 @@ class TriangleArbitrageDetector:
         # Initialize pairs and combinations after logger is set
         self.available_pairs = self._get_available_pairs()
         
+        # 🆕 Symbol Mapper - จับคู่ชื่อคู่เงินกับนามสกุลจริงของ Broker
+        self.symbol_mapper = SymbolMapper()
+        
         # ใช้ 6 สามเหลี่ยม Arbitrage แยกกัน (Optimized - ทุกคู่ซ้ำ Hedged!)
         self.arbitrage_pairs = [
             'EURUSD', 'GBPUSD', 'EURGBP',  # Group 1
@@ -107,6 +111,9 @@ class TriangleArbitrageDetector:
             ('NZDUSD', 'USDCHF', 'NZDCHF'),    # Group 5: NZD/USD(BUY), USD/CHF(SELL), NZD/CHF ✅ Hedged
             ('AUDUSD', 'NZDUSD', 'AUDNZD')     # Group 6: AUD/USD(SELL), NZD/USD(SELL), AUD/NZD ✅ Hedged
         ]
+        
+        # 🆕 Scan and Map Symbols from Broker
+        self._initialize_symbol_mapping()
         
         # เริ่มต้นตัวนับกลุ่มสำหรับแต่ละสามเหลี่ยม
         for i, triangle in enumerate(self.triangle_combinations, 1):
@@ -181,35 +188,70 @@ class TriangleArbitrageDetector:
                 self.logger.warning(f"Using fallback pairs: {len(fallback_pairs)} pairs")
                 return fallback_pairs
             
-            # Filter only Major and Minor pairs
-            major_minor_currencies = ['EUR', 'USD', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD']
-            available_pairs = []
-            
-            for pair in all_pairs:
-                # Debug logging for first few pairs
-                if len(available_pairs) < 5:
-                    self.logger.info(f"Processing pair: {pair} (type: {type(pair)})")
-                
-                # Handle both string and dict formats
-                pair_str = pair if isinstance(pair, str) else str(pair)
-                
-                # Check if pair contains only major/minor currencies
-                if len(pair_str) == 6:  # Standard pair format like EURUSD
-                    currency1 = pair_str[:3]
-                    currency2 = pair_str[3:]
-                    if currency1 in major_minor_currencies and currency2 in major_minor_currencies:
-                        available_pairs.append(pair_str)
-            
-            self.logger.info(f"Filtered {len(available_pairs)} Major/Minor pairs from broker")
-            if len(available_pairs) <= 20:  # Show all if small number
-                self.logger.info(f"Available pairs: {', '.join(available_pairs)}")
-            else:  # Show first 20 if many
-                self.logger.info(f"Available pairs (first 20): {', '.join(available_pairs[:20])}")
-            return available_pairs
+            # Return all pairs (no filtering) - SymbolMapper will handle matching
+            return all_pairs
             
         except Exception as e:
             self.logger.error(f"Error getting available pairs: {e}")
             return []
+    
+    def _initialize_symbol_mapping(self):
+        """สแกนและจับคู่ symbol จาก broker"""
+        try:
+            self.logger.info("=" * 60)
+            self.logger.info("🔍 Initializing Symbol Mapping System...")
+            self.logger.info("=" * 60)
+            
+            # รวมคู่เงินทั้งหมดที่เราต้องการใช้
+            required_pairs = list(set(self.arbitrage_pairs))
+            
+            # เพิ่มคู่เงินที่อาจใช้ใน recovery (28 pairs)
+            recovery_pairs = [
+                # Major Pairs
+                'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD',
+                # EUR Crosses
+                'EURGBP', 'EURJPY', 'EURCHF', 'EURAUD', 'EURCAD', 'EURNZD',
+                # GBP Crosses
+                'GBPJPY', 'GBPCHF', 'GBPAUD', 'GBPCAD', 'GBPNZD',
+                # JPY Crosses
+                'AUDJPY', 'CADJPY', 'CHFJPY', 'NZDJPY',
+                # AUD Crosses
+                'AUDCAD', 'AUDCHF', 'AUDNZD',
+                # NZD Crosses
+                'NZDCAD', 'NZDCHF',
+                # CAD Crosses
+                'CADCHF'
+            ]
+            
+            required_pairs.extend(recovery_pairs)
+            required_pairs = list(set(required_pairs))  # ลบซ้ำ
+            
+            self.logger.info(f"📊 Required pairs: {len(required_pairs)}")
+            
+            # Scan and map
+            mapping_result = self.symbol_mapper.scan_and_map(self.available_pairs, required_pairs)
+            
+            # Validate required pairs for arbitrage
+            arbitrage_validation = self.symbol_mapper.validate_required_pairs(self.arbitrage_pairs)
+            missing_arb_pairs = [p for p, valid in arbitrage_validation.items() if not valid]
+            
+            if missing_arb_pairs:
+                self.logger.error("=" * 60)
+                self.logger.error("❌ Missing required arbitrage pairs:")
+                for pair in missing_arb_pairs:
+                    self.logger.error(f"   {pair}")
+                self.logger.error("=" * 60)
+                self.logger.error("⚠️ System may not work properly without these pairs!")
+            else:
+                self.logger.info("=" * 60)
+                self.logger.info("✅ All required arbitrage pairs are available!")
+                self.logger.info("=" * 60)
+            
+            # Show summary
+            self.logger.info("\n" + self.symbol_mapper.get_mapping_summary())
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error initializing symbol mapping: {e}")
         
     # Method removed - not used in simple system
     
@@ -615,9 +657,12 @@ class TriangleArbitrageDetector:
                     # ใช้ magic number สำหรับสามเหลี่ยมนี้
                     magic_number = self.triangle_magic_numbers.get(triangle_name, 234000)
                     
-                    self.logger.info(f"🔍 Thread {result_index}: Sending {order_data['symbol']} {order_data['direction']} {lot_size} lot (Magic: {magic_number})")
+                    # 🆕 แปลง symbol ผ่าน mapper
+                    real_symbol = self.symbol_mapper.get_real_symbol(order_data['symbol'])
+                    
+                    self.logger.info(f"🔍 Thread {result_index}: Sending {order_data['symbol']} → {real_symbol} {order_data['direction']} {lot_size} lot (Magic: {magic_number})")
                     result = self.broker.place_order(
-                        symbol=order_data['symbol'],
+                        symbol=real_symbol,
                         order_type=order_data['direction'],
                         volume=lot_size,
                         comment=comment,
@@ -691,8 +736,10 @@ class TriangleArbitrageDetector:
             for result in results:
                 if result and result['success']:
                     orders_sent += 1
+                    # 🆕 แปลง symbol ผ่าน mapper
+                    real_symbol = self.symbol_mapper.get_real_symbol(result['symbol'])
                     # ดึงราคาปัจจุบันเป็น entry price
-                    entry_price = self.broker.get_current_price(result['symbol'])
+                    entry_price = self.broker.get_current_price(real_symbol)
                     if not entry_price:
                         entry_price = 0.0
                     
@@ -985,7 +1032,7 @@ class TriangleArbitrageDetector:
                 
         except Exception as e:
             self.logger.error(f"Error checking group status: {e}")
-    
+            
     def _should_start_recovery_from_mt5(self, magic_num: int, triangle_type: str) -> bool:
         """ตรวจสอบว่าควรเริ่ม recovery หรือไม่ - เช็คจาก MT5 จริงๆ"""
         try:
@@ -1825,10 +1872,15 @@ class TriangleArbitrageDetector:
         try:
             pair1, pair2, pair3 = triangle
             
+            # 🆕 แปลง symbols ผ่าน mapper
+            real_pair1 = self.symbol_mapper.get_real_symbol(pair1)
+            real_pair2 = self.symbol_mapper.get_real_symbol(pair2)
+            real_pair3 = self.symbol_mapper.get_real_symbol(pair3)
+            
             # Get current prices
-            price1 = self.broker.get_current_price(pair1)
-            price2 = self.broker.get_current_price(pair2)
-            price3 = self.broker.get_current_price(pair3)
+            price1 = self.broker.get_current_price(real_pair1)
+            price2 = self.broker.get_current_price(real_pair2)
+            price3 = self.broker.get_current_price(real_pair3)
             
             if price1 is None or price2 is None or price3 is None:
                 # Log missing prices for first few triangles to debug

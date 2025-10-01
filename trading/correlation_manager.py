@@ -151,9 +151,10 @@ class CorrelationManager:
                 comment.startswith('R') or
                 'RECOVERY' in comment.upper())
     
-    def __init__(self, broker_api, ai_engine=None):
+    def __init__(self, broker_api, ai_engine=None, symbol_mapper=None):
         self.broker = broker_api
         self.ai_engine = ai_engine  # ✅ Enable AI engine for correlation data
+        self.symbol_mapper = symbol_mapper  # 🆕 Symbol Mapper for translating pair names
         self.correlation_matrix = {}
         self.is_running = False
         self.logger = logging.getLogger(__name__)
@@ -1311,8 +1312,11 @@ class CorrelationManager:
                 self.logger.warning(f"Could not get entry price for {symbol} (Order: {order_id})")
                 return 0.0
             
+            # 🆕 แปลง symbol ผ่าน mapper
+            real_symbol = self.symbol_mapper.get_real_symbol(symbol) if self.symbol_mapper else symbol
+            
             # ดึงราคาปัจจุบัน
-            current_price = self.broker.get_current_price(symbol)
+            current_price = self.broker.get_current_price(real_symbol)
             if not current_price or current_price <= 0:
                 self.logger.warning(f"Could not get current price for {symbol}")
                 return 0.0
@@ -1365,7 +1369,9 @@ class CorrelationManager:
                 for pos in all_positions:
                     if pos['ticket'] == order_id:
                         entry_price = pos.get('price', 0.0)  # ใช้ 'price' แทน 'price_open'
-                        current_price = self.broker.get_current_price(symbol)
+                        # 🆕 แปลง symbol ผ่าน mapper
+                        real_symbol = self.symbol_mapper.get_real_symbol(symbol) if self.symbol_mapper else symbol
+                        current_price = self.broker.get_current_price(real_symbol)
                         if current_price and entry_price:
                             if 'JPY' in symbol:
                                 calc_distance = abs(current_price - entry_price) * 100
@@ -1597,7 +1603,9 @@ class CorrelationManager:
             entry_price = recovery_pair.get('entry_price', 0)
             if entry_price > 0:
                 try:
-                    current_price = self.broker.get_current_price(symbol)
+                    # 🆕 แปลง symbol ผ่าน mapper
+                    real_symbol = self.symbol_mapper.get_real_symbol(symbol) if self.symbol_mapper else symbol
+                    current_price = self.broker.get_current_price(real_symbol)
                     if current_price > 0:
                         # คำนวณ price distance ตามประเภทคู่เงิน
                         if 'JPY' in symbol:
@@ -1878,9 +1886,13 @@ class CorrelationManager:
     def _calculate_real_correlation_from_mt5(self, base_symbol: str, target_symbol: str) -> float:
         """คำนวณ correlation จริงจากข้อมูล MT5 แบบยืดหยุ่น"""
         try:
+            # 🆕 แปลง symbols ผ่าน mapper
+            real_base = self.symbol_mapper.get_real_symbol(base_symbol) if self.symbol_mapper else base_symbol
+            real_target = self.symbol_mapper.get_real_symbol(target_symbol) if self.symbol_mapper else target_symbol
+            
             # ดึงข้อมูลราคาจาก MT5
-            base_price = self.broker.get_current_price(base_symbol)
-            target_price = self.broker.get_current_price(target_symbol)
+            base_price = self.broker.get_current_price(real_base)
+            target_price = self.broker.get_current_price(real_target)
             
             if not base_price or not target_price:
                 return self._calculate_dynamic_correlation(base_symbol, target_symbol)
@@ -2404,9 +2416,12 @@ class CorrelationManager:
             # Determine direction based on correlation
             order_type = self._calculate_hedge_direction(original_position, symbol)
             
+            # 🆕 แปลง symbol ผ่าน mapper
+            real_symbol = self.symbol_mapper.get_real_symbol(symbol) if self.symbol_mapper else symbol
+            
             # ส่งออเดอร์
             result = self.broker.place_order(
-                symbol=symbol,
+                symbol=real_symbol,
                 order_type=order_type,  # ใช้ทิศทางที่ถูกต้อง
                 volume=lot_size,
                 comment=comment,
@@ -2670,7 +2685,9 @@ class CorrelationManager:
             if not symbol or entry_price == 0:
                 return 0.0
             
-            current_price = self.broker.get_current_price(symbol)
+            # 🆕 แปลง symbol ผ่าน mapper
+            real_symbol = self.symbol_mapper.get_real_symbol(symbol) if self.symbol_mapper else symbol
+            current_price = self.broker.get_current_price(real_symbol)
             if not current_price:
                 return 0.0
             

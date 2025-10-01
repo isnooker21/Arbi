@@ -239,6 +239,10 @@ class TradingSystem:
                 self.adaptive_engine,  # Pass adaptive_engine to arbitrage_detector
                 self.correlation_manager  # Pass correlation_manager to arbitrage_detector
             )
+            
+            # 🆕 Pass symbol_mapper from arbitrage_detector to correlation_manager
+            self.correlation_manager.symbol_mapper = self.arbitrage_detector.symbol_mapper
+            
             self.logger.info("Trading components initialized")
             
             # Update adaptive engine with the initialized components
