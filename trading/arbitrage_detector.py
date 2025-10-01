@@ -345,10 +345,19 @@ class TriangleArbitrageDetector:
                     if triangle_magic in active_magic_numbers:
                         active_triangles.append(triangle_name)
                         
-                        # ตรวจสอบว่าควรปิด Group หรือไม่
-                        if self._should_close_group_from_mt5(triangle_magic, triangle_name):
-                            self.logger.info(f"✅ Group {triangle_name} meets closing criteria - closing group")
-                            group_id = f"group_{triangle_name}_1"
+                        # ตรวจสอบว่าควรปิด Group หรือไม่ (ใช้ Trailing Stop Logic)
+                        group_id = f"group_{triangle_name}_1"
+                        
+                        # ถ้ามี group_data ใน active_groups ให้ใช้ _should_close_group (มี Trailing Stop!)
+                        if group_id in self.active_groups:
+                            group_data = self.active_groups[group_id]
+                            if self._should_close_group(group_id, group_data):
+                                self.logger.info(f"✅ Group {triangle_name} meets closing criteria (Trailing Stop) - closing group")
+                                self._close_group_by_magic(triangle_magic, group_id)
+                                closed_triangles.append(triangle_name)
+                        else:
+                            # ถ้าไม่มีใน active_groups แต่มี positions ใน MT5 → orphan positions → ปิดเลย
+                            self.logger.warning(f"⚠️ Found orphan positions for {triangle_name} (not in active_groups) - closing")
                             self._close_group_by_magic(triangle_magic, group_id)
                             closed_triangles.append(triangle_name)
                         continue
@@ -977,70 +986,6 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error checking group status: {e}")
     
-    def _should_close_group_from_mt5(self, magic_num: int, triangle_type: str) -> bool:
-        """ตรวจสอบว่าควรปิด Group หรือไม่ - เช็คจาก MT5 จริงๆ"""
-        try:
-            all_positions = self.broker.get_all_positions()
-            group_positions = []
-            total_pnl = 0.0
-            
-            for pos in all_positions:
-                if pos.get('magic', 0) == magic_num:
-                    group_positions.append(pos)
-                    total_pnl += pos.get('profit', 0)
-            
-            if not group_positions:
-                return True  # ปิด Group ที่ไม่มี positions
-            
-            # ✅ NEW: ดึง recovery PnL และคำนวณ net PnL
-            recovery_pnl = 0.0
-            group_id = f"group_{triangle_type}_1"  # Construct group_id from triangle_type
-            if self.correlation_manager:
-                recovery_pnl = self._get_recovery_pnl_for_group(group_id)
-            
-            net_pnl = total_pnl + recovery_pnl
-            
-            # ✅ NEW: ตรวจสอบ net PnL แทน arbitrage PnL เท่านั้น
-            if net_pnl > 0:
-                self.logger.info(f"💰 Group {triangle_type} has NET profit: ${net_pnl:.2f}")
-                self.logger.info(f"   Arbitrage: ${total_pnl:.2f}, Recovery: ${recovery_pnl:.2f}")
-                return True
-            
-            # FALLBACK: ถ้า arbitrage PnL เดี่ยวมีกำไร
-            if total_pnl > 0:
-                self.logger.info(f"💰 Group {triangle_type} has arbitrage profit: ${total_pnl:.2f} - Ready to close")
-                return True
-            
-            # ตรวจสอบ price distance สำหรับการปิด Group
-            max_price_distance = 0
-            for pos in group_positions:
-                symbol = pos.get('symbol', '')
-                entry_price = pos.get('price', 0)
-                
-                try:
-                    current_price = self.broker.get_current_price(symbol)
-                    if entry_price > 0 and current_price > 0:
-                        if 'JPY' in symbol:
-                            price_distance = abs(current_price - entry_price) * 100
-                        else:
-                            price_distance = abs(current_price - entry_price) * 10000
-                        
-                        max_price_distance = max(max_price_distance, price_distance)
-                except Exception as e:
-                    continue
-            
-            # ✅ NEW: ถ้าระยะห่างมากกว่า 10 pips และ net PnL > 0 ให้ปิด Group
-            if max_price_distance >= 10 and net_pnl > 0:
-                self.logger.info(f"✅ Group {triangle_type} meets price distance criteria:")
-                self.logger.info(f"   Distance: {max_price_distance:.1f} pips, Net PnL: ${net_pnl:.2f}")
-                return True
-            
-            return False
-            
-        except Exception as e:
-            self.logger.error(f"Error checking if should close group from MT5: {e}")
-            return False
-            
     def _should_start_recovery_from_mt5(self, magic_num: int, triangle_type: str) -> bool:
         """ตรวจสอบว่าควรเริ่ม recovery หรือไม่ - เช็คจาก MT5 จริงๆ"""
         try:
