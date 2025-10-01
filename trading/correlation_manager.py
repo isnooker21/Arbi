@@ -3520,3 +3520,27 @@ class CorrelationManager:
             self.logger.info("🛑 Correlation Manager stopped")
         except Exception as e:
             self.logger.debug(f"Error stopping Correlation Manager: {e}")
+    
+    def reload_config(self):
+        """โหลดการตั้งค่าใหม่จาก config file (Hot Reload!)"""
+        try:
+            self.logger.info("🔄 Reloading config from adaptive_params.json...")
+            self._load_config_from_file()
+            
+            # Reinitialize ML components if needed
+            if self.ml_logging_enabled and not hasattr(self, 'ml_logger'):
+                from data.ml_logger import MLRecoveryLogger
+                self.ml_logger = MLRecoveryLogger()
+            
+            if self.bandit_enabled and not hasattr(self, 'pair_bandit'):
+                from data.pair_selector_bandit import PairSelectorBandit
+                self.pair_bandit = PairSelectorBandit(
+                    exploration_rate=self.bandit_exploration_rate,
+                    learning_rate=self.bandit_learning_rate
+                )
+            
+            self.logger.info("✅ Config reloaded successfully!")
+            return True
+        except Exception as e:
+            self.logger.error(f"❌ Error reloading config: {e}")
+            return False

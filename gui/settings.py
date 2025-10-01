@@ -13,8 +13,9 @@ import os
 from typing import Dict, Any
 
 class SettingsWindow:
-    def __init__(self, parent):
+    def __init__(self, parent, trading_system=None):
         self.parent = parent
+        self.trading_system = trading_system
         self.settings = {}
         self.original_settings = {}
         self.parameter_vars = {}
@@ -432,10 +433,33 @@ class SettingsWindow:
             with open('config/adaptive_params.json', 'w', encoding='utf-8') as f:
                 json.dump(self.settings, f, indent=2, ensure_ascii=False)
             
-            messagebox.showinfo(
-                "✅ สำเร็จ", 
-                "บันทึกการตั้งค่าเรียบร้อยแล้ว!\n\n⚠️ กรุณา Restart ระบบเพื่อใช้งานค่าใหม่"
-            )
+            # 🆕 Auto Reload Config (ไม่ต้อง Restart!)
+            reload_success = False
+            if self.trading_system:
+                try:
+                    # Reload correlation_manager config
+                    if hasattr(self.trading_system, 'correlation_manager') and self.trading_system.correlation_manager:
+                        self.trading_system.correlation_manager.reload_config()
+                    
+                    # Reload arbitrage_detector config
+                    if hasattr(self.trading_system, 'arbitrage_detector') and self.trading_system.arbitrage_detector:
+                        self.trading_system.arbitrage_detector.reload_config()
+                    
+                    reload_success = True
+                except Exception as e:
+                    messagebox.showwarning("⚠️ Warning", f"บันทึกสำเร็จ แต่ reload ไม่ได้: {str(e)}\n\nกรุณา Restart ระบบ")
+            
+            if reload_success:
+                messagebox.showinfo(
+                    "✅ สำเร็จ", 
+                    "บันทึกและโหลดค่าใหม่เรียบร้อยแล้ว!\n\n✅ ค่าใหม่ทำงานทันที ไม่ต้อง Restart!"
+                )
+            else:
+                messagebox.showinfo(
+                    "✅ สำเร็จ", 
+                    "บันทึกการตั้งค่าเรียบร้อยแล้ว!\n\n⚠️ กรุณา Restart ระบบเพื่อใช้งานค่าใหม่"
+                )
+            
             self.settings_window.destroy()
             
         except Exception as e:

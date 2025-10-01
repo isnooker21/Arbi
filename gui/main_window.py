@@ -567,7 +567,7 @@ class MainWindow:
         """Show settings dialog"""
         try:
             from .settings import SettingsWindow
-            settings_window = SettingsWindow(self.root)
+            settings_window = SettingsWindow(self.root, self.trading_system)
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open settings: {str(e)}")
     

@@ -1229,23 +1229,29 @@ class TriangleArbitrageDetector:
                     # เริ่ม trailing stop
                     trailing_data['active'] = True
                     trailing_data['peak'] = net_pnl
-                    trailing_data['stop'] = net_pnl - self.trailing_stop_distance
+                    trailing_data['stop'] = max(0, net_pnl - self.trailing_stop_distance)  # ✅ Never Cut Loss!
                     self.logger.info(f"🎯 {group_id} Trailing Stop ACTIVATED: Peak=${net_pnl:.2f}, Stop=${trailing_data['stop']:.2f}")
                 else:
                     # อัปเดต peak ถ้ากำไรเพิ่ม
                     if net_pnl > trailing_data['peak']:
                         trailing_data['peak'] = net_pnl
-                        trailing_data['stop'] = net_pnl - self.trailing_stop_distance
+                        trailing_data['stop'] = max(0, net_pnl - self.trailing_stop_distance)  # ✅ Never Cut Loss!
                         self.logger.info(f"📈 {group_id} Peak Updated: ${net_pnl:.2f}, Stop=${trailing_data['stop']:.2f}")
                     
-                    # เช็คว่า hit trailing stop ไหม
-                    if net_pnl < trailing_data['stop']:
+                    # เช็คว่า hit trailing stop ไหม (และต้องกำไรด้วย!)
+                    if net_pnl < trailing_data['stop'] and net_pnl > 0:
                         self.logger.info(f"🚨 {group_id} TRAILING STOP HIT!")
                         self.logger.info(f"   Peak: ${trailing_data['peak']:.2f}")
                         self.logger.info(f"   Stop: ${trailing_data['stop']:.2f}")
                         self.logger.info(f"   Current Net: ${net_pnl:.2f}")
                         self.logger.info(f"   Locking profit: ${net_pnl:.2f} ✅")
                         return True
+                    elif net_pnl < trailing_data['stop'] and net_pnl <= 0:
+                        # ถ้า hit stop แต่ติดลบ → ยกเลิก trailing, รอ recovery
+                        self.logger.warning(f"⚠️ {group_id} Hit stop but negative (${net_pnl:.2f}) - Canceling trailing, waiting for recovery")
+                        trailing_data['active'] = False
+                        trailing_data['peak'] = 0.0
+                        trailing_data['stop'] = 0.0
             
             # 🆕 STEP 3: เช็ค Min Profit (ไม่มี trailing stop)
             if net_pnl >= min_profit_threshold and not trailing_data['active']:
@@ -2563,3 +2569,42 @@ class TriangleArbitrageDetector:
                 self.active_groups[group_id].update(enhanced_data)
         except Exception as e:
             self.logger.error(f"Error updating active groups with enhanced data: {e}")
+    
+    def reload_config(self):
+        """โหลดการตั้งค่าใหม่จาก config file (Hot Reload!)"""
+        try:
+            import json
+            import os
+            
+            self.logger.info("🔄 Reloading arbitrage config from adaptive_params.json...")
+            
+            config_path = 'config/adaptive_params.json'
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                
+                # Reload arbitrage params
+                arb_params = config.get('arbitrage_params', {})
+                closing = arb_params.get('closing', {})
+                
+                # Update trailing stop settings
+                self.trailing_stop_distance = closing.get('trailing_stop_distance', 10.0)
+                self.min_profit_base = closing.get('min_profit_base', 5.0)
+                self.min_profit_base_balance = closing.get('min_profit_base_balance', 10000.0)
+                
+                # Update max triangles
+                triangles = arb_params.get('triangles', {})
+                # Note: max_active_triangles affects new groups only
+                
+                self.logger.info("✅ Arbitrage config reloaded!")
+                self.logger.info(f"   Trailing Stop: ${self.trailing_stop_distance}")
+                self.logger.info(f"   Min Profit: ${self.min_profit_base} @ ${self.min_profit_base_balance}")
+                
+                return True
+            else:
+                self.logger.warning("⚠️ Config file not found")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error reloading arbitrage config: {e}")
+            return False
