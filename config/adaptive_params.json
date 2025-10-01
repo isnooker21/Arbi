@@ -168,11 +168,12 @@
     "closing": {
       "enable_net_pnl_check": true,
       "min_profit_to_close": 5,
-      "min_profit_base": 5.0,
+      "min_profit_base": 10.0,
       "min_profit_base_balance": 10000.0,
       "trailing_stop_enabled": true,
       "trailing_stop_distance": 10.0,
-      "description": "Min profit $5 @ $10K balance, scales with balance. Trailing stop $10 from peak."
+      "lock_profit_percentage": 0.5,
+      "description": "Min profit $10 @ $10K balance, scales with balance. Trailing stop $10 from peak. Lock 50% of peak."
     },
     "execution": {
       "max_slippage": 0.0005,

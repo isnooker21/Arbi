@@ -140,9 +140,10 @@ class TriangleArbitrageDetector:
         # 🆕 Trailing Stop System (Group-Level)
         self.group_trailing_stops = {}  # {group_id: {'peak': float, 'stop': float, 'active': bool}}
         self.trailing_stop_distance = 10.0  # $10 distance from peak
+        self.lock_profit_percentage = 0.5  # Lock 50% of peak profit
         
         # 🆕 Min Profit Threshold (Scale with Balance)
-        self.min_profit_base = 5.0  # $5 for $10K balance
+        self.min_profit_base = 10.0  # $10 for $10K balance
         self.min_profit_base_balance = 10000.0  # Base balance
         
         # If no triangles generated, create fallback triangles
@@ -1211,7 +1212,7 @@ class TriangleArbitrageDetector:
             balance_multiplier = balance / self.min_profit_base_balance
             min_profit_threshold = self.min_profit_base * balance_multiplier
             
-            self.logger.debug(f"💰 {group_id}: Balance=${balance:.2f}, Min Profit=${min_profit_threshold:.2f} (Base $5 @ $10K)")
+            self.logger.debug(f"💰 {group_id}: Balance=${balance:.2f}, Min Profit=${min_profit_threshold:.2f} (Base $10 @ $10K)")
             
             # 🆕 STEP 2: Trailing Stop Logic
             if group_id not in self.group_trailing_stops:
@@ -1229,14 +1230,16 @@ class TriangleArbitrageDetector:
                     # เริ่ม trailing stop
                     trailing_data['active'] = True
                     trailing_data['peak'] = net_pnl
-                    trailing_data['stop'] = max(0, net_pnl - self.trailing_stop_distance)  # ✅ Never Cut Loss!
-                    self.logger.info(f"🎯 {group_id} Trailing Stop ACTIVATED: Peak=${net_pnl:.2f}, Stop=${trailing_data['stop']:.2f}")
+                    # 🔒 Lock 50% of Peak: Stop = max(Peak × 0.5, Peak - Distance)
+                    trailing_data['stop'] = max(net_pnl * self.lock_profit_percentage, net_pnl - self.trailing_stop_distance)
+                    self.logger.info(f"🎯 {group_id} Trailing Stop ACTIVATED: Peak=${net_pnl:.2f}, Stop=${trailing_data['stop']:.2f} (Lock {self.lock_profit_percentage*100:.0f}%)")
                 else:
                     # อัปเดต peak ถ้ากำไรเพิ่ม
                     if net_pnl > trailing_data['peak']:
                         trailing_data['peak'] = net_pnl
-                        trailing_data['stop'] = max(0, net_pnl - self.trailing_stop_distance)  # ✅ Never Cut Loss!
-                        self.logger.info(f"📈 {group_id} Peak Updated: ${net_pnl:.2f}, Stop=${trailing_data['stop']:.2f}")
+                        # 🔒 Lock 50% of Peak: Stop = max(Peak × 0.5, Peak - Distance)
+                        trailing_data['stop'] = max(net_pnl * self.lock_profit_percentage, net_pnl - self.trailing_stop_distance)
+                        self.logger.info(f"📈 {group_id} Peak Updated: ${net_pnl:.2f}, Stop=${trailing_data['stop']:.2f} (Lock {self.lock_profit_percentage*100:.0f}%)")
                     
                     # เช็คว่า hit trailing stop ไหม (และต้องกำไรด้วย!)
                     if net_pnl < trailing_data['stop'] and net_pnl > 0:
@@ -2589,8 +2592,9 @@ class TriangleArbitrageDetector:
                 
                 # Update trailing stop settings
                 self.trailing_stop_distance = closing.get('trailing_stop_distance', 10.0)
-                self.min_profit_base = closing.get('min_profit_base', 5.0)
+                self.min_profit_base = closing.get('min_profit_base', 10.0)
                 self.min_profit_base_balance = closing.get('min_profit_base_balance', 10000.0)
+                self.lock_profit_percentage = closing.get('lock_profit_percentage', 0.5)
                 
                 # Update max triangles
                 triangles = arb_params.get('triangles', {})
@@ -2599,6 +2603,7 @@ class TriangleArbitrageDetector:
                 self.logger.info("✅ Arbitrage config reloaded!")
                 self.logger.info(f"   Trailing Stop: ${self.trailing_stop_distance}")
                 self.logger.info(f"   Min Profit: ${self.min_profit_base} @ ${self.min_profit_base_balance}")
+                self.logger.info(f"   Lock Profit: {self.lock_profit_percentage*100:.0f}% of Peak")
                 
                 return True
             else:
