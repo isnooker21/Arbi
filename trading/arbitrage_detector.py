@@ -889,9 +889,15 @@ class TriangleArbitrageDetector:
                     created_at = datetime.fromisoformat(created_at)
                 
                 if (datetime.now() - created_at).total_seconds() > 86400:  # 24 hours
-                    self.logger.warning(f"⏰ Group {group_id} expired after 24 hours")
-                    groups_to_close.append(group_id)
-                    continue
+                    # ✅ เช็คผ่าน _should_close_group() แทน (มี Min $10 + Trailing Stop + Lock 50%)
+                    if self._should_close_group(group_id, group_data):
+                        self.logger.warning(f"⏰ Group {group_id} expired after 24 hours AND meets closing criteria")
+                        groups_to_close.append(group_id)
+                        continue
+                    else:
+                        self.logger.warning(f"⏰ Group {group_id} expired but not profitable enough (Min: $10) - waiting for recovery")
+                        # ไม่ปิด - ให้ recovery ทำงานต่อ (Never Cut Loss!)
+                        continue
                 
                 # ตรวจสอบ PnL จริงของแต่ละตำแหน่ง (รวม recovery positions)
                 total_group_pnl = 0.0
@@ -984,34 +990,12 @@ class TriangleArbitrageDetector:
                 # self.logger.info(f"   💰 Account Balance: {account_balance:.2f} USD")  # DISABLED - too verbose
                 # self.logger.info(f"   📊 Profit Percentage: {profit_percentage:.3f}%")  # DISABLED - too verbose
                 
-                # คำนวณกำไรต่อ lot เดี่ยว (รวม recovery positions)
-                # นับจำนวน positions ทั้งหมด (arbitrage + recovery) using order_tracker
-                total_positions_count = len(group_data['positions'])
-                if self.correlation_manager:
-                    all_orders = self.correlation_manager.order_tracker.get_all_orders()
-                    recovery_count = sum(1 for order_data in all_orders.values() 
-                                       if (order_data.get('type') == 'RECOVERY' and 
-                                           order_data.get('group_id') == group_id and 
-                                           order_data.get('status') != 'HEDGED'))
-                    total_positions_count += recovery_count
-                
-                # ใช้จำนวน positions จริงในการคำนวณ
-                if total_positions_count > 0:
-                    profit_per_single_lot = total_group_pnl / total_positions_count
-                else:
-                    profit_per_single_lot = 0.0
-                
-                # self.logger.info(f"   📊 Total Positions: {total_positions_count} (Arbitrage: {len(group_data['positions'])}, Recovery: {total_positions_count - len(group_data['positions'])})")  # DISABLED - too verbose
-                
-                # ปิดกลุ่มเมื่อกำไรต่อ lot เดี่ยว ถึงเป้าหมาย
-                if profit_per_single_lot >= self.profit_threshold_per_lot:
-                    self.logger.info(f"✅ Closing {group_id} - Profit: ${total_group_pnl:.2f}")
+                # 🆕 ใช้ _should_close_group() แทน logic เก่า (มี Trailing Stop + Never Cut Loss!)
+                if self._should_close_group(group_id, group_data):
+                    self.logger.info(f"✅ Group {group_id} meets closing criteria (Trailing Stop)")
                     groups_to_close.append(group_id)
-                elif total_group_pnl > 0:
-                    self.logger.info(f"💰 Group {group_id} profitable but below threshold - Total PnL: {total_group_pnl:.2f} USD")
-                    self.logger.info(f"   🎯 Profit per single lot: {profit_per_single_lot:.2f} USD (Target: {self.profit_threshold_per_lot} USD)")
-                else:
-                    # ตรวจสอบว่าควรเริ่ม recovery หรือไม่
+                elif total_group_pnl < 0:
+                    # ถ้ายังติดลบ ตรวจสอบว่าควรเริ่ม recovery หรือไม่
                     triangle_type = group_data.get('triangle_type', 'unknown')
                     triangle_magic = self.triangle_magic_numbers.get(triangle_type, 234000)
                     
