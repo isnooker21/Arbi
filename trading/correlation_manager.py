@@ -2525,10 +2525,8 @@ class CorrelationManager:
                     skipped_reasons['not_found_mt5'] += 1
                     continue
                 
-                # ✅ CRITICAL FIX: Skip recovery orders completely
-                if self._is_recovery_order(position):
-                    skipped_reasons['already_recovery'] += 1
-                    continue
+                # 🔗 ไม่ Skip Recovery Orders - ให้ _meets_recovery_conditions() จัดการ Chain Recovery
+                # (มี logic chain recovery อยู่แล้วใน _meets_recovery_conditions)
                 
                 # ✅ CRITICAL: Double-check if this specific ticket is already hedged
                 if self.order_tracker.is_order_hedged(ticket, symbol):
@@ -2797,7 +2795,7 @@ class CorrelationManager:
                 # เช็คว่าเปิด chain recovery ไหม
                 if not self.chain_recovery_enabled:
                     self.logger.debug(f"❌ {ticket}_{symbol}: Is recovery order (chain recovery disabled)")
-                return False
+                    return False
                 
                 # เช็ค chain depth
                 chain_depth = self._get_recovery_chain_depth(ticket, symbol)
