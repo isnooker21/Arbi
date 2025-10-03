@@ -2957,15 +2957,11 @@ class CorrelationManager:
                 return
             
             for recovery_key in recovery_orders:
-                self.logger.info(f"🔍 Processing recovery_key: {recovery_key}")
-                
                 if recovery_key in self.order_tracker.order_tracking:
                     recovery_info = self.order_tracker.order_tracking[recovery_key]
                     recovery_symbol = recovery_info.get('symbol', '')
                     recovery_ticket = recovery_info.get('ticket', '')
                     recovery_status = recovery_info.get('status', 'UNKNOWN')
-                    
-                    self.logger.info(f"🔍 Recovery info: {recovery_symbol} | Ticket: {recovery_ticket} | Status: {recovery_status}")
                     
                     # หา recovery position จาก MT5
                     recovery_position = self._get_position_by_ticket(recovery_ticket)
