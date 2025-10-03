@@ -779,22 +779,9 @@ class CorrelationManager:
                                 self.logger.info(f"   - HG แล้ว")
                                 
                                 
-                                # แสดง recovery orders ต่อท้ายคู่เงิน
+                                # แสดงโซ่การแก้ไม้แบบหลายชั้น (recursive)
                                 if recovery_orders:
-                                    for recovery_key in recovery_orders:
-                                        if recovery_key in self.order_tracker.order_tracking:
-                                            recovery_info = self.order_tracker.order_tracking[recovery_key]
-                                            recovery_symbol = recovery_info.get('symbol', '')
-                                            recovery_ticket = recovery_info.get('ticket', '')
-                                            
-                                            # หา recovery position จาก MT5
-                                            recovery_position = self._get_position_by_ticket(recovery_ticket)
-                                            if recovery_position:
-                                                recovery_pnl = recovery_position.get('profit', 0)
-                                                recovery_icon = "🟢" if recovery_pnl >= 0 else "🔴"
-                                                self.logger.info(f"     └─ {recovery_symbol:8s}: ${recovery_pnl:8.2f} {recovery_icon} [RECOVERY]")
-                                            else:
-                                                self.logger.info(f"     └─ {recovery_symbol:8s}: [CLOSED] [RECOVERY]")
+                                    self._display_recovery_chain(recovery_orders, indent_level=2)
                         else:
                             self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} {pnl_icon}")
                 
