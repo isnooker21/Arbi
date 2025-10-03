@@ -348,18 +348,11 @@ class TriangleArbitrageDetector:
                             # ถ้าไม่มีใน active_groups แต่มี positions ใน MT5 → orphan positions
                             self.logger.warning(f"⚠️ Found orphan positions for {triangle_name} (not in active_groups)")
                             
-                            # 🆕 เช็ค PnL ก่อนปิด (Never Cut Loss!)
+                            # 🆕 ไม่มีการปิดทันทีอีกต่อไป ให้ reconstruct เสมอ แล้วให้ Trailing Stop เป็นผู้ตัดสินใจ
                             all_positions = self.broker.get_all_positions()
                             orphan_pnl = sum(pos.get('profit', 0) for pos in all_positions if pos.get('magic', 0) == triangle_magic)
-                            
-                            if orphan_pnl > 0:
-                                self.logger.info(f"💰 Orphan group profitable (${orphan_pnl:.2f}) - closing")
-                                self._close_group_by_magic(triangle_magic, group_id)
-                                closed_triangles.append(triangle_name)
-                            else:
-                                self.logger.warning(f"💸 Orphan group losing (${orphan_pnl:.2f}) - Never Cut Loss! Attempting to reconstruct...")
-                                # พยายาม reconstruct group_data
-                                self._reconstruct_orphan_group(triangle_name, triangle_magic, group_id)
+                            self.logger.info(f"🔄 Orphan current PnL: ${orphan_pnl:.2f} → Reconstructing group and delegating to Trailing Stop...")
+                            self._reconstruct_orphan_group(triangle_name, triangle_magic, group_id)
                         continue
                         
                         # ตรวจสอบ recovery จะทำใน _check_and_close_groups
@@ -1223,13 +1216,8 @@ class TriangleArbitrageDetector:
                         trailing_data['peak'] = 0.0
                         trailing_data['stop'] = 0.0
             
-            # 🆕 STEP 3: เช็ค Min Profit (ไม่มี trailing stop)
-            if net_pnl >= min_profit_threshold and not trailing_data['active']:
-                self.logger.info(f"💰 Group {group_id} reached Min Profit: ${net_pnl:.2f} >= ${min_profit_threshold:.2f}")
-                self.logger.info(f"   Arbitrage PnL: ${total_pnl:.2f}")
-                self.logger.info(f"   Recovery PnL: ${recovery_pnl:.2f}")
-                self.logger.info(f"   Ready to close!")
-                return True
+            # 🆕 STEP 3: ไม่ปิดทันทีที่ถึง Min Profit — ให้ Trailing Stop ควบคุมเท่านั้น
+            # หากเพิ่งถึงขั้นต่ำ ให้รอให้ trailing_data['active'] ถูกตั้งในรอบนี้ แล้วค่อยพิจารณา HIT ในรอบถัดไป
             
             # ✅ FALLBACK: แสดงสถานะถ้ากำไรแต่ยังไม่ถึง threshold
             if net_pnl > 0:
