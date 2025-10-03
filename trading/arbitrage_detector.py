@@ -253,59 +253,6 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"❌ Error initializing symbol mapping: {e}")
         
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
-    
-    # Method removed - not used in simple system
     
     def start_detection(self):
         """Start the simple trading system"""
@@ -398,10 +345,21 @@ class TriangleArbitrageDetector:
                                 self._close_group_by_magic(triangle_magic, group_id)
                                 closed_triangles.append(triangle_name)
                         else:
-                            # ถ้าไม่มีใน active_groups แต่มี positions ใน MT5 → orphan positions → ปิดเลย
-                            self.logger.warning(f"⚠️ Found orphan positions for {triangle_name} (not in active_groups) - closing")
-                            self._close_group_by_magic(triangle_magic, group_id)
-                            closed_triangles.append(triangle_name)
+                            # ถ้าไม่มีใน active_groups แต่มี positions ใน MT5 → orphan positions
+                            self.logger.warning(f"⚠️ Found orphan positions for {triangle_name} (not in active_groups)")
+                            
+                            # 🆕 เช็ค PnL ก่อนปิด (Never Cut Loss!)
+                            all_positions = self.broker.get_all_positions()
+                            orphan_pnl = sum(pos.get('profit', 0) for pos in all_positions if pos.get('magic', 0) == triangle_magic)
+                            
+                            if orphan_pnl > 0:
+                                self.logger.info(f"💰 Orphan group profitable (${orphan_pnl:.2f}) - closing")
+                                self._close_group_by_magic(triangle_magic, group_id)
+                                closed_triangles.append(triangle_name)
+                            else:
+                                self.logger.warning(f"💸 Orphan group losing (${orphan_pnl:.2f}) - Never Cut Loss! Attempting to reconstruct...")
+                                # พยายาม reconstruct group_data
+                                self._reconstruct_orphan_group(triangle_name, triangle_magic, group_id)
                         continue
                         
                         # ตรวจสอบ recovery จะทำใน _check_and_close_groups
@@ -798,29 +756,7 @@ class TriangleArbitrageDetector:
     
     def _send_arbitrage_order(self, symbol: str, direction: str, group_id: str, triangle_name: str = None) -> bool:
         """ส่งออเดอร์ arbitrage"""
-        try:
-            # ตรวจสอบว่าส่งออเดอร์ arbitrage แล้วหรือไม่ (สำหรับระบบเก่า - ไม่ใช้แล้ว)
-            # if self.arbitrage_sent:
-            #     self.logger.warning(f"🚫 ส่งออเดอร์ arbitrage แล้ว - หยุดส่งออเดอร์ {symbol}")
-            #     return {
-            #         'success': False,
-            #         'order_id': None,
-            #         'symbol': symbol,
-            #         'direction': direction,
-            #         'error': 'Arbitrage already sent'
-            #     }
-            
-            # ตรวจสอบเพิ่มเติม: ตรวจสอบว่าคู่เงินนี้ถูกใช้แล้วหรือไม่ (สำหรับระบบเก่า - ไม่ใช้แล้ว)
-            # if symbol in self.used_currency_pairs:
-            #     self.logger.warning(f"🚫 คู่เงิน {symbol} ถูกใช้แล้ว - หยุดส่งออเดอร์")
-            #     return {
-            #         'success': False,
-            #         'order_id': None,
-            #         'symbol': symbol,
-            #         'direction': direction,
-            #         'error': 'Currency pair already in use'
-            #     }
-            
+        try:            
             # สร้าง comment ที่แสดงกลุ่มและลำดับ
             if triangle_name:
                 triangle_number = triangle_name.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
@@ -883,21 +819,8 @@ class TriangleArbitrageDetector:
             groups_to_close = []
             
             for group_id, group_data in list(self.active_groups.items()):
-                # ตรวจสอบว่ากลุ่มหมดเวลา 24 ชั่วโมง
-                created_at = group_data['created_at']
-                if isinstance(created_at, str):
-                    created_at = datetime.fromisoformat(created_at)
-                
-                if (datetime.now() - created_at).total_seconds() > 86400:  # 24 hours
-                    # ✅ เช็คผ่าน _should_close_group() แทน (มี Min $10 + Trailing Stop + Lock 50%)
-                    if self._should_close_group(group_id, group_data):
-                        self.logger.warning(f"⏰ Group {group_id} expired after 24 hours AND meets closing criteria")
-                        groups_to_close.append(group_id)
-                        continue
-                    else:
-                        self.logger.warning(f"⏰ Group {group_id} expired but not profitable enough (Min: $10) - waiting for recovery")
-                        # ไม่ปิด - ให้ recovery ทำงานต่อ (Never Cut Loss!)
-                        continue
+                # 🆕 ลบ Timeout 24h - Never Cut Loss = Never Expire!
+                # ให้ _should_close_group() (Trailing Stop) ตัดสินเดี่ยว
                 
                 # ตรวจสอบ PnL จริงของแต่ละตำแหน่ง (รวม recovery positions)
                 total_group_pnl = 0.0
@@ -1122,6 +1045,27 @@ class TriangleArbitrageDetector:
                 self.logger.warning(f"No positions found for magic {magic_num}")
                 return
             
+            # 🆕 Safety Check: คำนวณ Net PnL ก่อนปิด (Never Cut Loss!)
+            arbitrage_pnl = sum(pos.get('profit', 0) for pos in positions_to_close)
+            recovery_pnl = 0.0
+            if self.correlation_manager:
+                recovery_pnl = self._get_recovery_pnl_for_group(group_id)
+            
+            net_pnl = arbitrage_pnl + recovery_pnl
+            
+            self.logger.info(f"💰 Closing Group {group_id}:")
+            self.logger.info(f"   Arbitrage PnL: ${arbitrage_pnl:.2f}")
+            self.logger.info(f"   Recovery PnL: ${recovery_pnl:.2f}")
+            self.logger.info(f"   Net PnL: ${net_pnl:.2f}")
+            
+            if net_pnl < 0:
+                self.logger.error(f"❌❌❌ BLOCKED! Net PnL is NEGATIVE: ${net_pnl:.2f}")
+                self.logger.error(f"   NEVER CUT LOSS! Group {group_id} will NOT be closed!")
+                self.logger.error(f"   Waiting for recovery to turn profitable...")
+                return
+            
+            self.logger.info(f"✅ Net PnL is POSITIVE (${net_pnl:.2f}) - Proceeding to close...")
+            
             # ปิด positions ทั้งหมด
             for pos in positions_to_close:
                 try:
@@ -1152,6 +1096,52 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error closing group by magic: {e}")
     
+    def _reconstruct_orphan_group(self, triangle_name: str, triangle_magic: int, group_id: str):
+        """Reconstruct orphan group data from MT5 positions"""
+        try:
+            self.logger.info(f"🔄 Attempting to reconstruct orphan group: {group_id}")
+            
+            # ดึง positions จาก MT5
+            all_positions = self.broker.get_all_positions()
+            orphan_positions = [pos for pos in all_positions if pos.get('magic', 0) == triangle_magic]
+            
+            if not orphan_positions:
+                self.logger.warning(f"⚠️ No positions found for reconstruction")
+                return
+            
+            # สร้าง group_data ใหม่
+            group_data = {
+                'group_id': group_id,
+                'triangle': self.triangle_combinations[int(triangle_name.split('_')[1]) - 1] if len(self.triangle_combinations) >= int(triangle_name.split('_')[1]) else ('EURUSD', 'GBPUSD', 'EURGBP'),
+                'triangle_type': triangle_name,
+                'created_at': datetime.now(),  # ใช้เวลาปัจจุบัน
+                'positions': [],
+                'status': 'active',
+                'total_pnl': 0.0,
+                'recovery_chain': []
+            }
+            
+            # เพิ่ม positions ลง group_data
+            for pos in orphan_positions:
+                group_data['positions'].append({
+                    'symbol': pos.get('symbol', ''),
+                    'direction': pos.get('type', 'BUY'),
+                    'order_id': pos.get('ticket'),
+                    'lot_size': pos.get('volume', 0.1),
+                    'entry_price': pos.get('price', 0.0),
+                    'entry_time': datetime.now()  # ไม่รู้เวลาจริง ใช้ปัจจุบัน
+                })
+            
+            # บันทึกลง active_groups
+            self.active_groups[group_id] = group_data
+            self._save_active_groups()
+            
+            self.logger.info(f"✅ Reconstructed orphan group: {group_id} with {len(orphan_positions)} positions")
+            self.logger.info(f"   Group will now be managed by Trailing Stop logic")
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error reconstructing orphan group: {e}")
+    
     def _should_close_group(self, group_id: str, group_data: Dict) -> bool:
         """ตรวจสอบว่าควรปิด Group หรือไม่ - ตรวจสอบกำไรรวม"""
         try:
@@ -1171,7 +1161,8 @@ class TriangleArbitrageDetector:
             
             if not group_positions:
                 self.logger.warning(f"⚠️ No positions found for group {group_id} (Magic: {triangle_magic})")
-                return True  # ปิด Group ที่ไม่มี positions
+                self.logger.warning(f"   This could be a timing issue or positions already closed")
+                return False  # ✅ ไม่ปิด! (Never Cut Loss - หา positions ไม่เจอไม่ควรปิด)
             
             # ✅ NEW: ดึง recovery PnL และคำนวณ net PnL
             recovery_pnl = 0.0
@@ -1310,9 +1301,6 @@ class TriangleArbitrageDetector:
             
             group_data = self.active_groups[group_id]
             
-            self.logger.info(f"🔄 Closing arbitrage group {group_id}")
-            self.logger.info(f"   🚀 Closing orders simultaneously...")
-            
             # ปิดออเดอร์พร้อมกันทั้งกลุ่มด้วย threading (ใช้ magic number)
             triangle_type = group_data.get('triangle_type', 'unknown')
             triangle_magic = self.triangle_magic_numbers.get(triangle_type, 234000)
@@ -1324,6 +1312,38 @@ class TriangleArbitrageDetector:
                 magic = pos.get('magic', 0)
                 if magic == triangle_magic:
                     positions_to_close.append(pos)
+            
+            # 🆕 FINAL SAFETY CHECK: คำนวณ Net PnL อีกครั้งก่อนปิด! (Never Cut Loss!)
+            arbitrage_pnl = sum(pos.get('profit', 0) for pos in positions_to_close)
+            recovery_pnl = 0.0
+            if self.correlation_manager:
+                recovery_pnl = self._get_recovery_pnl_for_group(group_id)
+            
+            net_pnl = arbitrage_pnl + recovery_pnl
+            
+            self.logger.info(f"🔍 FINAL CHECK before closing Group {group_id}:")
+            self.logger.info(f"   Arbitrage PnL: ${arbitrage_pnl:.2f}")
+            self.logger.info(f"   Recovery PnL: ${recovery_pnl:.2f}")
+            self.logger.info(f"   Net PnL: ${net_pnl:.2f}")
+            
+            if net_pnl < 0:
+                self.logger.error(f"❌❌❌ BLOCKED! Net PnL turned NEGATIVE: ${net_pnl:.2f}")
+                self.logger.error(f"   Price moved during execution window (Race Condition)!")
+                self.logger.error(f"   NEVER CUT LOSS! Group {group_id} will NOT be closed!")
+                self.logger.error(f"   Canceling Trailing Stop, waiting for recovery...")
+                
+                # ยกเลิก Trailing Stop (ให้เริ่มใหม่เมื่อกลับมาบวก)
+                if group_id in self.group_trailing_stops:
+                    self.group_trailing_stops[group_id]['active'] = False
+                    self.group_trailing_stops[group_id]['peak'] = 0.0
+                    self.group_trailing_stops[group_id]['stop'] = 0.0
+                    self.logger.warning(f"   🔄 Trailing Stop canceled for {group_id}")
+                
+                return
+            
+            self.logger.info(f"✅ Net PnL is POSITIVE (${net_pnl:.2f}) - Proceeding to close...")
+            self.logger.info(f"🔄 Closing arbitrage group {group_id}")
+            self.logger.info(f"   🚀 Closing orders simultaneously...")
             
             orders_closed = 0
             close_results = []
@@ -1483,22 +1503,7 @@ class TriangleArbitrageDetector:
                         self.used_currency_pairs[triangle_type].discard(pair)
                 del self.group_currency_mapping[group_id]
                 self.logger.info(f"   📊 คู่เงินที่ปลดล็อค: {group_pairs}")
-            
-            # ลบ comment ออกจาก used_currency_pairs (สำหรับระบบเก่า - ไม่ใช้แล้ว)
-            # triangle_type = group_data.get('triangle_type', 'unknown')
-            # triangle_number = triangle_type.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
-            # comments_to_remove = []
-            # for comment in list(self.used_currency_pairs):
-            #     if comment.startswith(f"G{triangle_number}_"):
-            #         comments_to_remove.append(comment)
-            # 
-            # for comment in comments_to_remove:
-            #     self.used_currency_pairs.discard(comment)
-            #     self.logger.debug(f"🗑️ Removed comment from used_currency_pairs: {comment}")
-            # 
-            # if comments_to_remove:
-            #     self.logger.info(f"   🔄 Comments removed: {comments_to_remove}")
-            
+                        
             # ปิด recovery positions ที่เกี่ยวข้องกับกลุ่มนี้ (using order_tracker)
             correlation_pnl = 0.0
             recovery_positions_closed = 0
