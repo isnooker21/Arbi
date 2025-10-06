@@ -273,15 +273,15 @@ class SettingsWindow:
         # Input frame (middle) - ไม่ใช้ pack_propagate(False)
         input_frame = tk.Frame(row_frame, bg='#2d2d2d')
         input_frame.pack(side='left', padx=(0, 15))
-        
-        # Get current value
-        current_value = self.get_nested_value(self.settings, param_path)
+            
+            # Get current value
+            current_value = self.get_nested_value(self.settings, param_path)
         if current_value is None:
             current_value = 0.0 if param_type == "float" else 0 if param_type == "int" else False
-        
-        if param_type == "bool":
+            
+            if param_type == "bool":
             # Boolean checkbox with custom style
-            var = tk.BooleanVar(value=current_value)
+                var = tk.BooleanVar(value=current_value)
             cb = tk.Checkbutton(
                 input_frame,
                 variable=var,
@@ -425,7 +425,7 @@ class SettingsWindow:
                     elif '.' not in value and value.lstrip('-').isdigit():
                         value = int(value)
                     elif value.replace('.', '', 1).replace('-', '', 1).isdigit():
-                        value = float(value)
+                    value = float(value)
                 
                 self.set_nested_value(self.settings, param_path, value)
             
@@ -482,7 +482,7 @@ class SettingsWindow:
             if messagebox.askyesno("⚠️ ยืนยัน", "มีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก\n\nต้องการปิดหน้าต่างโดยไม่บันทึกใช่หรือไม่?"):
                 self.settings_window.destroy()
         else:
-            self.settings_window.destroy()
+        self.settings_window.destroy()
     
     def show(self):
         """Show the settings window"""
