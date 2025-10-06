@@ -781,7 +781,13 @@ class CorrelationManager:
                                 
                                 # แสดงโซ่การแก้ไม้แบบหลายชั้น (recursive)
                                 if recovery_orders:
-                                    self._display_recovery_chain(recovery_orders, indent_level=2)
+                                    self._display_recovery_chain(
+                                        recovery_orders,
+                                        parent_symbol=symbol,
+                                        parent_ticket=ticket,
+                                        indent_level=2,
+                                        visited=set()
+                                    )
                         else:
                             self.logger.info(f"   {symbol:8s}: ${pnl:8.2f} {pnl_icon}")
                 
@@ -2944,19 +2950,23 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"Error starting recovery: {e}")
     
-    def _display_recovery_chain(self, recovery_orders: List[str], indent_level: int = 1):
-        """Display recovery chain recursively"""
+    def _display_recovery_chain(self, recovery_orders: List[str], parent_symbol: str = "", parent_ticket: str = "", indent_level: int = 1, visited: Set[str] = None):
+        """Display recovery chain recursively and show hedge linkage.
+        Example:
+           └─ EURGBP (R:34009119) → hedge GBPUSD (T:3398xxx): $-5.38 🔴
+        """
         try:
+            if visited is None:
+                visited = set()
             indent = "   " + "  " * indent_level  # เพิ่ม indent ตาม level
             
-            # Debug: แสดงจำนวน recovery orders
-            self.logger.info(f"🔍 _display_recovery_chain: Processing {len(recovery_orders)} recovery orders")
-            
             if not recovery_orders:
-                self.logger.info("🔍 No recovery orders to display")
                 return
             
             for recovery_key in recovery_orders:
+                if recovery_key in visited:
+                    continue
+                visited.add(recovery_key)
                 if recovery_key in self.order_tracker.order_tracking:
                     recovery_info = self.order_tracker.order_tracking[recovery_key]
                     recovery_symbol = recovery_info.get('symbol', '')
@@ -2968,20 +2978,27 @@ class CorrelationManager:
                     if recovery_position:
                         recovery_pnl = recovery_position.get('profit', 0)
                         recovery_icon = "🟢" if recovery_pnl >= 0 else "🔴"
-                        self.logger.info(f"{indent}- {recovery_symbol:8s}: ${recovery_pnl:8.2f} {recovery_icon}")
+                        linkage = f" → hedge {parent_symbol} (T:{parent_ticket})" if parent_symbol else ""
+                        self.logger.info(f"{indent}└─ {recovery_symbol} (R:{recovery_ticket}){linkage}: ${recovery_pnl:,.2f} {recovery_icon}")
                         
                         # ตรวจสอบว่า recovery order นี้ถูก hedge หรือไม่
                         if recovery_status == 'HEDGED':
                             recovery_recovery_orders = recovery_info.get('recovery_orders', [])
                             if recovery_recovery_orders:
-                                self.logger.info(f"{indent}  - HG แล้ว")
                                 # แสดง recovery orders ของ recovery order (chain recovery)
-                                self._display_recovery_chain(recovery_recovery_orders, indent_level + 2)
+                                self._display_recovery_chain(
+                                    recovery_recovery_orders,
+                                    parent_symbol=recovery_symbol,
+                                    parent_ticket=str(recovery_ticket),
+                                    indent_level=indent_level + 1,
+                                    visited=visited
+                                )
                     else:
                         # Recovery order ไม่พบใน MT5 (อาจถูกปิดแล้ว)
-                        self.logger.info(f"{indent}- {recovery_symbol:8s}: [CLOSED]")
+                        linkage = f" → hedge {parent_symbol} (T:{parent_ticket})" if parent_symbol else ""
+                        self.logger.info(f"{indent}└─ {recovery_symbol} (R:{recovery_ticket}){linkage}: [CLOSED]")
                 else:
-                    self.logger.info(f"🔍 Recovery key {recovery_key} not found in order_tracker")
+                    pass
                         
         except Exception as e:
             self.logger.error(f"Error displaying recovery chain: {e}")
