@@ -21,8 +21,11 @@ import logging
 import signal
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
+from tkinter import messagebox
 from typing import Optional
+
+import requests
 
 # Set UTF-8 encoding for Windows
 if sys.platform == "win32":
@@ -83,6 +86,9 @@ class TradingSystem:
         self.emergency_stop = False
         self.trading_thread = None
         
+        # API base URL
+        self.api_base_url = "http://123.253.62.50:8080/api"
+
         # Auto Setup if requested
         if auto_setup:
             self._auto_setup()
@@ -93,7 +99,6 @@ class TradingSystem:
         # Setup signal handlers
         self._setup_signal_handlers()
         
-    
     def _auto_setup(self):
         """Auto Setup ระบบโดยอัตโนมัติ"""
         try:
@@ -316,7 +321,7 @@ class TradingSystem:
             if self.is_running:
                 self.logger.warning("Trading system already running")
                 return True
-            
+
             if not self.broker_api or not self.broker_api.is_connected():
                 self.logger.error("Not connected to broker - trying to connect...")
                 # Try to connect if not connected
@@ -339,6 +344,8 @@ class TradingSystem:
                     self.logger.error("Failed to connect to broker after all attempts")
                     return False
             
+            self.report_status()
+
             self.logger.info("🚀 Starting adaptive trading system...")
             
             # Start all components
@@ -361,9 +368,71 @@ class TradingSystem:
             return True
             
         except Exception as e:
+            messagebox.showerror("Error", f"Error starting trading system: {e}")
             self.logger.error(f"Error starting trading system: {e}")
             return False
     
+    def should_report_status(self):
+        """Check if it's time to report status"""
+        if hasattr(self, 'next_report_time') and self.next_report_time:
+            current_utc = datetime.now(timezone.utc)
+            next_report_utc = self.next_report_time.astimezone(timezone.utc)
+            
+            return current_utc >= next_report_utc
+        return True  # Report if no scheduled time
+
+    def report_status(self):
+        """Report the current status to the API"""
+        
+        if self.broker_api.account_info:
+            account = self.broker_api.account_info
+            status_response = requests.post(
+                f"{self.api_base_url}/customer-clients/status",
+                json={
+                    "tradingAccountId": str(account.login),
+                    "name": account.name,
+                    "brokerName": account.company,
+                    "currentBalance": str(account.balance),
+                    "currentProfit": str(account.profit),
+                    "currency": account.currency,
+                    "botName": "Arbi Adaptive Trader",
+                    "botVersion": "0.0.1"
+                },
+                timeout=10
+            )                  
+        else:
+            raise Exception("Cannot report status - no account info")
+                
+        
+        if status_response.status_code == 200:
+            response_data = status_response.json()
+            
+            # Check if trading is inactive
+            if response_data.get("processedStatus") == "inactive":
+                message = response_data.get("message", "Trading is inactive")
+                raise Exception(f"Trading is inactive. {message}")
+            
+            # Store next report time for scheduling
+            next_report_time = response_data.get("nextReportTime")
+            if next_report_time:
+                # Fix microseconds to 6 digits
+                if '.' in next_report_time and '+' in next_report_time:
+                    parts = next_report_time.split('.')
+                    microseconds = parts[1].split('+')[0]
+                    timezone_part = '+' + parts[1].split('+')[1]
+                    
+                    # Truncate microseconds to 6 digits
+                    if len(microseconds) > 6:
+                        microseconds = microseconds[:6]
+                    
+                    next_report_time = f"{parts[0]}.{microseconds}{timezone_part}"
+                
+                self.next_report_time = datetime.fromisoformat(next_report_time)
+                print(f"Next report scheduled for: {self.next_report_time}")
+                
+        else:
+            raise Exception(f"Failed to check status: {status_response.status_code}")
+
     def stop(self):
         """Stop the trading system"""
         try:
@@ -447,6 +516,15 @@ class TradingSystem:
                         self._attempt_system_recovery()
                         time.sleep(10)  # Wait 10 seconds before retry
                         continue
+
+                    if self.should_report_status():
+                        try:
+                            self.report_status()
+                        except Exception as e:
+                            self.stop()
+                            self.logger.error(f"Status report error: {e}")
+                            messagebox.showerror("Error", f"Status report error: {e}")
+                            break
                     
                     # Update market analysis
                     # Market analysis disabled for simple trading system

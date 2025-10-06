@@ -1,0 +1,10 @@
+{
+  "recovery_metrics": {
+    "total_recoveries": 0,
+    "successful_recoveries": 0,
+    "failed_recoveries": 0,
+    "avg_recovery_time_hours": 0,
+    "total_recovered_amount": 0.0
+  },
+  "saved_at": "2025-10-06T21:01:16.085340"
+}

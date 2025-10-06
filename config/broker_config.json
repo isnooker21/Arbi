@@ -1,7 +1,7 @@
 {
   "MetaTrader5": {
-    "server": "YourBroker-Server",
-    "login": 0,
+    "server": "DupoinMarkets-Real",
+    "login": 90047898,
     "password": "",
     "timeout": 30000,
     "portable": false

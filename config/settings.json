@@ -3,7 +3,13 @@
     "strategy": "adaptive_arbitrage_correlation_recovery",
     "never_cut_loss": true,
     "auto_position_sizing": true,
-    "market_regime_adaptation": true
+    "market_regime_adaptation": true,
+    "base_lot_size": 0.0,
+    "max_triangles": 0,
+    "max_grid_levels": 0,
+    "min_arbitrage_threshold": 0.0,
+    "max_spread": 0.0,
+    "position_hold_time": 0
   },
   "arbitrage": {
     "enabled": true,
@@ -31,9 +37,9 @@
     "auto_account_detection": true
   },
   "gui": {
-    "theme": "default",
-    "chart_refresh_rate": 1000,
-    "log_max_lines": 1000,
+    "theme": "dark",
+    "chart_refresh_rate": "1000",
+    "log_max_lines": "1000",
     "window_size": "1400x800",
     "show_arbitrage_opportunities": true,
     "show_active_recoveries": true,
@@ -45,5 +51,16 @@
     "performance_monitoring": true,
     "auto_rebalancing": true,
     "emergency_stop": true
+  },
+  "risk_management": {
+    "position_size_multiplier": 0.1,
+    "take_profit_percent": 0.0
+  },
+  "ai": {
+    "learning_enabled": false,
+    "rule_adaptation_frequency": "False",
+    "confidence_threshold": 0.0,
+    "max_rules_per_category": 0,
+    "performance_lookback_days": 0
   }
 }
