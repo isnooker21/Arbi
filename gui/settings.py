@@ -182,19 +182,21 @@ class SettingsWindow:
         
         # === RIGHT COLUMN ===
         
-        # 5. Position Sizing
-        self.create_section(right_column, "💰 Position Sizing (ขนาดไม้)", [
-            ("Lot Multiplier", "position_sizing.account_tiers.medium.lot_multiplier", 
-             "float", 0.5, 3.0, "เช่น 1.0 = ขนาดปกติ, 0.5 = ลดครึ่ง"),
-            ("Base Lot Size", "position_sizing.account_tiers.medium.base_lot_size", 
-             "float", 0.01, 1.0, "เช่น 0.1 = เปิดไม้ 0.1 lot"),
+        # 5. Lot Sizing (Risk-Based) ⭐ แนะนำ
+        self.create_section(right_column, "💰 Lot Sizing (Risk-Based) ⭐ แนะนำ", [
+            ("Risk per Trade (%)", "position_sizing.lot_calculation.risk_per_trade_percent", 
+             "float", 0.5, 5.0, "เช่น 1.5 = เสี่ยง 1.5% ของ balance ต่อไม้")
+        ])
+        
+        # 6. Recovery Lot Sizing (ขนาดไม้แก้)
+        self.create_section(right_column, "🔧 Recovery Lot Sizing (ขนาดไม้แก้)", [
             ("Lot สูงสุด (Recovery)", "recovery_params.dynamic_hedge.max_hedge_lot", 
-             "float", 0.1, 5.0, "เช่น 3.0 = recovery สูงสุด 3.0 lot"),
+             "float", 0.1, 10.0, "เช่น 3.0 = recovery สูงสุด 3.0 lot"),
             ("Lot ต่ำสุด (Recovery)", "recovery_params.dynamic_hedge.min_hedge_lot", 
              "float", 0.01, 1.0, "เช่น 0.1 = recovery ต่ำสุด 0.1 lot")
         ])
         
-        # 6. Arbitrage Settings
+        # 7. Arbitrage Settings
         self.create_section(right_column, "⚡ Arbitrage Settings", [
             ("Threshold ขั้นต่ำ", "arbitrage_params.detection.min_threshold", 
              "float", 0.00001, 0.01, "เช่น 0.0001 = ต้องมีส่วนต่าง >= 0.01%"),
@@ -204,7 +206,7 @@ class SettingsWindow:
              "float", 0.1, 2.0, "เช่น 0.5 = ยอมรับ spread 0.5 pips")
         ])
         
-        # 7. Multi-Armed Bandit
+        # 8. Multi-Armed Bandit
         self.create_section(right_column, "🤖 Multi-Armed Bandit (ML)", [
             ("เปิดใช้งาน ML", "recovery_params.multi_armed_bandit.enabled", 
              "bool", "เปิด = ระบบเรียนรู้เลือก pair อัตโนมัติ"),
@@ -214,14 +216,12 @@ class SettingsWindow:
              "float", 0.0, 1.0, "เช่น 0.1 = เรียนรู้ช้าๆ แต่มั่นคง")
         ])
         
-        # 8. Advanced Settings
-        self.create_section(right_column, "🎯 Advanced Settings", [
-            ("Max Position Size", "position_sizing.account_tiers.medium.max_position_size", 
-             "float", 1.0, 20.0, "เช่น 5.0 = เปิดได้สูงสุด 5.0 lot"),
-            ("Risk per Trade (%)", "position_sizing.risk_management.risk_per_trade", 
-             "float", 0.001, 0.05, "เช่น 0.015 = เสี่ยง 1.5% ต่อไม้"),
-            ("Max Groups", "position_sizing.risk_management.max_concurrent_groups", 
-             "int", 1, 10, "เช่น 4 = เปิดได้สูงสุด 4 groups")
+        # 9. System Limits
+        self.create_section(right_column, "⚙️ System Limits (ข้อจำกัดระบบ)", [
+            ("Max Portfolio Risk (%)", "position_sizing.risk_management.max_portfolio_risk", 
+             "float", 1.0, 20.0, "เช่น 8.0 = ความเสี่ยงรวมสูงสุด 8% ของ balance"),
+            ("Max Concurrent Groups", "position_sizing.risk_management.max_concurrent_groups", 
+             "int", 1, 10, "เช่น 4 = เปิดพร้อมกันได้สูงสุด 4 groups")
         ])
         
         canvas.pack(side="left", fill="both", expand=True)

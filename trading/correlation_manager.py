@@ -257,7 +257,7 @@ class CorrelationManager:
             # Use config helper to support EXE and user override
             try:
                 from utils.config_helper import load_config
-                config = load_config('adaptive_params.json')
+                config = load_config('adaptive_params.json', force_reload=True)
             except Exception:
                 # Fallback to direct path if helper unavailable
                 config_path = 'config/adaptive_params.json'
@@ -267,28 +267,32 @@ class CorrelationManager:
                 else:
                     config = {}
                 
-                # โหลด recovery parameters
-                recovery_params = config.get('recovery_params', {})
-                correlation_thresholds = recovery_params.get('correlation_thresholds', {})
-                loss_thresholds = recovery_params.get('loss_thresholds', {})
-                hedge_ratios = recovery_params.get('hedge_ratios', {})
-                timing = recovery_params.get('timing', {})
-                
-                # ตั้งค่า recovery thresholds จาก config (% based)
-                self.recovery_thresholds = {
-                    'min_correlation': correlation_thresholds.get('min_correlation', 0.6),
-                    'max_correlation': correlation_thresholds.get('max_correlation', 0.95),
-                    'min_loss_percent': loss_thresholds.get('min_loss_percent', -0.005),  # % based
-                    'use_percentage_based': loss_thresholds.get('use_percentage_based', True),
-                    'max_recovery_time_hours': timing.get('max_recovery_time_hours', 24),
-                    'hedge_ratio_range': (
-                        hedge_ratios.get('min_ratio', 0.7),
-                        hedge_ratios.get('max_ratio', 1.3)
-                    ),
-                    'wait_time_minutes': timing.get('recovery_check_interval_minutes', 5),
-                    'cooldown_between_checks': timing.get('cooldown_between_checks', 10),
-                    'base_lot_size': 0.05
-                }
+            # โหลด recovery parameters
+            recovery_params = config.get('recovery_params', {})
+            correlation_thresholds = recovery_params.get('correlation_thresholds', {})
+            loss_thresholds = recovery_params.get('loss_thresholds', {})
+            hedge_ratios = recovery_params.get('hedge_ratios', {})
+            timing = recovery_params.get('timing', {})
+            
+            # โหลด position sizing จาก config
+            position_sizing = config.get('position_sizing', {})
+            lot_calc = position_sizing.get('lot_calculation', {})
+            
+            # ตั้งค่า recovery thresholds จาก config (% based)
+            self.recovery_thresholds = {
+                'min_correlation': correlation_thresholds.get('min_correlation', 0.6),
+                'max_correlation': correlation_thresholds.get('max_correlation', 0.95),
+                'min_loss_percent': loss_thresholds.get('min_loss_percent', -0.005),  # % based
+                'use_percentage_based': loss_thresholds.get('use_percentage_based', True),
+                'max_recovery_time_hours': timing.get('max_recovery_time_hours', 24),
+                'hedge_ratio_range': (
+                    hedge_ratios.get('min_ratio', 0.7),
+                    hedge_ratios.get('max_ratio', 1.3)
+                ),
+                'wait_time_minutes': timing.get('recovery_check_interval_minutes', 5),
+                'cooldown_between_checks': timing.get('cooldown_between_checks', 10),
+                'base_lot_size': lot_calc.get('base_lot_size', 0.01)  # โหลดจาก config แทน hardcode
+            }
                 
                 # โหลด diversification settings
                 diversification = recovery_params.get('diversification', {})

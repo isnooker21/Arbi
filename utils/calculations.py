@@ -550,14 +550,76 @@ class TradingCalculations:
             return min_lot
     
     @staticmethod
-    def get_uniform_triangle_lots(triangle_symbols: List[str], balance: float, target_pip_value: float = 10.0, broker_api=None) -> Dict[str, float]:
-        """คำนวณ lot sizes ให้ pip value เท่ากัน + scale ตาม balance"""
+    def get_uniform_triangle_lots(triangle_symbols: List[str], balance: float, target_pip_value: float = 10.0, broker_api=None, use_simple_mode: bool = False) -> Dict[str, float]:
+        """คำนวณ lot sizes ให้ pip value เท่ากัน + scale ตาม balance (ใช้ค่าจาก config)"""
         try:
             if not triangle_symbols or len(triangle_symbols) != 3:
                 return {}
             
             if balance <= 0:
                 return {}
+            
+            # โหลดค่าจาก config
+            from utils.config_helper import load_config
+            config = load_config('adaptive_params.json', force_reload=False)
+            
+            lot_calc = config.get('position_sizing', {}).get('lot_calculation', {})
+            use_risk_based = lot_calc.get('use_risk_based_sizing', False)
+            risk_per_trade_percent = lot_calc.get('risk_per_trade_percent', 1.5)
+            
+            logging.getLogger(__name__).info(f"🔍 DEBUG: Calculations - Inside get_uniform_triangle_lots")
+            logging.getLogger(__name__).info(f"   use_simple_mode={use_simple_mode}")
+            logging.getLogger(__name__).info(f"   use_risk_based={use_risk_based}")
+            logging.getLogger(__name__).info(f"   risk_per_trade_percent={risk_per_trade_percent}")
+            logging.getLogger(__name__).info(f"   balance=${balance}")
+            
+            # ===== โหมดที่ 1: Risk-Based Sizing (ง่ายที่สุด - แนะนำ!) =====
+            if use_risk_based:
+                # คำนวณ lot size จาก risk โดยตรง
+                # Risk Amount = Balance × Risk%
+                # แบ่งเป็น 3 คู่ (triangle) = Risk per Pair
+                # Lot = Risk per Pair / (Stop Loss × Pip Value)
+                risk_amount = balance * (risk_per_trade_percent / 100.0)
+                risk_per_pair = risk_amount / 3.0  # แบ่ง 3 คู่
+                
+                # ใช้ stop loss 50 pips เป็นมาตรฐาน
+                stop_loss_pips = 50.0
+                
+                logging.getLogger(__name__).info(f"🔍 DEBUG: RISK-BASED MODE CALCULATION:")
+                logging.getLogger(__name__).info(f"   Balance=${balance:.2f}")
+                logging.getLogger(__name__).info(f"   Risk={risk_per_trade_percent}% (${risk_amount:.2f})")
+                logging.getLogger(__name__).info(f"   Risk per Pair: ${risk_per_pair:.2f}")
+                logging.getLogger(__name__).info(f"   Stop Loss: {stop_loss_pips} pips")
+                
+                lot_sizes = {}
+                
+                for symbol in triangle_symbols:
+                    # คำนวณ pip value ต่อ 0.01 lot
+                    pip_value_per_001 = TradingCalculations.calculate_pip_value(symbol, 0.01, broker_api)
+                    
+                    if pip_value_per_001 > 0:
+                        # Lot = Risk per Pair / (Stop Loss × Pip Value per 0.01 lot) × 0.01
+                        lot_size = (risk_per_pair / (stop_loss_pips * pip_value_per_001)) * 0.01
+                        
+                        # Round to valid lot size
+                        lot_size = TradingCalculations.round_to_valid_lot_size(lot_size)
+                        
+                        # จำกัดขนาด lot
+                        lot_size = max(0.01, min(lot_size, 1.0))
+                        
+                        logging.getLogger(__name__).info(f"🔍 {symbol}: Risk-based lot={lot_size:.4f}")
+                    else:
+                        lot_size = 0.01  # Minimum fallback
+                        logging.getLogger(__name__).warning(f"⚠️ {symbol}: Cannot calculate pip value, using minimum lot")
+                    
+                    lot_sizes[symbol] = lot_size
+                
+                return lot_sizes
+            
+            # ===== โหมดที่ 2 & 3: Simple หรือ Tier-based =====
+            pos_sizing = config.get('position_sizing', {}).get('account_tiers', {}).get('medium', {})
+            base_lot_size = pos_sizing.get('base_lot_size', 0.01)
+            lot_multiplier = pos_sizing.get('lot_multiplier', 1.0)
             
             # คำนวณ balance multiplier (base $10K = 1.0x)
             base_balance = 10000.0
@@ -575,28 +637,22 @@ class TradingCalculations:
                 pip_value_per_001 = TradingCalculations.calculate_pip_value(symbol, 0.01, broker_api)
                 
                 # คำนวณ lot size ที่ให้ pip value ตาม target
-                # pip_value = lot_size * pip_value_per_001 / 0.01
-                # lot_size = pip_value * 0.01 / pip_value_per_001
                 if pip_value_per_001 > 0:
                     lot_size = (scaled_pip_value / pip_value_per_001) * 0.01
                 else:
-                    lot_size = 0.1  # Fallback
+                    lot_size = base_lot_size  # Fallback
                 
                 # Round to valid lot size (0.01 step)
                 lot_size = TradingCalculations.round_to_valid_lot_size(lot_size)
                 
-                # ใช้ lot ขั้นต่ำ 0.1 ถ้าคำนวณได้ต่ำกว่า
-                if lot_size < 0.1:
-                    lot_size = 0.1
+                # ใช้ lot ขั้นต่ำจาก config
+                if lot_size < base_lot_size:
+                    lot_size = base_lot_size
                     logging.getLogger(__name__).info(f"📊 {symbol}: Lot size adjusted to minimum: {lot_size:.2f}")
                 else:
                     logging.getLogger(__name__).info(f"📊 {symbol}: Using calculated lot size: {lot_size:.4f}")
                 
-                # คำนวณ pip value จริงที่ได้
-                actual_pip_value = TradingCalculations.calculate_pip_value(symbol, lot_size, broker_api)
-                
                 lot_sizes[symbol] = lot_size
-                logging.getLogger(__name__).info(f"📊 {symbol}: Lot Size={lot_size:.4f}, Actual Pip Value=${actual_pip_value:.2f}")
             
             return lot_sizes
             

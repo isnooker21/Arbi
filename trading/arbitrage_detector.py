@@ -548,14 +548,30 @@ class TriangleArbitrageDetector:
         try:
             self.logger.info(f"🔍 Processing {triangle_name}: {triangle}")
             
+            # โหลดค่าจาก config
+            from utils.config_helper import load_config
+            config = load_config('adaptive_params.json', force_reload=False)
+            lot_calc_config = config.get('position_sizing', {}).get('lot_calculation', {})
+            use_simple_mode = lot_calc_config.get('use_simple_mode', False)
+            use_risk_based_sizing = lot_calc_config.get('use_risk_based_sizing', True)
+            risk_per_trade_percent = lot_calc_config.get('risk_per_trade_percent', 1.5)
+
+            self.logger.info(f"🔍 DEBUG: Arbitrage Detector - Config for Lot Calc:")
+            self.logger.info(f"   use_simple_mode={use_simple_mode}")
+            self.logger.info(f"   use_risk_based_sizing={use_risk_based_sizing}")
+            self.logger.info(f"   risk_per_trade_percent={risk_per_trade_percent}")
+            self.logger.info(f"   Current Balance: ${balance}")
+
             # คำนวณ lot sizes ให้ pip value เท่ากัน + scale ตาม balance
             triangle_symbols = list(triangle)
             lot_sizes = TradingCalculations.get_uniform_triangle_lots(
                 triangle_symbols=triangle_symbols,
                 balance=balance,
                 target_pip_value=5.0,  # $5 pip value base (reduced from $10 for lower risk)
-                broker_api=self.broker  # ส่ง broker API สำหรับดึงอัตราแลกเปลี่ยน
+                broker_api=self.broker,  # ส่ง broker API สำหรับดึงอัตราแลกเปลี่ยน
+                use_simple_mode=use_simple_mode  # ใช้ค่าจาก config
             )
+            self.logger.info(f"🔍 DEBUG: Arbitrage Detector - Calculated Lot Sizes: {lot_sizes}")
             
             self.logger.info(f"📊 {triangle_name} lot sizes: {lot_sizes}")
             

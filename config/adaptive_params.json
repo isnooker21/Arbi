@@ -39,7 +39,7 @@
         "min_balance": 5000,
         "max_balance": 10000,
         "lot_multiplier": 1.0,
-        "base_lot_size": 0.1,
+        "base_lot_size": 0.01,
         "max_position_size": 5.0,
         "description": "Small account - optimized sizing for better recovery"
       },
@@ -47,7 +47,7 @@
         "min_balance": 10000,
         "max_balance": 50000,
         "lot_multiplier": 1.0,
-        "base_lot_size": 0.1,
+        "base_lot_size": 0.01,
         "max_position_size": 5.0,
         "description": "Medium account - moderate sizing for loss reduction"
       },
@@ -55,7 +55,7 @@
         "min_balance": 50000,
         "max_balance": 100000,
         "lot_multiplier": 1.3,
-        "base_lot_size": 0.15,
+        "base_lot_size": 0.01,
         "max_position_size": 7.5,
         "description": "Large account - conservative sizing for loss reduction"
       },
@@ -63,14 +63,20 @@
         "min_balance": 100000,
         "max_balance": 999999999,
         "lot_multiplier": 1.5,
-        "base_lot_size": 0.2,
+        "base_lot_size": 0.01,
         "max_position_size": 10.0,
         "description": "Premium account - conservative sizing for loss reduction"
       }
     },
+    "lot_calculation": {
+      "use_simple_mode": false,
+      "use_risk_based_sizing": true,
+      "risk_per_trade_percent": 1.5,
+      "description": "use_risk_based_sizing=true: ใช้ risk_per_trade คำนวณ lot อัตโนมัติ (ง่ายที่สุด แนะนำ!)"
+    },
     "risk_management": {
       "risk_per_trade": 0.015,
-      "max_portfolio_risk": 0.08,
+      "max_portfolio_risk": 8.0,
       "max_concurrent_groups": 4,
       "correlation_limit": 0.8,
       "description": "Risk management parameters - no cut loss, recovery only, optimized for small accounts"
