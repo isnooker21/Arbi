@@ -253,6 +253,10 @@ class CorrelationManager:
         # Uncomment the line below if you want to start fresh
         # self.clear_old_order_tracking()
         
+        # 🆕 Reset order tracker to match real MT5 positions (recommended)
+        # Uncomment the line below to reset tracker to match real positions
+        # self.reset_tracker_to_match_mt5()
+        
         # 🆕 Enable auto-registration if needed (optional)
         # Uncomment the line below if you want to auto-register new orders
         # self._enable_auto_registration()
@@ -3461,6 +3465,95 @@ class CorrelationManager:
             
         except Exception as e:
             self.logger.error(f"❌ Error enabling auto-registration: {e}")
+    
+    def reset_tracker_to_match_mt5(self):
+        """Reset order tracker to match real MT5 positions"""
+        try:
+            self.logger.info("🔄 RESETTING ORDER TRACKER TO MATCH MT5")
+            
+            # Check broker connection
+            if not self.broker:
+                self.logger.error("❌ Broker not initialized - cannot reset tracker")
+                return
+            
+            # Try to connect if not connected
+            if not self.broker.is_connected():
+                self.logger.warning("⚠️ Broker not connected - attempting to connect...")
+                try:
+                    self.broker.connect()
+                    if not self.broker.is_connected():
+                        self.logger.error("❌ Failed to connect to MT5 - will retry on next check")
+                        return
+                    self.logger.info("✅ Successfully connected to MT5")
+                except Exception as e:
+                    self.logger.error(f"❌ Error connecting to MT5: {e}")
+                    return
+            
+            # Get current tracker stats
+            stats_before = self.order_tracker.get_statistics()
+            self.logger.info(f"📊 Before reset: {stats_before['total_tracked_orders']} tracked orders")
+            
+            # Force reset all orders
+            self.order_tracker.force_reset_all_orders()
+            self.logger.info("🧹 Cleared all tracked orders")
+            
+            # Get all MT5 positions
+            all_positions = self.broker.get_all_positions()
+            self.logger.info(f"📊 Found {len(all_positions)} positions in MT5")
+            
+            if not all_positions:
+                self.logger.warning("⚠️ No positions found in MT5")
+                return
+            
+            # Register only valid arbitrage orders
+            registered_count = 0
+            skipped_count = 0
+            
+            for pos in all_positions:
+                ticket = str(pos.get('ticket', ''))
+                symbol = pos.get('symbol', '')
+                magic = pos.get('magic', 0)
+                comment = pos.get('comment', '')
+                profit = pos.get('profit', 0)
+                
+                if not ticket or not symbol:
+                    continue
+                
+                # STRICT VALIDATION: Only register arbitrage orders
+                if not (234001 <= magic <= 234006):
+                    self.logger.debug(f"⚠️ Skipping order {ticket}_{symbol}: Magic {magic} not in range 234001-234006")
+                    skipped_count += 1
+                    continue
+                
+                # Additional validation: Check comment pattern
+                if not comment or not comment.startswith('G') or '_' not in comment:
+                    self.logger.debug(f"⚠️ Skipping order {ticket}_{symbol}: Invalid comment pattern '{comment}'")
+                    skipped_count += 1
+                    continue
+                
+                # Determine group_id from magic number
+                group_id = self._get_group_id_from_magic(magic)
+                
+                # Register as original order
+                success = self.order_tracker.register_original_order(ticket, symbol, group_id)
+                if success:
+                    registered_count += 1
+                    self.logger.info(f"✅ Registered: {ticket}_{symbol} (${profit:.2f}) in {group_id} (comment: {comment})")
+                else:
+                    self.logger.warning(f"❌ Failed to register: {ticket}_{symbol}")
+            
+            # Show final statistics
+            stats_after = self.order_tracker.get_statistics()
+            self.logger.info(f"📊 After reset: {stats_after['total_tracked_orders']} tracked orders")
+            self.logger.info(f"📊 Registration complete: {registered_count} registered, {skipped_count} skipped")
+            
+            # Show updated statistics
+            self.order_tracker.log_status_summary()
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error resetting tracker: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
     
     def test_recovery_system(self):
         """Test the recovery system with current losing positions"""

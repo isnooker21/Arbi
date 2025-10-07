@@ -209,6 +209,21 @@ class IndividualOrderTracker:
         with self._lock:
             return self.order_tracking.copy()
     
+    def is_order_tracked(self, ticket: str, symbol: str) -> bool:
+        """
+        Check if an order is already tracked.
+        
+        Args:
+            ticket: Order ticket
+            symbol: Currency pair symbol
+            
+        Returns:
+            bool: True if order is tracked
+        """
+        with self._lock:
+            order_key = f"{ticket}_{symbol}"
+            return order_key in self.order_tracking
+    
     def get_orders_needing_recovery(self) -> List[Dict]:
         """
         Get all orders that need recovery.

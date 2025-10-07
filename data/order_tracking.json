@@ -1,73 +1,43 @@
 {
   "order_tracking": {
-    "12345_EURUSD": {
-      "ticket": "12345",
-      "symbol": "EURUSD",
-      "group_id": "group_triangle_1_1",
-      "type": "ORIGINAL",
-      "status": "HEDGED",
-      "recovery_orders": [
-        "22345_EURUSD",
-        "22345_EURUSD",
-        "22345_EURUSD",
-        "22345_EURUSD"
-      ],
-      "created_at": "2025-10-08T04:31:08.313171",
-      "last_sync": "2025-10-08T04:31:08.313177"
-    },
-    "12346_GBPUSD": {
-      "ticket": "12346",
-      "symbol": "GBPUSD",
-      "group_id": "group_triangle_1_1",
-      "type": "ORIGINAL",
-      "status": "HEDGED",
-      "recovery_orders": [
-        "22346_GBPUSD",
-        "22346_GBPUSD",
-        "22346_GBPUSD",
-        "22346_GBPUSD"
-      ],
-      "created_at": "2025-10-08T04:31:08.313925",
-      "last_sync": "2025-10-08T04:31:08.313926"
-    },
-    "12347_EURGBP": {
-      "ticket": "12347",
-      "symbol": "EURGBP",
-      "group_id": "group_triangle_1_1",
+    "79510007_NZDCHF": {
+      "ticket": "79510007",
+      "symbol": "NZDCHF",
+      "group_id": "group_triangle_5_1",
       "type": "ORIGINAL",
       "status": "NOT_HEDGED",
       "recovery_orders": [],
-      "created_at": "2025-10-08T04:31:08.314036",
-      "last_sync": "2025-10-08T04:31:08.314037"
+      "created_at": "2025-10-08T04:53:26.896027",
+      "last_sync": "2025-10-08T04:53:26.896028"
     },
-    "22345_EURUSD": {
-      "ticket": "22345",
-      "symbol": "EURUSD",
-      "type": "RECOVERY",
+    "79510008_NZDUSD": {
+      "ticket": "79510008",
+      "symbol": "NZDUSD",
+      "group_id": "group_triangle_5_1",
+      "type": "ORIGINAL",
       "status": "NOT_HEDGED",
-      "hedging_for": "12345_EURUSD",
       "recovery_orders": [],
-      "created_at": "2025-10-08T04:34:05.628438",
-      "last_sync": "2025-10-08T04:34:05.628442"
+      "created_at": "2025-10-08T04:53:26.896211",
+      "last_sync": "2025-10-08T04:53:26.896211"
     },
-    "22346_GBPUSD": {
-      "ticket": "22346",
-      "symbol": "GBPUSD",
-      "type": "RECOVERY",
+    "79510009_NZDUSD": {
+      "ticket": "79510009",
+      "symbol": "NZDUSD",
+      "group_id": "group_triangle_6_1",
+      "type": "ORIGINAL",
       "status": "NOT_HEDGED",
-      "hedging_for": "12346_GBPUSD",
       "recovery_orders": [],
-      "created_at": "2025-10-08T04:34:05.628795",
-      "last_sync": "2025-10-08T04:34:05.628796"
+      "created_at": "2025-10-08T04:53:26.896399",
+      "last_sync": "2025-10-08T04:53:26.896400"
     }
   },
   "stats": {
-    "original_orders_registered": 817,
-    "recovery_orders_registered": 354,
-    "orders_hedged": 354,
-    "orders_removed": 1160,
-    "sync_operations": 132949,
-    "last_sync": "2025-10-07T03:59:14.079575"
+    "original_orders_registered": 3,
+    "recovery_orders_registered": 0,
+    "orders_hedged": 0,
+    "orders_removed": 0,
+    "sync_operations": 0,
+    "last_sync": null
   },
-  "saved_at": "2025-10-08T04:34:05.628859"
+  "saved_at": "2025-10-08T04:53:26.896449"
 }
