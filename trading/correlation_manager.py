@@ -293,92 +293,88 @@ class CorrelationManager:
                 'cooldown_between_checks': timing.get('cooldown_between_checks', 10),
                 'base_lot_size': lot_calc.get('base_lot_size', 0.01)  # โหลดจาก config แทน hardcode
             }
-                
-                # โหลด diversification settings
-                diversification = recovery_params.get('diversification', {})
-                self.max_symbol_usage = diversification.get('max_usage_per_symbol', 3)
-                
-                # โหลด chain recovery settings (% based)
-                chain_recovery = recovery_params.get('chain_recovery', {})
-                self.chain_recovery_enabled = chain_recovery.get('enabled', True)
-                self.max_chain_depth = chain_recovery.get('max_chain_depth', 3)
-                self.min_loss_percent_for_chain = chain_recovery.get('min_loss_percent_for_chain', -0.004)  # % based
-                
-                # โหลด price distance และ position age
-                self.min_price_distance_pips = loss_thresholds.get('min_price_distance_pips', 10)
-                self.min_position_age_seconds = timing.get('min_position_age_seconds', 60)
-                
-                # โหลด trend analysis settings
-                trend_settings = recovery_params.get('trend_analysis', {})
-                self.trend_analysis_enabled = trend_settings.get('enabled', True)
-                self.trend_periods = trend_settings.get('periods', 50)
-                self.trend_confidence_threshold = trend_settings.get('confidence_threshold', 0.4)
-                self.enable_chain_on_low_confidence = trend_settings.get('enable_chain_on_low_confidence', True)
-                
-                # โหลด ML logging settings
-                ml_settings = recovery_params.get('ml_logging', {})
-                self.ml_logging_enabled = ml_settings.get('enabled', True)
-                self.log_market_features = ml_settings.get('log_market_features', True)
-                
-                # โหลด multi-armed bandit settings
-                bandit_settings = recovery_params.get('multi_armed_bandit', {})
-                self.bandit_enabled = bandit_settings.get('enabled', True)
-                self.bandit_exploration_rate = bandit_settings.get('exploration_rate', 0.2)
-                self.bandit_learning_rate = bandit_settings.get('learning_rate', 0.1)
-                
-                # โหลด chain recovery settings
-                chain_settings = recovery_params.get('chain_recovery', {})
-                self.chain_recovery_enabled = chain_settings.get('enabled', True)
-                self.chain_recovery_mode = chain_settings.get('mode', 'conditional')
-                self.max_chain_depth = chain_settings.get('max_chain_depth', 2)
-                self.min_loss_percent_for_chain = chain_settings.get('min_loss_percent_for_chain', -0.006)
-                self.chain_only_when_trend_uncertain = chain_settings.get('only_when_trend_uncertain', True)
-                
-                # โหลด risk management parameters
-                risk_mgmt = config.get('position_sizing', {}).get('risk_management', {})
-                self.portfolio_balance_threshold = risk_mgmt.get('max_portfolio_risk', 0.05)
-                
-                self.logger.info("=" * 60)
-                self.logger.info("✅ RECOVERY CONFIG LOADED (% BASED)")
-                self.logger.info("=" * 60)
-                self.logger.info(f"📊 Correlation: {self.recovery_thresholds['min_correlation']:.1%} - {self.recovery_thresholds['max_correlation']:.1%}")
-                self.logger.info(f"💡 Loss Threshold: {abs(self.recovery_thresholds['min_loss_percent']):.3%} of balance (dynamic)")
-                
-                # แสดงตัวอย่างสำหรับ balance ต่างๆ
-                example_balances = [5000, 10000, 50000, 100000]
-                self.logger.info(f"   Examples:")
-                for bal in example_balances:
-                    amount = bal * self.recovery_thresholds['min_loss_percent']
-                    self.logger.info(f"   - Balance ${bal:,}: Loss >= ${abs(amount):.2f} triggers recovery")
-                
-                self.logger.info(f"📏 Min Distance: {self.min_price_distance_pips} pips")
-                self.logger.info(f"⏱️  Min Age: {self.min_position_age_seconds}s before recovery")
-                self.logger.info(f"⏱️  Cooldown: {self.recovery_thresholds['cooldown_between_checks']}s between checks")
-                self.logger.info(f"🔗 Chain Recovery: {'ENABLED' if self.chain_recovery_enabled else 'DISABLED'}")
-                if self.chain_recovery_enabled:
-                    self.logger.info(f"   Max Depth: {self.max_chain_depth} levels")
-                    self.logger.info(f"   Min Loss for Chain: {abs(self.min_loss_percent_for_chain):.3%} of balance")
-                    for bal in [5000, 10000, 50000]:
-                        amount = bal * self.min_loss_percent_for_chain
-                        self.logger.info(f"   - Balance ${bal:,}: >= ${abs(amount):.2f}")
-                
-                # แสดง ML systems status
-                if self.trend_analysis_enabled:
-                    self.logger.info(f"📈 Trend Analysis: ENABLED (confidence threshold: {self.trend_confidence_threshold:.1%})")
-                if self.ml_logging_enabled:
-                    self.logger.info(f"🤖 ML Logging: ENABLED (ready for training)")
-                if self.bandit_enabled:
-                    self.logger.info(f"🎰 Pair Bandit: ENABLED (explore: {self.bandit_exploration_rate:.1%})")
-                
-                self.logger.info(f"📦 Hedge Ratio: {self.recovery_thresholds['hedge_ratio_range'][0]} - {self.recovery_thresholds['hedge_ratio_range'][1]}")
-                self.logger.info(f"🎯 Max Symbol Usage: {self.max_symbol_usage} times")
-                self.logger.info(f"📏 Base Lot Size: {self.recovery_thresholds['base_lot_size']}")
-                self.logger.info("=" * 60)
-                
-            else:
-                self.logger.warning("⚠️ Config file not found, using fallback values")
-                self._set_fallback_config()
-                
+            
+            # โหลด diversification settings
+            diversification = recovery_params.get('diversification', {})
+            self.max_symbol_usage = diversification.get('max_usage_per_symbol', 3)
+            
+            # โหลด chain recovery settings (% based)
+            chain_recovery = recovery_params.get('chain_recovery', {})
+            self.chain_recovery_enabled = chain_recovery.get('enabled', True)
+            self.max_chain_depth = chain_recovery.get('max_chain_depth', 3)
+            self.min_loss_percent_for_chain = chain_recovery.get('min_loss_percent_for_chain', -0.004)  # % based
+            
+            # โหลด price distance และ position age
+            self.min_price_distance_pips = loss_thresholds.get('min_price_distance_pips', 10)
+            self.min_position_age_seconds = timing.get('min_position_age_seconds', 60)
+            
+            # โหลด trend analysis settings
+            trend_settings = recovery_params.get('trend_analysis', {})
+            self.trend_analysis_enabled = trend_settings.get('enabled', True)
+            self.trend_periods = trend_settings.get('periods', 50)
+            self.trend_confidence_threshold = trend_settings.get('confidence_threshold', 0.4)
+            self.enable_chain_on_low_confidence = trend_settings.get('enable_chain_on_low_confidence', True)
+            
+            # โหลด ML logging settings
+            ml_settings = recovery_params.get('ml_logging', {})
+            self.ml_logging_enabled = ml_settings.get('enabled', True)
+            self.log_market_features = ml_settings.get('log_market_features', True)
+            
+            # โหลด multi-armed bandit settings
+            bandit_settings = recovery_params.get('multi_armed_bandit', {})
+            self.bandit_enabled = bandit_settings.get('enabled', True)
+            self.bandit_exploration_rate = bandit_settings.get('exploration_rate', 0.2)
+            self.bandit_learning_rate = bandit_settings.get('learning_rate', 0.1)
+            
+            # โหลด chain recovery settings
+            chain_settings = recovery_params.get('chain_recovery', {})
+            self.chain_recovery_enabled = chain_settings.get('enabled', True)
+            self.chain_recovery_mode = chain_settings.get('mode', 'conditional')
+            self.max_chain_depth = chain_settings.get('max_chain_depth', 2)
+            self.min_loss_percent_for_chain = chain_settings.get('min_loss_percent_for_chain', -0.006)
+            self.chain_only_when_trend_uncertain = chain_settings.get('only_when_trend_uncertain', True)
+            
+            # โหลด risk management parameters
+            risk_mgmt = config.get('position_sizing', {}).get('risk_management', {})
+            self.portfolio_balance_threshold = risk_mgmt.get('max_portfolio_risk', 0.05)
+            
+            self.logger.info("=" * 60)
+            self.logger.info("✅ RECOVERY CONFIG LOADED (% BASED)")
+            self.logger.info("=" * 60)
+            self.logger.info(f"📊 Correlation: {self.recovery_thresholds['min_correlation']:.1%} - {self.recovery_thresholds['max_correlation']:.1%}")
+            self.logger.info(f"💡 Loss Threshold: {abs(self.recovery_thresholds['min_loss_percent']):.3%} of balance (dynamic)")
+            
+            # แสดงตัวอย่างสำหรับ balance ต่างๆ
+            example_balances = [5000, 10000, 50000, 100000]
+            self.logger.info(f"   Examples:")
+            for bal in example_balances:
+                amount = bal * self.recovery_thresholds['min_loss_percent']
+                self.logger.info(f"   - Balance ${bal:,}: Loss >= ${abs(amount):.2f} triggers recovery")
+            
+            self.logger.info(f"📏 Min Distance: {self.min_price_distance_pips} pips")
+            self.logger.info(f"⏱️  Min Age: {self.min_position_age_seconds}s before recovery")
+            self.logger.info(f"⏱️  Cooldown: {self.recovery_thresholds['cooldown_between_checks']}s between checks")
+            self.logger.info(f"🔗 Chain Recovery: {'ENABLED' if self.chain_recovery_enabled else 'DISABLED'}")
+            if self.chain_recovery_enabled:
+                self.logger.info(f"   Max Depth: {self.max_chain_depth} levels")
+                self.logger.info(f"   Min Loss for Chain: {abs(self.min_loss_percent_for_chain):.3%} of balance")
+                for bal in [5000, 10000, 50000]:
+                    amount = bal * self.min_loss_percent_for_chain
+                    self.logger.info(f"   - Balance ${bal:,}: >= ${abs(amount):.2f}")
+            
+            # แสดง ML systems status
+            if self.trend_analysis_enabled:
+                self.logger.info(f"📈 Trend Analysis: ENABLED (confidence threshold: {self.trend_confidence_threshold:.1%})")
+            if self.ml_logging_enabled:
+                self.logger.info(f"🤖 ML Logging: ENABLED (ready for training)")
+            if self.bandit_enabled:
+                self.logger.info(f"🎰 Pair Bandit: ENABLED (explore: {self.bandit_exploration_rate:.1%})")
+            
+            self.logger.info(f"📦 Hedge Ratio: {self.recovery_thresholds['hedge_ratio_range'][0]} - {self.recovery_thresholds['hedge_ratio_range'][1]}")
+            self.logger.info(f"🎯 Max Symbol Usage: {self.max_symbol_usage} times")
+            self.logger.info(f"📏 Base Lot Size: {self.recovery_thresholds['base_lot_size']}")
+            self.logger.info("=" * 60)
+            
         except Exception as e:
             self.logger.error(f"❌ Error loading config: {e}")
             self.logger.info("🔄 Using fallback configuration")
