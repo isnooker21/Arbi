@@ -1214,35 +1214,35 @@ class TriangleArbitrageDetector:
                 
                 # ถ้ากำไรเกิน min_profit → เริ่ม trailing stop
                 if net_pnl >= min_profit_threshold:
-                if not trailing_data['active']:
-                    # เริ่ม trailing stop
-                    trailing_data['active'] = True
-                    trailing_data['peak'] = net_pnl
-                    # 🔒 Lock 50% of Peak: Stop = max(Peak × 0.5, Peak - Distance)
-                    trailing_data['stop'] = max(net_pnl * self.lock_profit_percentage, net_pnl - self.trailing_stop_distance)
-                    self.logger.info(f"🎯 {group_id} Trailing Stop ACTIVATED: Peak=${net_pnl:.2f}, Stop=${trailing_data['stop']:.2f} (Lock {self.lock_profit_percentage*100:.0f}%)")
-                else:
-                    # อัปเดต peak ถ้ากำไรเพิ่ม
-                    if net_pnl > trailing_data['peak']:
+                    if not trailing_data['active']:
+                        # เริ่ม trailing stop
+                        trailing_data['active'] = True
                         trailing_data['peak'] = net_pnl
                         # 🔒 Lock 50% of Peak: Stop = max(Peak × 0.5, Peak - Distance)
                         trailing_data['stop'] = max(net_pnl * self.lock_profit_percentage, net_pnl - self.trailing_stop_distance)
-                        self.logger.info(f"📈 {group_id} Peak Updated: ${net_pnl:.2f}, Stop=${trailing_data['stop']:.2f} (Lock {self.lock_profit_percentage*100:.0f}%)")
-                    
-                    # เช็คว่า hit trailing stop ไหม (และต้องกำไรด้วย!)
-                    if net_pnl < trailing_data['stop'] and net_pnl > 0:
-                        self.logger.info(f"🚨 {group_id} TRAILING STOP HIT!")
-                        self.logger.info(f"   Peak: ${trailing_data['peak']:.2f}")
-                        self.logger.info(f"   Stop: ${trailing_data['stop']:.2f}")
-                        self.logger.info(f"   Current Net: ${net_pnl:.2f}")
-                        self.logger.info(f"   Locking profit: ${net_pnl:.2f} ✅")
-                        return True
-                    elif net_pnl < trailing_data['stop'] and net_pnl <= 0:
-                        # ถ้า hit stop แต่ติดลบ → ยกเลิก trailing, รอ recovery
-                        self.logger.warning(f"⚠️ {group_id} Hit stop but negative (${net_pnl:.2f}) - Canceling trailing, waiting for recovery")
-                        trailing_data['active'] = False
-                        trailing_data['peak'] = 0.0
-                        trailing_data['stop'] = 0.0
+                        self.logger.info(f"🎯 {group_id} Trailing Stop ACTIVATED: Peak=${net_pnl:.2f}, Stop=${trailing_data['stop']:.2f} (Lock {self.lock_profit_percentage*100:.0f}%)")
+                    else:
+                        # อัปเดต peak ถ้ากำไรเพิ่ม
+                        if net_pnl > trailing_data['peak']:
+                            trailing_data['peak'] = net_pnl
+                            # 🔒 Lock 50% of Peak: Stop = max(Peak × 0.5, Peak - Distance)
+                            trailing_data['stop'] = max(net_pnl * self.lock_profit_percentage, net_pnl - self.trailing_stop_distance)
+                            self.logger.info(f"📈 {group_id} Peak Updated: ${net_pnl:.2f}, Stop=${trailing_data['stop']:.2f} (Lock {self.lock_profit_percentage*100:.0f}%)")
+                        
+                        # เช็คว่า hit trailing stop ไหม (และต้องกำไรด้วย!)
+                        if net_pnl < trailing_data['stop'] and net_pnl > 0:
+                            self.logger.info(f"🚨 {group_id} TRAILING STOP HIT!")
+                            self.logger.info(f"   Peak: ${trailing_data['peak']:.2f}")
+                            self.logger.info(f"   Stop: ${trailing_data['stop']:.2f}")
+                            self.logger.info(f"   Current Net: ${net_pnl:.2f}")
+                            self.logger.info(f"   Locking profit: ${net_pnl:.2f} ✅")
+                            return True
+                        elif net_pnl < trailing_data['stop'] and net_pnl <= 0:
+                            # ถ้า hit stop แต่ติดลบ → ยกเลิก trailing, รอ recovery
+                            self.logger.warning(f"⚠️ {group_id} Hit stop but negative (${net_pnl:.2f}) - Canceling trailing, waiting for recovery")
+                            trailing_data['active'] = False
+                            trailing_data['peak'] = 0.0
+                            trailing_data['stop'] = 0.0
             else:
                 # Trailing Stop ปิดอยู่ — ใช้ Min Profit เพียงอย่างเดียว
                 if net_pnl >= min_profit_threshold:
