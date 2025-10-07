@@ -40,12 +40,40 @@ class SettingsWindow:
     def load_settings(self):
         """Load adaptive_params.json"""
         try:
+            print("\n" + "="*60)
+            print("📂 GUI SETTINGS - LOAD PROCESS")
+            print("="*60)
+            
+            config_path = get_config_path('adaptive_params.json')
+            print(f"Loading from: {config_path}")
+            
             self.settings = load_config('adaptive_params.json')
+            
+            if self.settings:
+                print(f"✅ Config loaded successfully")
+                
+                # Show key values
+                risk = self.get_nested_value(self.settings, 'position_sizing.lot_calculation.risk_per_trade_percent')
+                use_risk = self.get_nested_value(self.settings, 'position_sizing.lot_calculation.use_risk_based_sizing')
+                min_loss = self.get_nested_value(self.settings, 'recovery_params.loss_thresholds.min_loss_percent')
+                
+                print(f"\n📊 Key values loaded:")
+                print(f"  • Risk per Trade: {risk}%")
+                print(f"  • Use Risk-Based: {use_risk}")
+                print(f"  • Min Loss Threshold: {min_loss}")
+            else:
+                print(f"❌ Config is empty")
             
             # Store original settings for comparison
             self.original_settings = json.loads(json.dumps(self.settings))
             
+            print("="*60)
+            print()
+            
         except Exception as e:
+            print(f"❌ Error loading settings: {e}")
+            import traceback
+            traceback.print_exc()
             messagebox.showerror("Error", f"ไม่สามารถโหลดไฟล์ได้: {str(e)}")
             self.settings = {}
             self.original_settings = {}
@@ -416,8 +444,14 @@ class SettingsWindow:
     def save_settings(self):
         """Save all settings to adaptive_params.json"""
         try:
+            print("\n" + "="*60)
+            print("🔧 GUI SETTINGS - SAVE PROCESS")
+            print("="*60)
+            
             # Update settings from UI
+            changes = []
             for param_path, var in self.parameter_vars.items():
+                old_value = self.get_nested_value(self.settings, param_path)
                 value = var.get()
                 
                 # Convert value based on type
@@ -432,26 +466,61 @@ class SettingsWindow:
                         value = float(value)
                 
                 self.set_nested_value(self.settings, param_path, value)
+                
+                # Track changes
+                if old_value != value:
+                    changes.append(f"  • {param_path}: {old_value} → {value}")
+            
+            print(f"\n📝 Changes detected: {len(changes)}")
+            for change in changes[:10]:  # Show first 10 changes
+                print(change)
+            if len(changes) > 10:
+                print(f"  ... and {len(changes) - 10} more changes")
             
             # Save to file
+            print(f"\n💾 Saving to config file...")
+            config_path = get_user_config_path('adaptive_params.json')
+            print(f"   Path: {config_path}")
+            
             if not save_config('adaptive_params.json', self.settings):
                 raise Exception("ไม่สามารถบันทึกไฟล์ config ได้")
             
+            print(f"   ✅ File saved successfully")
+            
             # 🆕 Auto Reload Config (ไม่ต้อง Restart!)
             reload_success = False
+            reload_errors = []
+            
+            print(f"\n🔄 Reloading components...")
             if self.trading_system:
                 try:
                     # Reload correlation_manager config
                     if hasattr(self.trading_system, 'correlation_manager') and self.trading_system.correlation_manager:
+                        print(f"   → Reloading correlation_manager...")
                         self.trading_system.correlation_manager.reload_config()
+                        print(f"      ✅ Done")
+                    else:
+                        print(f"   ⚠️ correlation_manager not found")
                     
                     # Reload arbitrage_detector config
                     if hasattr(self.trading_system, 'arbitrage_detector') and self.trading_system.arbitrage_detector:
+                        print(f"   → Reloading arbitrage_detector...")
                         self.trading_system.arbitrage_detector.reload_config()
+                        print(f"      ✅ Done")
+                    else:
+                        print(f"   ⚠️ arbitrage_detector not found")
                     
                     reload_success = True
+                    
                 except Exception as e:
+                    reload_errors.append(str(e))
+                    print(f"   ❌ Error during reload: {e}")
                     messagebox.showwarning("⚠️ Warning", f"บันทึกสำเร็จ แต่ reload ไม่ได้: {str(e)}\n\nกรุณา Restart ระบบ")
+            else:
+                print(f"   ⚠️ trading_system not connected to GUI")
+            
+            print("="*60)
+            print()
             
             if reload_success:
                 messagebox.showinfo(
@@ -467,6 +536,9 @@ class SettingsWindow:
             self.settings_window.destroy()
             
         except Exception as e:
+            print(f"\n❌ ERROR saving settings: {e}")
+            import traceback
+            traceback.print_exc()
             messagebox.showerror("❌ Error", f"ไม่สามารถบันทึกได้: {str(e)}")
     
     def reset_settings(self):
