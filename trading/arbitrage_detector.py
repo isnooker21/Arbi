@@ -550,7 +550,7 @@ class TriangleArbitrageDetector:
             
             # โหลดค่าจาก config
             from utils.config_helper import load_config
-            config = load_config('adaptive_params.json', force_reload=False)
+            config = load_config('adaptive_params.json')
             lot_calc_config = config.get('position_sizing', {}).get('lot_calculation', {})
             use_simple_mode = lot_calc_config.get('use_simple_mode', False)
             use_risk_based_sizing = lot_calc_config.get('use_risk_based_sizing', True)

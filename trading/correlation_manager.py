@@ -257,7 +257,7 @@ class CorrelationManager:
             # Use config helper to support EXE and user override
             try:
                 from utils.config_helper import load_config
-                config = load_config('adaptive_params.json', force_reload=True)
+                config = load_config('adaptive_params.json')
             except Exception:
                 # Fallback to direct path if helper unavailable
                 config_path = 'config/adaptive_params.json'

@@ -561,7 +561,7 @@ class TradingCalculations:
             
             # โหลดค่าจาก config
             from utils.config_helper import load_config
-            config = load_config('adaptive_params.json', force_reload=False)
+            config = load_config('adaptive_params.json')
             
             lot_calc = config.get('position_sizing', {}).get('lot_calculation', {})
             use_risk_based = lot_calc.get('use_risk_based_sizing', False)
