@@ -253,6 +253,10 @@ class CorrelationManager:
         # Uncomment the line below if you want to start fresh
         # self.clear_old_order_tracking()
         
+        # 🆕 Enable auto-registration if needed (optional)
+        # Uncomment the line below if you want to auto-register new orders
+        # self._enable_auto_registration()
+        
         self.logger.info("✅ CorrelationManager initialization completed")
     
     def _load_config_from_file(self):
@@ -2554,8 +2558,9 @@ class CorrelationManager:
             if sync_results.get('orders_removed', 0) > 0:
                 self.logger.info(f"🔄 Synced: {sync_results['orders_removed']} orders removed")
             
-            # 🔄 STEP 1.5: Auto-register any new orders that aren't tracked yet
-            self._auto_register_new_orders()
+            # 🔄 STEP 1.5: Auto-register any new orders that aren't tracked yet (DISABLED)
+            # self._auto_register_new_orders()  # Disabled to prevent tracking unwanted orders
+            # Use self._enable_auto_registration() to enable this feature
             
             # Get orders needing recovery from individual order tracker
             orders_needing_recovery = self.order_tracker.get_orders_needing_recovery()
@@ -3286,8 +3291,18 @@ class CorrelationManager:
                 ticket = str(pos.get('ticket', ''))
                 symbol = pos.get('symbol', '')
                 magic = pos.get('magic', 0)
+                comment = pos.get('comment', '')
                 
                 if not ticket or not symbol:
+                    continue
+                
+                # STRICT VALIDATION: Only track arbitrage orders with specific magic and comment patterns
+                if not (234001 <= magic <= 234006):
+                    continue
+                
+                # Additional validation: Check comment pattern (G1_, G2_, etc.)
+                if not comment or not comment.startswith('G') or '_' not in comment:
+                    self.logger.debug(f"⚠️ Skipping order {ticket}_{symbol}: Invalid comment pattern '{comment}'")
                     continue
                 
                 # Quick check if already tracked
@@ -3301,7 +3316,7 @@ class CorrelationManager:
                 if success:
                     new_orders_count += 1
                     profit = pos.get('profit', 0)
-                    self.logger.info(f"🆕 Auto-registered new order: {ticket}_{symbol} (${profit:.2f})")
+                    self.logger.info(f"🆕 Auto-registered new order: {ticket}_{symbol} (${profit:.2f}) (comment: {comment})")
             
             if new_orders_count > 0:
                 self.logger.info(f"✅ Auto-registered {new_orders_count} new orders")
@@ -3348,8 +3363,19 @@ class CorrelationManager:
                 symbol = pos.get('symbol', '')
                 magic = pos.get('magic', 0)
                 profit = pos.get('profit', 0)
+                comment = pos.get('comment', '')
                 
                 if not ticket or not symbol:
+                    continue
+                
+                # STRICT VALIDATION: Only register arbitrage orders with specific magic and comment patterns
+                if not (234001 <= magic <= 234006):
+                    self.logger.debug(f"⚠️ Skipping order {ticket}_{symbol}: Magic {magic} not in range 234001-234006")
+                    continue
+                
+                # Additional validation: Check comment pattern (G1_, G2_, etc.)
+                if not comment or not comment.startswith('G') or '_' not in comment:
+                    self.logger.debug(f"⚠️ Skipping order {ticket}_{symbol}: Invalid comment pattern '{comment}'")
                     continue
                 
                 # Check if already tracked
@@ -3365,7 +3391,7 @@ class CorrelationManager:
                 success = self.order_tracker.register_original_order(ticket, symbol, group_id)
                 if success:
                     registered_count += 1
-                    self.logger.info(f"✅ Registered: {ticket}_{symbol} (${profit:.2f}) in {group_id}")
+                    self.logger.info(f"✅ Registered: {ticket}_{symbol} (${profit:.2f}) in {group_id} (comment: {comment})")
                 else:
                     self.logger.warning(f"❌ Failed to register: {ticket}_{symbol}")
             
@@ -3420,6 +3446,21 @@ class CorrelationManager:
             
         except Exception as e:
             self.logger.error(f"❌ Error clearing old tracking data: {e}")
+    
+    def _enable_auto_registration(self):
+        """Enable auto-registration of new orders (use with caution)"""
+        try:
+            self.logger.info("🔧 ENABLING AUTO-REGISTRATION")
+            self.logger.warning("⚠️ Auto-registration will track ALL orders with magic 234001-234006")
+            self.logger.warning("⚠️ Make sure this is what you want!")
+            
+            # Enable auto-registration by uncommenting the line in check_recovery_chain
+            # This is a manual process for safety
+            self.logger.info("ℹ️ To enable auto-registration, uncomment the line in check_recovery_chain()")
+            self.logger.info("ℹ️ Line: # self._auto_register_new_orders()")
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error enabling auto-registration: {e}")
     
     def test_recovery_system(self):
         """Test the recovery system with current losing positions"""

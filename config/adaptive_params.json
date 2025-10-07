@@ -211,6 +211,15 @@
     },
     "description": "Market analysis and regime detection parameters"
   },
+  "system_limits": {
+    "max_concurrent_groups": 6,
+    "max_portfolio_risk": 0.15,
+    "max_drawdown_percent": 30,
+    "max_position_hold_hours": 24,
+    "max_recovery_attempts": 3,
+    "emergency_stop_loss": 0.20,
+    "description": "System-wide limits and safety parameters"
+  },
   "performance_monitoring": {
     "metrics": {
       "update_interval_seconds": 60,

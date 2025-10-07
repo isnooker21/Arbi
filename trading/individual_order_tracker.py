@@ -336,16 +336,37 @@ class IndividualOrderTracker:
             Dict: Tracker statistics
         """
         with self._lock:
-            stats = self.stats.copy()
-            stats.update({
-                'total_tracked_orders': len(self.order_tracking),
-                'original_orders': len([o for o in self.order_tracking.values() if o.get('type') == 'ORIGINAL']),
-                'recovery_orders': len([o for o in self.order_tracking.values() if o.get('type') == 'RECOVERY']),
-                'hedged_orders': len([o for o in self.order_tracking.values() if o.get('status') == 'HEDGED']),
-                'not_hedged_orders': len([o for o in self.order_tracking.values() if o.get('status') == 'NOT_HEDGED']),
-                'orphaned_orders': len([o for o in self.order_tracking.values() if o.get('status') == 'ORPHANED'])
-            })
-            return stats
+            # Calculate current statistics from actual data
+            total_tracked = len(self.order_tracking)
+            original_orders = len([o for o in self.order_tracking.values() if o.get('type') == 'ORIGINAL'])
+            recovery_orders = len([o for o in self.order_tracking.values() if o.get('type') == 'RECOVERY'])
+            
+            # Count hedged orders (only ORIGINAL orders that are HEDGED)
+            hedged_orders = len([o for o in self.order_tracking.values() 
+                               if o.get('type') == 'ORIGINAL' and o.get('status') == 'HEDGED'])
+            
+            # Count not hedged orders (only ORIGINAL orders that are NOT_HEDGED)
+            not_hedged_orders = len([o for o in self.order_tracking.values() 
+                                   if o.get('type') == 'ORIGINAL' and o.get('status') == 'NOT_HEDGED'])
+            
+            # Count orphaned orders
+            orphaned_orders = len([o for o in self.order_tracking.values() if o.get('status') == 'ORPHANED'])
+            
+            # Return current statistics (not accumulated)
+            return {
+                'total_tracked_orders': total_tracked,
+                'original_orders': original_orders,
+                'recovery_orders': recovery_orders,
+                'hedged_orders': hedged_orders,
+                'not_hedged_orders': not_hedged_orders,
+                'orphaned_orders': orphaned_orders,
+                'last_sync': self.stats.get('last_sync'),
+                # Keep accumulated stats for reference
+                'total_original_registered': self.stats.get('original_orders_registered', 0),
+                'total_recovery_registered': self.stats.get('recovery_orders_registered', 0),
+                'total_orders_removed': self.stats.get('orders_removed', 0),
+                'total_sync_operations': self.stats.get('sync_operations', 0)
+            }
     
     def log_status_summary(self):
         """Log a summary of all tracked orders."""
@@ -360,6 +381,14 @@ class IndividualOrderTracker:
             self.logger.info(f"   Not Hedged Orders: {stats['not_hedged_orders']}")
             self.logger.info(f"   Orphaned Orders: {stats['orphaned_orders']}")
             self.logger.info(f"   Last Sync: {stats['last_sync']}")
+            
+            # Show accumulated statistics for reference
+            if stats.get('total_original_registered', 0) > 0:
+                self.logger.info("📈 ACCUMULATED STATISTICS:")
+                self.logger.info(f"   Total Original Registered: {stats['total_original_registered']}")
+                self.logger.info(f"   Total Recovery Registered: {stats['total_recovery_registered']}")
+                self.logger.info(f"   Total Orders Removed: {stats['total_orders_removed']}")
+                self.logger.info(f"   Total Sync Operations: {stats['total_sync_operations']}")
             
     
     def force_reset_all_orders(self):
