@@ -543,11 +543,37 @@ class BrokerAPI:
                 self.logger.debug(f"📋 Order request: {request}")
                 self.logger.info(f"🔄 Letting broker choose filling type automatically")
                 
-                # Simple validation - just check if connected
+                # Enhanced validation
                 if not self._connected:
                     self.logger.error(f"❌ Not connected to MT5 - cannot send real orders")
                     self.logger.error(f"❌ Please check MT5 connection and credentials")
-                    return None
+                    return {
+                        'success': False,
+                        'error': 'Not connected to MT5',
+                        'symbol': symbol,
+                        'type': order_type
+                    }
+                
+                # Check symbol info
+                symbol_info = mt5.symbol_info(symbol)
+                if symbol_info is None:
+                    self.logger.error(f"❌ Symbol {symbol} not found in MT5")
+                    return {
+                        'success': False,
+                        'error': f'Symbol {symbol} not found',
+                        'symbol': symbol,
+                        'type': order_type
+                    }
+                
+                # Check if symbol is tradeable
+                if not symbol_info.trade_mode:
+                    self.logger.error(f"❌ Symbol {symbol} is not tradeable")
+                    return {
+                        'success': False,
+                        'error': f'Symbol {symbol} not tradeable',
+                        'symbol': symbol,
+                        'type': order_type
+                    }
                 
                 # Send order
                 self.logger.info(f"🚀 ส่ง Order: {symbol} {order_type_mt5} Volume: {volume}")
@@ -556,10 +582,15 @@ class BrokerAPI:
                 # Check result
                 if result is None:
                     last_error = mt5.last_error()
-                    self.logger.error(f"❌ ส่ง Order ไม่สำเร็จ: {last_error}")
+                    error_msg = f"MT5 Error: {last_error[1] if last_error else 'Unknown error'}"
+                    self.logger.error(f"❌ ส่ง Order ไม่สำเร็จ: {error_msg}")
                     self.logger.error(f"❌ Error Code: {last_error[0] if last_error else 'Unknown'}")
-                    self.logger.error(f"❌ Error Description: {last_error[1] if last_error else 'Unknown'}")
-                    return None
+                    return {
+                        'success': False,
+                        'error': error_msg,
+                        'symbol': symbol,
+                        'type': order_type
+                    }
                 
                 # Log detailed result
                 self.logger.info(f"📋 Result: RetCode={result.retcode}")
@@ -567,6 +598,7 @@ class BrokerAPI:
                 if result.retcode == 10009:  # TRADE_RETCODE_DONE
                     self.logger.info(f"✅ สำเร็จ! Deal: {result.deal}, Order: {result.order}")
                     return {
+                        'success': True,
                         'order_id': result.order,
                         'symbol': symbol,
                         'type': order_type,
@@ -584,6 +616,8 @@ class BrokerAPI:
                     self.logger.error(f"❌ Full result: {result}")
                     # Return error result instead of None
                     return {
+                        'success': False,
+                        'error': f"RetCode {result.retcode}: {error_desc}",
                         'order_id': None,
                         'symbol': symbol,
                         'type': order_type,

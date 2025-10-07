@@ -578,8 +578,8 @@ class TradingCalculations:
                 risk_amount = balance * (risk_per_trade_percent / 100.0)
                 risk_per_pair = risk_amount / 3.0  # แบ่ง 3 คู่
                 
-                # ใช้ stop loss 50 pips เป็นมาตรฐาน
-                stop_loss_pips = 50.0
+                # ใช้ stop loss 100 pips เป็นมาตรฐาน (เพิ่มขึ้นเพื่อลดการถูก SL)
+                stop_loss_pips = 100.0
                 
                 logging.getLogger(__name__).info(f"🔍 DEBUG: RISK-BASED MODE CALCULATION:")
                 logging.getLogger(__name__).info(f"   Balance=${balance:.2f}")

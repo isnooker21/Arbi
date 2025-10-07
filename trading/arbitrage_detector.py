@@ -712,7 +712,7 @@ class TriangleArbitrageDetector:
             
             # ตรวจสอบผลลัพธ์
             for result in results:
-                if result and result['success']:
+                if result and result.get('success') and result.get('order_id'):
                     orders_sent += 1
                     # 🆕 แปลง symbol ผ่าน mapper
                     real_symbol = self.symbol_mapper.get_real_symbol(result['symbol'])
