@@ -19,8 +19,18 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import logging
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Set
 import threading
+import os
+import sys
+
+# Ensure project root is on sys.path when running this module directly
+try:
+    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if PROJECT_ROOT not in sys.path:
+        sys.path.append(PROJECT_ROOT)
+except Exception:
+    pass
 from utils.calculations import TradingCalculations
 from trading.individual_order_tracker import IndividualOrderTracker
 
@@ -244,12 +254,18 @@ class CorrelationManager:
         try:
             import json
             import os
-            
-            config_path = 'config/adaptive_params.json'
-            
-            if os.path.exists(config_path):
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
+            # Use config helper to support EXE and user override
+            try:
+                from utils.config_helper import load_config
+                config = load_config('adaptive_params.json')
+            except Exception:
+                # Fallback to direct path if helper unavailable
+                config_path = 'config/adaptive_params.json'
+                if os.path.exists(config_path):
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                else:
+                    config = {}
                 
                 # โหลด recovery parameters
                 recovery_params = config.get('recovery_params', {})

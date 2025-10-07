@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 import logging
 from typing import Dict, List, Optional
 import json
+import os
 
 class RiskManager:
     def __init__(self, config_file: str = "config/settings.json"):
@@ -51,7 +52,13 @@ class RiskManager:
     def _load_config(self, config_file: str) -> Dict:
         """Load configuration from JSON file"""
         try:
-            with open(config_file, 'r') as f:
+            # Use config helper to support EXE and user override
+            try:
+                from utils.config_helper import get_config_path
+                cfg_path = get_config_path(os.path.basename(config_file))
+            except Exception:
+                cfg_path = config_file
+            with open(cfg_path, 'r') as f:
                 return json.load(f)
         except Exception as e:
             self.logger.error(f"Error loading config: {e}")

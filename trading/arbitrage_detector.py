@@ -27,6 +27,16 @@ import asyncio
 import threading
 # import talib  # ไม่ใช้ในระบบนี้
 import time
+import os
+import sys
+
+# Ensure project root is on sys.path when running this module directly
+try:
+    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if PROJECT_ROOT not in sys.path:
+        sys.path.append(PROJECT_ROOT)
+except Exception:
+    pass
 from utils.calculations import TradingCalculations
 from utils.symbol_mapper import SymbolMapper
 
@@ -2555,10 +2565,16 @@ class TriangleArbitrageDetector:
             
             self.logger.info("🔄 Reloading arbitrage config from adaptive_params.json...")
             
-            config_path = 'config/adaptive_params.json'
-            if os.path.exists(config_path):
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
+            try:
+                from utils.config_helper import load_config
+                config = load_config('adaptive_params.json')
+            except Exception:
+                config_path = 'config/adaptive_params.json'
+                if os.path.exists(config_path):
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                else:
+                    config = {}
                 
                 # Reload arbitrage params
                 arb_params = config.get('arbitrage_params', {})

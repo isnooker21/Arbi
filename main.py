@@ -197,7 +197,19 @@ class TradingSystem:
             handlers=[file_handler, console_handler]
         )
         
-        return logging.getLogger(__name__)
+        logger = logging.getLogger(__name__)
+        
+        # If running as a frozen EXE, restrict logging to ERROR only
+        try:
+            if getattr(sys, 'frozen', False):
+                logging.getLogger().setLevel(logging.ERROR)
+                for h in logging.getLogger().handlers:
+                    h.setLevel(logging.ERROR)
+                logger.setLevel(logging.ERROR)
+        except Exception:
+            pass
+        
+        return logger
     
     def _initialize_components(self):
         """Initialize all system components"""

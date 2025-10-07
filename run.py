@@ -62,6 +62,15 @@ def setup_logging():
         handlers=[file_handler, console_handler]
     )
     
+    # If running as a frozen EXE, restrict logging to ERROR only
+    try:
+        if getattr(sys, 'frozen', False):
+            logging.getLogger().setLevel(logging.ERROR)
+            for h in logging.getLogger().handlers:
+                h.setLevel(logging.ERROR)
+    except Exception:
+        pass
+    
     return logging.getLogger(__name__)
 
 def run_gui():
