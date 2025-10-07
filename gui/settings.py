@@ -308,8 +308,18 @@ class SettingsWindow:
         
         # Get current value
         current_value = self.get_nested_value(self.settings, param_path)
+        
+        # Debug for risk_per_trade_percent
+        if 'risk_per_trade_percent' in param_path:
+            print(f"\n📋 Creating parameter row for: {param_name}")
+            print(f"   Path: {param_path}")
+            print(f"   Type: {param_type}")
+            print(f"   Current value from config: {current_value} (type: {type(current_value).__name__ if current_value is not None else 'None'})")
+        
         if current_value is None:
             current_value = 0.0 if param_type == "float" else 0 if param_type == "int" else False
+            if 'risk_per_trade_percent' in param_path:
+                print(f"   ⚠️ Value was None, using default: {current_value}")
         
         if param_type == "bool":
             # Boolean checkbox with custom style
@@ -403,11 +413,27 @@ class SettingsWindow:
         """Get value from nested dictionary using dot notation"""
         keys = path.split('.')
         value = data
-        for key in keys:
+        
+        # Debug logging for risk_per_trade_percent
+        if 'risk_per_trade_percent' in path:
+            print(f"\n🔍 DEBUG get_nested_value: {path}")
+            print(f"   Keys to traverse: {keys}")
+        
+        for i, key in enumerate(keys):
             if isinstance(value, dict) and key in value:
                 value = value[key]
+                if 'risk_per_trade_percent' in path:
+                    print(f"   Step {i+1}: key='{key}' → type={type(value).__name__}, value={value if not isinstance(value, dict) else '{...}'}")
             else:
+                if 'risk_per_trade_percent' in path:
+                    print(f"   ❌ Step {i+1}: key='{key}' NOT FOUND in {type(value).__name__}")
+                    if isinstance(value, dict):
+                        print(f"   Available keys: {list(value.keys())}")
                 return None
+        
+        if 'risk_per_trade_percent' in path:
+            print(f"   ✅ Final value: {value} (type: {type(value).__name__})")
+        
         return value
     
     def set_nested_value(self, data, path, value):
