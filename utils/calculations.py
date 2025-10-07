@@ -578,14 +578,15 @@ class TradingCalculations:
                 risk_amount = balance * (risk_per_trade_percent / 100.0)
                 risk_per_pair = risk_amount / 3.0  # แบ่ง 3 คู่
                 
-                # ใช้ stop loss 100 pips เป็นมาตรฐาน (เพิ่มขึ้นเพื่อลดการถูก SL)
-                stop_loss_pips = 100.0
+                # ไม่ใช้ stop loss เพื่อให้ระบบ Recovery ทำงานได้
+                # ระบบจะใช้ Recovery Strategy แทน SL
+                stop_loss_pips = 0.0  # ปิด SL
                 
-                logging.getLogger(__name__).info(f"🔍 DEBUG: RISK-BASED MODE CALCULATION:")
+                logging.getLogger(__name__).info(f"🔍 DEBUG: RISK-BASED MODE CALCULATION (NO SL):")
                 logging.getLogger(__name__).info(f"   Balance=${balance:.2f}")
                 logging.getLogger(__name__).info(f"   Risk={risk_per_trade_percent}% (${risk_amount:.2f})")
                 logging.getLogger(__name__).info(f"   Risk per Pair: ${risk_per_pair:.2f}")
-                logging.getLogger(__name__).info(f"   Stop Loss: {stop_loss_pips} pips")
+                logging.getLogger(__name__).info(f"   Stop Loss: DISABLED (Recovery Mode)")
                 
                 lot_sizes = {}
                 
@@ -594,8 +595,10 @@ class TradingCalculations:
                     pip_value_per_001 = TradingCalculations.calculate_pip_value(symbol, 0.01, broker_api)
                     
                     if pip_value_per_001 > 0:
-                        # Lot = Risk per Pair / (Stop Loss × Pip Value per 0.01 lot) × 0.01
-                        lot_size = (risk_per_pair / (stop_loss_pips * pip_value_per_001)) * 0.01
+                        # ไม่ใช้ SL - คำนวณ lot size จาก risk โดยตรง
+                        # ใช้ pip value เป็นตัวกำหนด lot size
+                        # Lot = Risk per Pair / (Pip Value per 0.01 lot) × 0.01
+                        lot_size = (risk_per_pair / pip_value_per_001) * 0.01
                         
                         # Round to valid lot size
                         lot_size = TradingCalculations.round_to_valid_lot_size(lot_size)
