@@ -569,7 +569,9 @@ class TriangleArbitrageDetector:
                 balance=balance,
                 target_pip_value=5.0,  # $5 pip value base (reduced from $10 for lower risk)
                 broker_api=self.broker,  # ส่ง broker API สำหรับดึงอัตราแลกเปลี่ยน
-                use_simple_mode=use_simple_mode  # ใช้ค่าจาก config
+                use_simple_mode=use_simple_mode,  # ใช้ค่าจาก config
+                use_risk_based_sizing=use_risk_based_sizing,  # 🔥 ส่ง risk-based flag
+                risk_per_trade_percent=risk_per_trade_percent  # 🔥 ส่ง risk percentage
             )
             self.logger.info(f"🔍 DEBUG: Arbitrage Detector - Calculated Lot Sizes: {lot_sizes}")
             
