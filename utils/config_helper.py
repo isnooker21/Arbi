@@ -88,10 +88,17 @@ def save_config(filename, data):
         bool: True if successful, False otherwise
     """
     try:
-        config_path = get_user_config_path(filename)
+        # 🔥 FIX: Save to the SAME path we load from!
+        config_path = get_config_path(filename)
+        
+        # Make sure directory exists
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        print(f"✅ Config saved to: {config_path}")
         return True
     except Exception as e:
-        print(f"Error saving config {filename}: {e}")
+        print(f"❌ Error saving config {filename}: {e}")
         return False
