@@ -156,12 +156,11 @@ class TriangleArbitrageDetector:
         
         # 🆕 Trailing Stop System (Group-Level)
         self.group_trailing_stops = {}  # {group_id: {'peak': float, 'stop': float, 'active': bool}}
-        self.trailing_stop_distance = 10.0  # $10 distance from peak
-        self.lock_profit_percentage = 0.5  # Lock 50% of peak profit
         
-        # 🆕 Min Profit Threshold (Scale with Balance)
-        self.min_profit_base = 10.0  # $10 for $10K balance
-        self.min_profit_base_balance = 10000.0  # Base balance
+        # ⭐ โหลด Trailing Stop Config จาก adaptive_params.json
+        self._load_trailing_stop_config()
+        
+        # 🆕 Min Profit Threshold (Scale with Balance) - จะถูกโหลดจาก config
         
         # If no triangles generated, create fallback triangles
         if len(self.triangle_combinations) == 0 and len(self.available_pairs) > 0:
@@ -1202,18 +1201,19 @@ class TriangleArbitrageDetector:
             
             self.logger.debug(f"💰 {group_id}: Balance=${balance:.2f}, Min Profit=${min_profit_threshold:.2f} (Base $10 @ $10K)")
             
-            # 🆕 STEP 2: Trailing Stop Logic
-            if group_id not in self.group_trailing_stops:
-                self.group_trailing_stops[group_id] = {
-                    'peak': 0.0,
-                    'stop': 0.0,
-                    'active': False
-                }
-            
-            trailing_data = self.group_trailing_stops[group_id]
-            
-            # ถ้ากำไรเกิน min_profit → เริ่ม trailing stop
-            if net_pnl >= min_profit_threshold:
+            # 🆕 STEP 2: Trailing Stop Logic (เช็ค trailing_stop_enabled ก่อน)
+            if self.trailing_stop_enabled:
+                if group_id not in self.group_trailing_stops:
+                    self.group_trailing_stops[group_id] = {
+                        'peak': 0.0,
+                        'stop': 0.0,
+                        'active': False
+                    }
+                
+                trailing_data = self.group_trailing_stops[group_id]
+                
+                # ถ้ากำไรเกิน min_profit → เริ่ม trailing stop
+                if net_pnl >= min_profit_threshold:
                 if not trailing_data['active']:
                     # เริ่ม trailing stop
                     trailing_data['active'] = True
@@ -1243,6 +1243,11 @@ class TriangleArbitrageDetector:
                         trailing_data['active'] = False
                         trailing_data['peak'] = 0.0
                         trailing_data['stop'] = 0.0
+            else:
+                # Trailing Stop ปิดอยู่ — ใช้ Min Profit เพียงอย่างเดียว
+                if net_pnl >= min_profit_threshold:
+                    self.logger.info(f"✅ {group_id} Min Profit Reached: ${net_pnl:.2f} >= ${min_profit_threshold:.2f} (Trailing Stop DISABLED)")
+                    return True
             
             # 🆕 STEP 3: ไม่ปิดทันทีที่ถึง Min Profit — ให้ Trailing Stop ควบคุมเท่านั้น
             # หากเพิ่งถึงขั้นต่ำ ให้รอให้ trailing_data['active'] ถูกตั้งในรอบนี้ แล้วค่อยพิจารณา HIT ในรอบถัดไป
@@ -2575,13 +2580,11 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error updating active groups with enhanced data: {e}")
     
-    def reload_config(self):
-        """โหลดการตั้งค่าใหม่จาก config file (Hot Reload!)"""
+    def _load_trailing_stop_config(self):
+        """โหลด Trailing Stop Config จาก adaptive_params.json"""
         try:
             import json
             import os
-            
-            self.logger.info("🔄 Reloading arbitrage config from adaptive_params.json...")
             
             try:
                 from utils.config_helper import load_config
@@ -2593,30 +2596,59 @@ class TriangleArbitrageDetector:
                         config = json.load(f)
                 else:
                     config = {}
-                
-                # Reload arbitrage params
-                arb_params = config.get('arbitrage_params', {})
-                closing = arb_params.get('closing', {})
-                
-                # Update trailing stop settings
-                self.trailing_stop_distance = closing.get('trailing_stop_distance', 10.0)
-                self.min_profit_base = closing.get('min_profit_base', 10.0)
-                self.min_profit_base_balance = closing.get('min_profit_base_balance', 10000.0)
-                self.lock_profit_percentage = closing.get('lock_profit_percentage', 0.5)
-                
-                # Update max triangles
-                triangles = arb_params.get('triangles', {})
-                # Note: max_active_triangles affects new groups only
-                
-                self.logger.info("✅ Arbitrage config reloaded!")
-                self.logger.info(f"   Trailing Stop: ${self.trailing_stop_distance}")
+            
+            # Load arbitrage params
+            arb_params = config.get('arbitrage_params', {})
+            detection = arb_params.get('detection', {})
+            closing = arb_params.get('closing', {})
+            triangles = arb_params.get('triangles', {})
+            
+            # ⭐ Load Trailing Stop Settings
+            self.trailing_stop_enabled = closing.get('trailing_stop_enabled', True)
+            self.trailing_stop_distance = closing.get('trailing_stop_distance', 10.0)
+            self.min_profit_base = closing.get('min_profit_base', 10.0)
+            self.min_profit_base_balance = closing.get('min_profit_base_balance', 10000.0)
+            self.lock_profit_percentage = closing.get('lock_profit_percentage', 0.5)
+            
+            # ⭐ Load Arbitrage Detection Settings
+            self.min_arbitrage_threshold = detection.get('min_threshold', 0.0001)
+            self.spread_tolerance = detection.get('spread_tolerance', 0.5)
+            
+            # ⭐ Load Triangle Settings
+            self.max_active_triangles_config = triangles.get('max_active_triangles', 4)
+            
+            self.logger.info("=" * 60)
+            self.logger.info("✅ ARBITRAGE CONFIG LOADED")
+            self.logger.info("=" * 60)
+            self.logger.info(f"🔒 Trailing Stop: {'ENABLED' if self.trailing_stop_enabled else 'DISABLED'}")
+            if self.trailing_stop_enabled:
+                self.logger.info(f"   Distance: ${self.trailing_stop_distance}")
                 self.logger.info(f"   Min Profit: ${self.min_profit_base} @ ${self.min_profit_base_balance}")
                 self.logger.info(f"   Lock Profit: {self.lock_profit_percentage*100:.0f}% of Peak")
-                
-                return True
-            else:
-                self.logger.warning("⚠️ Config file not found")
-                return False
+            self.logger.info(f"⚡ Min Threshold: {self.min_arbitrage_threshold}")
+            self.logger.info(f"📊 Spread Tolerance: {self.spread_tolerance} pips")
+            self.logger.info(f"🔺 Max Active Triangles: {self.max_active_triangles_config}")
+            self.logger.info("=" * 60)
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error loading trailing stop config: {e}")
+            # Fallback values
+            self.trailing_stop_enabled = True
+            self.trailing_stop_distance = 10.0
+            self.min_profit_base = 10.0
+            self.min_profit_base_balance = 10000.0
+            self.lock_profit_percentage = 0.5
+            self.min_arbitrage_threshold = 0.0001
+            self.spread_tolerance = 0.5
+            self.max_active_triangles_config = 4
+    
+    def reload_config(self):
+        """โหลดการตั้งค่าใหม่จาก config file (Hot Reload!)"""
+        try:
+            self.logger.info("🔄 Reloading arbitrage config from adaptive_params.json...")
+            self._load_trailing_stop_config()
+            self.logger.info("✅ Arbitrage config reloaded!")
+            return True
                 
         except Exception as e:
             self.logger.error(f"❌ Error reloading arbitrage config: {e}")

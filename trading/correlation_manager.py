@@ -277,6 +277,11 @@ class CorrelationManager:
             # โหลด position sizing จาก config
             position_sizing = config.get('position_sizing', {})
             lot_calc = position_sizing.get('lot_calculation', {})
+            risk_mgmt = position_sizing.get('risk_management', {})
+            
+            # ⭐ โหลด risk_per_trade_percent สำหรับการคำนวณ lot อัตโนมัติ
+            self.use_risk_based_sizing = lot_calc.get('use_risk_based_sizing', True)
+            self.risk_per_trade_percent = lot_calc.get('risk_per_trade_percent', 1.5)
             
             # ตั้งค่า recovery thresholds จาก config (% based)
             self.recovery_thresholds = {
@@ -291,7 +296,8 @@ class CorrelationManager:
                 ),
                 'wait_time_minutes': timing.get('recovery_check_interval_minutes', 5),
                 'cooldown_between_checks': timing.get('cooldown_between_checks', 10),
-                'base_lot_size': lot_calc.get('base_lot_size', 0.01)  # โหลดจาก config แทน hardcode
+                'base_lot_size': lot_calc.get('base_lot_size', 0.01),  # โหลดจาก config แทน hardcode
+                'risk_per_trade_percent': self.risk_per_trade_percent  # ⭐ เพิ่ม risk_per_trade_percent
             }
             
             # โหลด diversification settings
@@ -337,6 +343,12 @@ class CorrelationManager:
             # โหลด risk management parameters
             risk_mgmt = config.get('position_sizing', {}).get('risk_management', {})
             self.portfolio_balance_threshold = risk_mgmt.get('max_portfolio_risk', 0.05)
+            self.max_concurrent_groups = risk_mgmt.get('max_concurrent_groups', 4)
+            
+            # โหลด dynamic hedge parameters
+            dynamic_hedge = recovery_params.get('dynamic_hedge', {})
+            self.min_hedge_lot = dynamic_hedge.get('min_hedge_lot', 0.1)
+            self.max_hedge_lot = dynamic_hedge.get('max_hedge_lot', 3.0)
             
             self.logger.info("=" * 60)
             self.logger.info("✅ RECOVERY CONFIG LOADED (% BASED)")
@@ -373,6 +385,17 @@ class CorrelationManager:
             self.logger.info(f"📦 Hedge Ratio: {self.recovery_thresholds['hedge_ratio_range'][0]} - {self.recovery_thresholds['hedge_ratio_range'][1]}")
             self.logger.info(f"🎯 Max Symbol Usage: {self.max_symbol_usage} times")
             self.logger.info(f"📏 Base Lot Size: {self.recovery_thresholds['base_lot_size']}")
+            self.logger.info(f"🔧 Recovery Lot Limits: {self.min_hedge_lot} - {self.max_hedge_lot} lot")
+            self.logger.info(f"⚙️ System Limits: Max Portfolio Risk {self.portfolio_balance_threshold:.1%}, Max Groups {self.max_concurrent_groups}")
+            self.logger.info(f"⭐ Risk-Based Sizing: {'ENABLED' if self.use_risk_based_sizing else 'DISABLED'}")
+            if self.use_risk_based_sizing:
+                self.logger.info(f"💰 Risk Per Trade: {self.risk_per_trade_percent}% of balance")
+                self.logger.info(f"   Examples (with 100 pips risk):")
+                for bal in [5000, 10000, 50000, 100000]:
+                    # คำนวณ lot โดยประมาณ
+                    risk_amount = bal * (self.risk_per_trade_percent / 100)
+                    approx_lot = risk_amount / (10 * 100)  # pip_value ~$10, 100 pips
+                    self.logger.info(f"   - Balance ${bal:,}: ~{approx_lot:.2f} lot")
             self.logger.info("=" * 60)
             
         except Exception as e:
@@ -382,6 +405,10 @@ class CorrelationManager:
     
     def _set_fallback_config(self):
         """ตั้งค่า fallback เมื่อไม่สามารถโหลด config ได้ (% based)"""
+        # ⭐ ตั้งค่า risk-based sizing (fallback)
+        self.use_risk_based_sizing = True
+        self.risk_per_trade_percent = 1.5
+        
         self.recovery_thresholds = {
             'min_correlation': 0.6,      # ความสัมพันธ์ขั้นต่ำ 60%
             'max_correlation': 0.95,     # ความสัมพันธ์สูงสุด 95%
@@ -391,7 +418,8 @@ class CorrelationManager:
             'hedge_ratio_range': (0.7, 1.3),  # ขนาด hedge ratio
             'wait_time_minutes': 5,      # รอ 5 นาทีก่อนแก้ไม้
             'cooldown_between_checks': 10,  # เช็คทุก 10 วินาที
-            'base_lot_size': 0.05        # ขนาด lot เริ่มต้น
+            'base_lot_size': 0.05,       # ขนาด lot เริ่มต้น
+            'risk_per_trade_percent': self.risk_per_trade_percent  # ⭐ เพิ่ม risk_per_trade_percent
         }
         
         # Diversification settings
@@ -943,8 +971,8 @@ class CorrelationManager:
                     # เพิ่ม lot size ขึ้น
                     hedge_lot = hedge_lot * (pips_needed / 10)
             
-            # ✅ ขั้นตอนที่ 5: จำกัด min/max และ round
-            hedge_lot = max(0.1, min(hedge_lot, 2.0))
+            # ✅ ขั้นตอนที่ 5: จำกัด min/max และ round (ใช้ค่าจาก config)
+            hedge_lot = max(self.min_hedge_lot, min(hedge_lot, self.max_hedge_lot))
             hedge_lot = TradingCalculations.round_to_valid_lot_size(hedge_lot)
             
             self.logger.info(f"📊 Dynamic Hedge Calculation:")
@@ -967,7 +995,7 @@ class CorrelationManager:
                     break
             
             fallback_lot = original_lot * abs(correlation)
-            fallback_lot = max(0.1, min(fallback_lot, 2.0))
+            fallback_lot = max(self.min_hedge_lot, min(fallback_lot, self.max_hedge_lot))
             
             from utils.calculations import TradingCalculations
             fallback_lot = TradingCalculations.round_to_valid_lot_size(fallback_lot)
@@ -1440,9 +1468,58 @@ class CorrelationManager:
             self.logger.error(f"Error marking position as hedged: {e}")
     
     def _calculate_hedge_lot_size(self, original_lot: float, correlation: float, loss_percent: float, original_symbol: str = None, hedge_symbol: str = None) -> float:
-        """คำนวณขนาด lot สำหรับ hedge position - ใช้ dynamic calculation"""
+        """คำนวณขนาด lot สำหรับ hedge position - ใช้ risk-based หรือ dynamic calculation"""
         try:
-            # ✅ NEW: Try to get original position PnL for dynamic calculation
+            from utils.calculations import TradingCalculations
+            
+            # ดึง balance จาก broker
+            balance = self.broker.get_account_balance()
+            if not balance or balance <= 0:
+                self.logger.warning("Cannot get account balance - using fallback lot size")
+                return max(0.01, min(original_lot, 0.5))
+            
+            # ⭐ ใช้ Risk-Based Sizing (แนะนำ!)
+            if self.use_risk_based_sizing and hedge_symbol:
+                self.logger.info(f"⭐ Using Risk-Based Lot Calculation (risk_per_trade={self.risk_per_trade_percent}%)")
+                
+                # คำนวณ lot จาก balance และ risk percent
+                # ใช้ TradingCalculations.calculate_lot_from_balance()
+                # สมมติ max_loss_pips = 100 pips (สามารถปรับได้ตามต้องการ)
+                max_loss_pips = 100
+                
+                # คำนวณ pip value ของ hedge symbol
+                pip_value = TradingCalculations.calculate_pip_value(hedge_symbol, 0.01, self.broker)
+                if pip_value <= 0:
+                    pip_value = 1.0  # fallback
+                
+                # คำนวณ lot size โดยใช้ risk_per_trade_percent
+                hedge_lot = TradingCalculations.calculate_lot_from_balance(
+                    balance=balance,
+                    pip_value=pip_value,
+                    risk_percent=self.risk_per_trade_percent,
+                    max_loss_pips=max_loss_pips
+                )
+                
+                # ปรับตาม correlation
+                hedge_lot = hedge_lot * abs(correlation)
+                
+                # Round to valid lot size
+                hedge_lot = TradingCalculations.round_to_valid_lot_size(hedge_lot)
+                
+                # จำกัดขนาด lot ตาม config (โหลดจาก adaptive_params.json)
+                hedge_lot = max(self.min_hedge_lot, min(hedge_lot, self.max_hedge_lot))
+                
+                self.logger.info(f"💰 Risk-Based Calculation:")
+                self.logger.info(f"   Balance: ${balance:.2f}")
+                self.logger.info(f"   Risk Per Trade: {self.risk_per_trade_percent}%")
+                self.logger.info(f"   Risk Amount: ${balance * (self.risk_per_trade_percent / 100):.2f}")
+                self.logger.info(f"   Correlation Adj: {abs(correlation):.3f}")
+                self.logger.info(f"   Final Hedge Lot: {hedge_lot:.4f}")
+                
+                return float(hedge_lot)
+            
+            # ✅ ใช้ Dynamic Hedge Calculation (fallback method)
+            self.logger.info(f"📊 Using Dynamic Hedge Calculation")
             original_pnl = 0.0
             if original_symbol:
                 all_positions = self.broker.get_all_positions()
@@ -1451,67 +1528,50 @@ class CorrelationManager:
                         original_pnl = pos.get('profit', 0)
                         break
             
-            # ✅ NEW: Use dynamic hedge calculation if PnL is available
+            # Use dynamic calculation if PnL is available
             if abs(original_pnl) > 0 and hedge_symbol:
                 hedge_lot = self._calculate_dynamic_hedge_lot(
                     original_pnl, correlation, original_symbol, hedge_symbol
                 )
                 
-                # ✅ Ensure lot size is valid (round to 0.01)
-                from utils.calculations import TradingCalculations
+                # Ensure lot size is valid (round to 0.01)
                 hedge_lot = TradingCalculations.round_to_valid_lot_size(hedge_lot)
                 
-                self.logger.info(f"📊 Using Dynamic Hedge Calculation: Original PnL=${original_pnl:.2f}, Hedge Lot={hedge_lot:.4f}")
+                self.logger.info(f"📊 Dynamic Hedge: Original PnL=${original_pnl:.2f}, Hedge Lot={hedge_lot:.4f}")
                 return hedge_lot
             
-            # ✅ Fallback to original calculation if dynamic fails
-            # ดึง balance จาก broker
-            balance = self.broker.get_account_balance()
-            if not balance:
-                self.logger.warning("Cannot get account balance - using original lot size")
-                return original_lot
-            
-            # คำนวณ pip value ของ original position
+            # ✅ Fallback to pip value calculation
             if original_symbol and hedge_symbol:
                 original_pip_value = TradingCalculations.calculate_pip_value(original_symbol, original_lot, self.broker)
                 
-                # คำนวณ target pip value ตาม balance (base $10K = $5 pip value - reduced for lower risk)
+                # คำนวณ target pip value ตาม balance
                 base_balance = 10000.0
                 balance_multiplier = balance / base_balance
                 target_pip_value = 5.0 * balance_multiplier
                 
                 # คำนวณ lot size ที่ให้ pip value เท่ากับ target
-                # ใช้ correlation เพื่อปรับขนาด hedge
-                hedge_pip_value = target_pip_value * abs(correlation)  # ใช้ absolute value
+                hedge_pip_value = target_pip_value * abs(correlation)
                 
                 # หา lot size ที่ให้ pip value ตาม target
-                # ใช้คู่เงินที่แก้เป็น base
                 pip_value_per_001 = TradingCalculations.calculate_pip_value(hedge_symbol, 0.01, self.broker)
                 if pip_value_per_001 > 0:
                     hedge_lot = (hedge_pip_value * 0.01) / pip_value_per_001
                 else:
-                    # Fallback: ใช้ lot size เดียวกันกับไม้เดิม
                     hedge_lot = original_lot
                 
-                # Round to valid lot size
+                # Round and limit
                 hedge_lot = TradingCalculations.round_to_valid_lot_size(hedge_lot)
+                hedge_lot = max(0.1, min(hedge_lot, 0.5))
                 
-                # จำกัดขนาด lot (reduced for lower risk)
-                hedge_lot = min(hedge_lot, 0.5)  # สูงสุด 0.5 lot (reduced from 1.0)
-                hedge_lot = max(hedge_lot, 0.1)  # ต่ำสุด 0.1 lot
-                
-                self.logger.info(f"📊 Hedge lot calculation: Original={original_lot:.4f}, Target Pip=${target_pip_value:.2f}, Hedge Lot={hedge_lot:.4f}")
-                self.logger.info(f"   Original pip value: ${original_pip_value:.2f}, Hedge pip value: ${hedge_pip_value:.2f}")
-                self.logger.info(f"   Hedge symbol: {hedge_symbol}, Pip value per 0.01: ${pip_value_per_001:.2f}")
-                
+                self.logger.info(f"📊 Pip-Based Hedge: Original={original_lot:.4f}, Hedge Lot={hedge_lot:.4f}")
                 return float(hedge_lot)
-            else:
-                # Fallback: ใช้ lot size เดียวกันกับไม้เดิม
-                return original_lot
+            
+            # Ultimate fallback
+            return max(0.01, min(original_lot, 0.5))
             
         except Exception as e:
             self.logger.error(f"Error calculating hedge lot size: {e}")
-            return original_lot
+            return max(0.01, min(original_lot, 0.5))
     
     def _send_hedge_order(self, symbol: str, lot_size: float, group_id: str, recovery_level: int = 1, original_symbol: str = None) -> bool:
         """ส่งออเดอร์ hedge"""
