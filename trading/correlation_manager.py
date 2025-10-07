@@ -238,14 +238,20 @@ class CorrelationManager:
         self.logger.info("🚀 Individual Order Tracker initialized")
         self.order_tracker.log_status_summary()
         
-        # Auto-register existing orders on startup
-        self.logger.info("🔧 Auto-registering existing MT5 positions...")
-        try:
-            self.register_existing_orders()
-        except Exception as e:
-            self.logger.error(f"❌ Error in auto-registration: {e}")
-            import traceback
-            self.logger.error(f"Traceback: {traceback.format_exc()}")
+        # Auto-register existing orders on startup (DISABLED - to avoid registering old orders)
+        # self.logger.info("🔧 Auto-registering existing MT5 positions...")
+        # try:
+        #     self.register_existing_orders()
+        # except Exception as e:
+        #     self.logger.error(f"❌ Error in auto-registration: {e}")
+        #     import traceback
+        #     self.logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        self.logger.info("ℹ️ Auto-registration disabled - only new orders will be tracked")
+        
+        # 🆕 Clear old order tracking data on startup (optional)
+        # Uncomment the line below if you want to start fresh
+        # self.clear_old_order_tracking()
         
         self.logger.info("✅ CorrelationManager initialization completed")
     
@@ -3383,6 +3389,37 @@ class CorrelationManager:
             234006: "group_triangle_6_1"
         }
         return magic_to_group.get(magic, f"group_unknown_{magic}")
+    
+    def clear_old_order_tracking(self):
+        """Clear all old order tracking data to start fresh"""
+        try:
+            self.logger.info("🧹 CLEARING OLD ORDER TRACKING DATA")
+            
+            # Clear order tracker
+            if hasattr(self, 'order_tracker') and self.order_tracker:
+                self.order_tracker.force_reset_all_orders()
+                self.logger.info("✅ Order tracker cleared")
+            
+            # Clear recovery data files
+            import os
+            files_to_clear = [
+                "data/order_tracking.json",
+                "data/active_groups.json",
+                "data/recovery_positions.json"
+            ]
+            
+            for file_path in files_to_clear:
+                if os.path.exists(file_path):
+                    try:
+                        os.remove(file_path)
+                        self.logger.info(f"🗑️ Removed: {file_path}")
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ Could not remove {file_path}: {e}")
+            
+            self.logger.info("✅ Old tracking data cleared - system ready for fresh start")
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error clearing old tracking data: {e}")
     
     def test_recovery_system(self):
         """Test the recovery system with current losing positions"""
