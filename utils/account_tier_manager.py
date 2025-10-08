@@ -24,9 +24,22 @@ class AccountTierManager:
     def _load_account_tiers(self) -> Dict:
         """โหลดการตั้งค่า Account Tiers จาก config"""
         try:
-            with open(self.config_file, 'r') as f:
+            with open(self.config_file, 'r', encoding='utf-8') as f:
                 config = json.load(f)
             return config.get('position_sizing', {}).get('account_tiers', {})
+        except UnicodeDecodeError as e:
+            self.logger.error(f"Unicode decode error in config file: {e}")
+            # Try with different encodings
+            for encoding in ['cp1252', 'latin-1', 'iso-8859-1']:
+                try:
+                    with open(self.config_file, 'r', encoding=encoding) as f:
+                        config = json.load(f)
+                    self.logger.info(f"Successfully loaded config with {encoding} encoding")
+                    return config.get('position_sizing', {}).get('account_tiers', {})
+                except:
+                    continue
+            self.logger.error("Failed to load config with any encoding, using defaults")
+            return self._get_default_tiers()
         except Exception as e:
             self.logger.error(f"Error loading account tiers: {e}")
             return self._get_default_tiers()
@@ -217,3 +230,4 @@ def test_account_tiers():
 
 if __name__ == "__main__":
     test_account_tiers()
+

@@ -553,8 +553,21 @@ class TriangleArbitrageDetector:
         """โหลดการตั้งค่า Account Tier จาก config"""
         try:
             import json
-            with open('config/adaptive_params.json', 'r') as f:
+            with open('config/adaptive_params.json', 'r', encoding='utf-8') as f:
                 self.tier_config = json.load(f)
+        except UnicodeDecodeError as e:
+            self.logger.error(f"Unicode decode error in config file: {e}")
+            # Try with different encodings
+            for encoding in ['cp1252', 'latin-1', 'iso-8859-1']:
+                try:
+                    with open('config/adaptive_params.json', 'r', encoding=encoding) as f:
+                        self.tier_config = json.load(f)
+                    self.logger.info(f"Successfully loaded config with {encoding} encoding")
+                    return
+                except:
+                    continue
+            self.logger.error("Failed to load config with any encoding")
+            self.tier_config = {}
         except Exception as e:
             self.logger.error(f"Error loading tier config: {e}")
             self.tier_config = {}

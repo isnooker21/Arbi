@@ -228,7 +228,7 @@
     "max_drawdown_percent": 30,
     "max_position_hold_hours": 24,
     "max_recovery_attempts": 3,
-    "emergency_stop_loss": 0.20,
+    "emergency_stop_loss": 0.2,
     "description": "System-wide limits and safety parameters"
   },
   "performance_monitoring": {
