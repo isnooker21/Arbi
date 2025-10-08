@@ -2575,6 +2575,14 @@ class CorrelationManager:
         try:
             current_time = datetime.now()
             
+            # 📊 แสดงสถานะทุก Group ทุก 30 วินาที
+            if not hasattr(self, '_last_status_log'):
+                self._last_status_log = current_time
+                self._log_all_groups_status()
+            elif (current_time - self._last_status_log).total_seconds() > 30:
+                self._log_all_groups_status()
+                self._last_status_log = current_time
+            
             # 🎯 STAGE 1: ARBITRAGE - หา Group ที่ติดลบ
             arbitrage_groups = self._find_losing_arbitrage_groups()
             
@@ -2589,18 +2597,83 @@ class CorrelationManager:
                     self.logger.info(f"🔗 STAGE 3: Found {len(chain_candidates)} chain recovery candidates")
                     for candidate in chain_candidates:
                         self._start_individual_recovery(candidate)
-                else:
-                    # Log "no work" once per 5 minutes
-                    if not hasattr(self, '_last_no_work_log'):
-                        self._last_no_work_log = current_time
-                    elif (current_time - self._last_no_work_log).total_seconds() > 300:
-                        stats = self.order_tracker.get_statistics()
-                        self.logger.info(f"✅ All groups stable | Tracked: {stats['total_tracked_orders']} | "
-                                       f"Hedged: {stats['hedged_orders']} | Pending: {stats['not_hedged_orders']}")
-                        self._last_no_work_log = current_time
             
         except Exception as e:
             self.logger.error(f"❌ Smart Recovery Flow error: {e}")
+    
+    def _log_all_groups_status(self):
+        """📊 แสดงตารางสถานะทุก Group"""
+        try:
+            all_positions = self.broker.get_all_positions()
+            
+            # เก็บข้อมูลแต่ละ Group
+            groups_data = {}
+            
+            for magic in [234001, 234002, 234003, 234004, 234005, 234006]:
+                group_positions = []
+                total_pnl = 0.0
+                losing_count = 0
+                hedged_count = 0
+                
+                for pos in all_positions:
+                    if pos.get('magic', 0) == magic:
+                        comment = pos.get('comment', '')
+                        if comment and comment.startswith('G') and '_' in comment:
+                            group_positions.append(pos)
+                            profit = pos.get('profit', 0)
+                            total_pnl += profit
+                            
+                            if profit < 0:
+                                losing_count += 1
+                                
+                                # เช็คว่าแก้ไม้แล้วหรือยัง
+                                ticket = str(pos.get('ticket', ''))
+                                symbol = pos.get('symbol', '')
+                                if self.order_tracker.is_order_hedged(ticket, symbol):
+                                    hedged_count += 1
+                
+                if group_positions:
+                    group_id = self._get_group_id_from_magic(magic)
+                    groups_data[group_id] = {
+                        'total': len(group_positions),
+                        'losing': losing_count,
+                        'hedged': hedged_count,
+                        'pnl': total_pnl
+                    }
+            
+            # แสดงตาราง
+            if groups_data:
+                self.logger.info("=" * 80)
+                self.logger.info("📊 SMART RECOVERY STATUS - ALL GROUPS")
+                self.logger.info("=" * 80)
+                self.logger.info(f"{'Group':<20} {'Stage':<15} {'Positions':<12} {'Losing':<10} {'Hedged':<10} {'PnL':<12}")
+                self.logger.info("-" * 80)
+                
+                for group_id, data in sorted(groups_data.items()):
+                    # กำหนด Stage
+                    if data['losing'] == 0:
+                        stage = "✅ Stable"
+                        stage_color = ""
+                    elif data['hedged'] == data['losing']:
+                        stage = "🟢 Stage 2 Done"
+                        stage_color = ""
+                    elif data['hedged'] > 0:
+                        stage = "🔧 Stage 2"
+                        stage_color = ""
+                    else:
+                        stage = "🔴 Stage 1"
+                        stage_color = ""
+                    
+                    pnl_icon = "🔴" if data['pnl'] < 0 else "🟢"
+                    
+                    self.logger.info(f"{group_id:<20} {stage:<15} {data['total']:<12} "
+                                   f"{data['losing']:<10} {data['hedged']:<10} "
+                                   f"{pnl_icon} ${data['pnl']:>8.2f}")
+                
+                self.logger.info("=" * 80)
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error logging groups status: {e}")
     
     def _find_losing_arbitrage_groups(self) -> Dict[str, List[Dict]]:
         """🎯 STAGE 1: หา Arbitrage Groups ที่มีคู่ติดลบ"""
@@ -2629,11 +2702,6 @@ class CorrelationManager:
                     if losing_positions:
                         group_id = self._get_group_id_from_magic(magic)
                         losing_groups[group_id] = losing_positions
-                        
-                        # Log แบบกระชับ
-                        pnl_icon = "🔴" if total_group_pnl < 0 else "🟢"
-                        self.logger.info(f"{pnl_icon} {group_id}: {len(losing_positions)}/{len(group_positions)} losing | "
-                                       f"PnL: ${total_group_pnl:.2f} | STAGE 1: Arbitrage Check")
             
             return losing_groups
             
