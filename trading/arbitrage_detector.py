@@ -376,9 +376,7 @@ class TriangleArbitrageDetector:
                         # Triangle นี้ปิดแล้ว
                         closed_triangles.append(triangle_name)
                 
-                # แสดงสถานะ
-                if active_triangles:
-                    self.logger.info(f"📊 Active triangles: {active_triangles}")
+                # แสดงสถานะเฉพาะเมื่อมีการเปลี่ยนแปลง
                 if closed_triangles:
                     self.logger.info(f"📊 Closed triangles: {closed_triangles}")
                 

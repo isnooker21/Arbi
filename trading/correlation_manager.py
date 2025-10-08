@@ -3428,9 +3428,10 @@ class CorrelationManager:
             
             self.logger.info(f"📊 Registration complete: {registered_count} registered, {skipped_count} already tracked")
             
-            # Show updated statistics
+            # Show updated statistics (only if there are orders)
             stats = self.order_tracker.get_statistics()
-            self.logger.info(f"📊 Tracker stats: {stats['total_tracked_orders']} total, {stats['not_hedged_orders']} not hedged")
+            if stats['total_tracked_orders'] > 0:
+                self.logger.info(f"📊 Tracker stats: {stats['total_tracked_orders']} total, {stats['not_hedged_orders']} not hedged")
             
         except Exception as e:
             self.logger.error(f"Error registering existing orders: {e}")
