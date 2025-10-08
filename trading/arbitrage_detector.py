@@ -1792,11 +1792,14 @@ class TriangleArbitrageDetector:
             triangle_number = triangle_type.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
             
             # สร้าง comment patterns ที่ต้อง reset
+            # ✅ Comment patterns for group identification
+            # NEW FORMAT: R{ticket}_{symbol} for recovery orders
+            # LEGACY: RECOVERY_G{triangle_number}_ (old format, still supported)
             comment_patterns = [
                 f"G{triangle_number}_EURUSD",
                 f"G{triangle_number}_GBPUSD", 
                 f"G{triangle_number}_EURGBP",
-                f"RECOVERY_G{triangle_number}_",
+                f"R",  # NEW: Recovery orders start with 'R'
                 f"ARB_G{triangle_number}_"
             ]
             

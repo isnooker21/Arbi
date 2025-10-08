@@ -579,12 +579,24 @@ class IndividualOrderTracker:
             if not comment:
                 return None
             
-            # Parse recovery comment patterns
-            # Pattern 1: RECOVERY_G6_EURUSD_TO_GBPUSD_L1
-            # Pattern 2: RECOVERY_G6_EURUSD_L1
-            # Pattern 3: R_EURUSDp (short format)
+            # ✅ Parse recovery comment patterns
+            # NEW FORMAT: R{ticket}_{symbol} (e.g., R3317086_EURUSD)
+            # LEGACY: RECOVERY_G6_EURUSD_TO_GBPUSD_L1 (old format, still supported)
             
-            if comment.startswith('RECOVERY_'):
+            if comment.startswith('R') and '_' in comment and not comment.startswith('RECOVERY_'):
+                # NEW SHORT FORMAT: R3317086_EURUSD
+                parts = comment.split('_')
+                if len(parts) >= 2:
+                    ticket_part = parts[0][1:]  # Remove 'R' prefix
+                    # The ticket part should be in our tracking
+                    # Look for original order with this ticket
+                    for order_key, order_info in self.order_tracking.items():
+                        if (order_info.get('ticket', '').endswith(ticket_part) and
+                            order_info.get('type') == 'ORIGINAL'):
+                            return order_key
+            
+            elif comment.startswith('RECOVERY_'):
+                # LEGACY FORMAT: RECOVERY_G6_EURUSD_TO_GBPUSD_L1
                 # Extract original symbol from comment
                 parts = comment.split('_')
                 if len(parts) >= 3:
@@ -599,20 +611,6 @@ class IndividualOrderTracker:
                         if (order_info.get('group_id') == group_id and
                             order_info.get('symbol') == original_symbol and
                             order_info.get('type') == 'ORIGINAL'):
-                            return order_key
-            
-            elif comment.startswith('R_'):
-                # Short format: R_EURUSDp
-                original_symbol = comment[2:]  # Remove 'R_' prefix
-                
-                # Look for original order with similar symbol
-                for order_key, order_info in self.order_tracking.items():
-                    if (order_info.get('group_id') == group_id and
-                        order_info.get('type') == 'ORIGINAL'):
-                        # Compare symbols (handle broker suffixes)
-                        orig_sym = order_info.get('symbol', '')
-                        if (self._symbols_match(original_symbol, orig_sym) or
-                            self._symbols_match(orig_sym, original_symbol)):
                             return order_key
             
             return None

@@ -1279,23 +1279,20 @@ class CorrelationManager:
     def _is_recovery_suitable_for_symbol(self, original_symbol: str, recovery_symbol: str, comment: str) -> bool:
         """ตรวจสอบว่า recovery position นี้เหมาะสมสำหรับ original symbol หรือไม่ - ใช้ comment pattern"""
         try:
-            # ตรวจสอบ comment pattern: RECOVERY_G{group}_{original}_TO_{recovery}
-            # หรือ RECOVERY_G{group}_{original} (รูปแบบเก่า)
+            # ✅ NEW FORMAT: Check comment pattern "R{ticket}_{symbol}"
+            # Example: R3317086_EURUSD
             
             # แยก comment เพื่อหา original symbol
-            if '_TO_' in comment:
-                # รูปแบบใหม่: RECOVERY_G6_EURUSD_TO_GBPUSD
-                parts = comment.split('_TO_')
-                if len(parts) == 2:
-                    original_part = parts[0]  # RECOVERY_G6_EURUSD
-                    if original_symbol in original_part:
-                        self.logger.info(f"✅ Recovery suitable: {original_symbol} -> {recovery_symbol} (new format)")
-                        return True
-            else:
-                # รูปแบบเก่า: RECOVERY_G6_EURUSD
+            if comment.startswith('R') and '_' in comment:
+                # รูปแบบใหม่: R3317086_EURUSD
                 if original_symbol in comment:
-                    self.logger.info(f"✅ Recovery suitable: {original_symbol} -> {recovery_symbol} (old format)")
+                    self.logger.info(f"✅ Recovery suitable: {original_symbol} -> {recovery_symbol} (new format)")
                     return True
+            
+            # Legacy support: Old format (RECOVERY_G{group}_{symbol})
+            if 'RECOVERY_' in comment and original_symbol in comment:
+                self.logger.info(f"✅ Recovery suitable: {original_symbol} -> {recovery_symbol} (legacy format)")
+                return True
             
             self.logger.info(f"❌ Recovery not suitable: {original_symbol} -> {recovery_symbol} (comment: {comment})")
             return False
@@ -1588,43 +1585,9 @@ class CorrelationManager:
             self.logger.error(f"Error calculating hedge lot size: {e}")
             return max(0.01, min(original_lot, 0.5))
     
-    def _send_hedge_order(self, symbol: str, lot_size: float, group_id: str, recovery_level: int = 1, original_symbol: str = None) -> bool:
-        """ส่งออเดอร์ hedge"""
-        try:
-            # สร้าง comment - ใส่คู่เงินที่แก้และคู่เงินที่แก้ไม้
-            # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
-            if 'triangle_' in group_id:
-                triangle_part = group_id.split('triangle_')[1].split('_')[0]
-                group_number = triangle_part
-            else:
-                group_number = 'X'
-            if original_symbol:
-                comment = f"RECOVERY_G{group_number}_{original_symbol}_TO_{symbol}_L{recovery_level}"
-            else:
-                comment = f"RECOVERY_G{group_number}_{symbol}_L{recovery_level}"
-            
-            # กำหนดทิศทางที่ถูกต้อง (ใช้ทิศทางเดียวกันกับคู่เดิม)
-            # สำหรับการแก้ไม้ ใช้ทิศทางเดียวกันกับคู่เดิม
-            order_type = 'SELL'  # ใช้ SELL เป็นหลัก (ทิศทางเดียวกัน)
-            
-            # ส่งออเดอร์
-            result = self.broker.place_order(
-                symbol=symbol,
-                order_type=order_type,  # ใช้ทิศทางที่ถูกต้อง
-                volume=lot_size,
-                comment=comment
-            )
-            
-            if result and result.get('retcode') == 10009:
-                self.logger.debug(f"✅ Recovery order sent: {symbol} {lot_size} lot")
-                return True
-            else:
-                self.logger.debug(f"❌ Failed to send recovery order: {symbol}")
-                return False
-                
-        except Exception as e:
-            self.logger.debug(f"Error sending hedge order: {e}")
-            return False
+    # REMOVED: _send_hedge_order() - Legacy method removed
+    # This method created old comment format: "RECOVERY_G{group}_{symbol}_L{level}"
+    # Now using _send_correlation_order() exclusively with format: "R{ticket}_{symbol}"
     
     def check_recovery_chain(self):
         """ตรวจสอบ recovery chain และดำเนินการต่อเนื่อง (simplified - using order_tracker)"""
