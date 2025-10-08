@@ -2587,16 +2587,20 @@ class CorrelationManager:
             arbitrage_groups = self._find_losing_arbitrage_groups()
             
             if arbitrage_groups:
+                self.logger.info(f"🎯 STAGE 1: Found {len(arbitrage_groups)} groups with losing positions")
                 # 🎯 STAGE 2: CORRELATION - แก้ไม้ที่ติดลบในแต่ละ Group
                 for group_id, losing_positions in arbitrage_groups.items():
                     self._process_group_correlation_recovery(group_id, losing_positions)
             else:
+                self.logger.info(f"🎯 STAGE 1: No losing arbitrage groups found - checking chain recovery")
                 # 🎯 STAGE 3: CHAIN - ตรวจหา Recovery Orders ที่ยังติดลบ
                 chain_candidates = self._find_chain_recovery_candidates()
                 if chain_candidates:
                     self.logger.info(f"🔗 STAGE 3: Found {len(chain_candidates)} chain recovery candidates")
                     for candidate in chain_candidates:
                         self._start_individual_recovery(candidate)
+                else:
+                    self.logger.info(f"🔗 STAGE 3: No chain recovery candidates found")
             
         except Exception as e:
             self.logger.error(f"❌ Smart Recovery Flow error: {e}")
@@ -2789,6 +2793,10 @@ class CorrelationManager:
         try:
             losing_groups = {}
             
+            # 🆕 Debug: แสดงจำนวน positions ทั้งหมด
+            all_positions = self.broker.get_all_positions()
+            self.logger.info(f"🔍 DEBUG: Total positions from MT5: {len(all_positions)}")
+            
             # ตรวจสอบ Groups ทั้งหมด (Magic 234001-234006)
             for magic in [234001, 234002, 234003, 234004, 234005, 234006]:
                 group_positions = []
@@ -2799,7 +2807,12 @@ class CorrelationManager:
                     if pos.get('magic', 0) == magic:
                         # ตรวจสอบว่าเป็น original arbitrage order (ไม่ใช่ recovery)
                         comment = pos.get('comment', '')
-                        if comment and comment.startswith('G') and '_' in comment:
+                        # 🆕 รองรับ comment format ทั้ง G และ R (ถ้าเป็นไม้เดิม)
+                        if comment and (comment.startswith('G') or comment.startswith('R')) and '_' in comment:
+                            # ถ้าเป็น R ให้ตรวจสอบว่าไม่ใช่ recovery order
+                            if comment.startswith('R') and len(comment.split('_')) >= 2:
+                                # ถ้าเป็น format R{ticket}_{symbol} ให้ข้าม (เป็น recovery)
+                                continue
                             group_positions.append(pos)
                 
                 # ถ้า Group มีคู่ติดลบ
@@ -2809,7 +2822,13 @@ class CorrelationManager:
                     if losing_positions:
                         group_id = self._get_group_id_from_magic(magic)
                         losing_groups[group_id] = losing_positions
+                        self.logger.info(f"🔍 DEBUG: Found {len(losing_positions)} losing positions in {group_id}")
+                    else:
+                        self.logger.info(f"🔍 DEBUG: Group {magic} has {len(group_positions)} positions but none are losing")
+                else:
+                    self.logger.info(f"🔍 DEBUG: Group {magic} has no positions")
             
+            self.logger.info(f"🔍 DEBUG: Total losing groups found: {len(losing_groups)}")
             return losing_groups
             
         except Exception as e:
