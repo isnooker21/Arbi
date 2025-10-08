@@ -480,9 +480,15 @@ class IndividualOrderTracker:
                 for key, order_info in data['order_tracking'].items():
                     # Convert ISO format strings back to datetime objects
                     if 'created_at' in order_info and isinstance(order_info['created_at'], str):
-                        order_info['created_at'] = datetime.fromisoformat(order_info['created_at'])
+                        try:
+                            order_info['created_at'] = datetime.fromisoformat(order_info['created_at'])
+                        except ValueError:
+                            order_info['created_at'] = datetime.now()
                     if 'last_sync' in order_info and isinstance(order_info['last_sync'], str):
-                        order_info['last_sync'] = datetime.fromisoformat(order_info['last_sync'])
+                        try:
+                            order_info['last_sync'] = datetime.fromisoformat(order_info['last_sync'])
+                        except ValueError:
+                            order_info['last_sync'] = datetime.now()
                     
                     self.order_tracking[key] = order_info
             
@@ -492,7 +498,10 @@ class IndividualOrderTracker:
             
             # Convert last_sync from string to datetime if needed
             if 'last_sync' in self.stats and isinstance(self.stats['last_sync'], str):
-                self.stats['last_sync'] = datetime.fromisoformat(self.stats['last_sync'])
+                try:
+                    self.stats['last_sync'] = datetime.fromisoformat(self.stats['last_sync'])
+                except ValueError:
+                    self.stats['last_sync'] = datetime.now()
             
             loaded_count = len(self.order_tracking)
             self.logger.info(f"📁 Loaded {loaded_count} orders from {self.persistence_file}")

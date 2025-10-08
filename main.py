@@ -394,6 +394,7 @@ class TradingSystem:
             return current_utc >= next_report_utc
         return True  # Report if no scheduled time
 
+    @staticmethod
     def normalize_isoformat(s: str) -> str:
         match = re.match(r"^(.*T\d{2}:\d{2}:\d{2})(?:\.(\d+))?([+-]\d{2}:\d{2}|Z)?$", s)
         if not match:
@@ -449,9 +450,14 @@ class TradingSystem:
                     
                     next_report_time = f"{parts[0]}.{microseconds}{timezone_part}"
                 
-                safe_time = self.normalize_isoformat(next_report_time)
-                dt = datetime.fromisoformat(safe_time)
-                self.next_report_time = dt
+                try:
+                    # Use normalize_isoformat to fix the format first
+                    safe_time = self.normalize_isoformat(next_report_time)
+                    self.next_report_time = datetime.fromisoformat(safe_time)
+                except ValueError as e:
+                    # Fallback for malformed ISO format
+                    self.logger.warning(f"Invalid ISO format: {next_report_time}, using current time")
+                    self.next_report_time = datetime.now()
                 print(f"Next report scheduled for: {self.next_report_time}")
                 
         else:

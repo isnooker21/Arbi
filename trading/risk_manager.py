@@ -133,7 +133,10 @@ class RiskManager:
             
             # Convert to datetime if it's a string
             if isinstance(entry_time, str):
-                entry_time = datetime.fromisoformat(entry_time)
+                try:
+                    entry_time = datetime.fromisoformat(entry_time)
+                except ValueError:
+                    entry_time = datetime.now()
             
             position_age = datetime.now() - entry_time
             max_hold_time = timedelta(seconds=self.config.get('trading', {}).get('position_hold_time', 3600))
