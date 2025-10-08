@@ -2312,6 +2312,12 @@ class CorrelationManager:
             original_symbol = original_position.get('symbol', '')
             original_ticket = str(original_position.get('ticket', ''))
             
+            # Debug: Show ticket information
+            self.logger.info(f"🔍 DEBUG: Original position data:")
+            self.logger.info(f"   Ticket: '{original_ticket}' (type: {type(original_ticket)})")
+            self.logger.info(f"   Symbol: {original_symbol}")
+            self.logger.info(f"   Position keys: {list(original_position.keys())}")
+            
             self.logger.info(f"🎯 Starting recovery for ticket {original_ticket}_{original_symbol}")
             
             # ✅ CRITICAL CHECK #1: Skip if ticket is empty

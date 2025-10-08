@@ -741,29 +741,9 @@ class BrokerAPI:
                     return []
                 
                 position_list = []
-                for i, pos in enumerate(positions):
-                    # Debug: Show MT5 position object structure
-                    if i == 0:  # Only log first position to avoid spam
-                        self.logger.info(f"🔍 MT5 Position Object Structure:")
-                        self.logger.info(f"   pos.ticket: {getattr(pos, 'ticket', 'NOT_FOUND')}")
-                        self.logger.info(f"   pos.identifier: {getattr(pos, 'identifier', 'NOT_FOUND')}")
-                        self.logger.info(f"   pos.symbol: {pos.symbol}")
-                        self.logger.info(f"   pos.magic: {pos.magic}")
-                        self.logger.info(f"   pos.comment: {pos.comment}")
-                    
-                    # Use position identifier as ticket (MT5 positions don't have tickets)
-                    position_id = None
-                    
-                    # Try different ways to get position ID
-                    if hasattr(pos, 'ticket') and pos.ticket:
-                        position_id = pos.ticket
-                    elif hasattr(pos, 'identifier') and pos.identifier:
-                        position_id = pos.identifier
-                    elif hasattr(pos, 'position_id') and pos.position_id:
-                        position_id = pos.position_id
-                    else:
-                        # Fallback: create ID from symbol + time + magic
-                        position_id = f"{pos.symbol}_{pos.time}_{pos.magic}"
+                for pos in positions:
+                    # MT5 positions have ticket - use it directly
+                    position_id = pos.ticket
                     
                     position_list.append({
                         'ticket': position_id,
