@@ -15,6 +15,7 @@
 เวอร์ชัน: 2.0.0 (Adaptive Engine)
 """
 #9a1ffed323d49f7311549ecd46a1f7f69393410f,กูทำเสร็จแล้วโว้ย(มั้ง) 
+import re
 import sys
 import os
 import logging
@@ -393,6 +394,16 @@ class TradingSystem:
             return current_utc >= next_report_utc
         return True  # Report if no scheduled time
 
+    def normalize_isoformat(s: str) -> str:
+        match = re.match(r"^(.*T\d{2}:\d{2}:\d{2})(?:\.(\d+))?([+-]\d{2}:\d{2}|Z)?$", s)
+        if not match:
+            return s
+        base, micro, tz = match.groups()
+        if micro:
+            micro = (micro + "000000")[:6]  # pad or truncate to 6 digits
+            return f"{base}.{micro}{tz or ''}"
+        return f"{base}{tz or ''}"
+    
     def report_status(self):
         """Report the current status to the API"""
         
@@ -414,7 +425,6 @@ class TradingSystem:
             )                  
         else:
             raise Exception("Cannot report status - no account info")
-                
         
         if status_response.status_code == 200:
             response_data = status_response.json()
@@ -439,7 +449,9 @@ class TradingSystem:
                     
                     next_report_time = f"{parts[0]}.{microseconds}{timezone_part}"
                 
-                self.next_report_time = datetime.fromisoformat(next_report_time)
+                safe_time = self.normalize_isoformat(next_report_time)
+                dt = datetime.fromisoformat(safe_time)
+                self.next_report_time = dt
                 print(f"Next report scheduled for: {self.next_report_time}")
                 
         else:

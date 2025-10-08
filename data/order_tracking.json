@@ -1,25 +1,5 @@
 {
   "order_tracking": {
-    "79510007_NZDCHF": {
-      "ticket": "79510007",
-      "symbol": "NZDCHF",
-      "group_id": "group_triangle_5_1",
-      "type": "ORIGINAL",
-      "status": "NOT_HEDGED",
-      "recovery_orders": [],
-      "created_at": "2025-10-08T04:53:26.896027",
-      "last_sync": "2025-10-08T04:53:26.896028"
-    },
-    "79510008_NZDUSD": {
-      "ticket": "79510008",
-      "symbol": "NZDUSD",
-      "group_id": "group_triangle_5_1",
-      "type": "ORIGINAL",
-      "status": "NOT_HEDGED",
-      "recovery_orders": [],
-      "created_at": "2025-10-08T04:53:26.896211",
-      "last_sync": "2025-10-08T04:53:26.896211"
-    },
     "79510009_NZDUSD": {
       "ticket": "79510009",
       "symbol": "NZDUSD",
@@ -35,9 +15,9 @@
     "original_orders_registered": 3,
     "recovery_orders_registered": 0,
     "orders_hedged": 0,
-    "orders_removed": 0,
-    "sync_operations": 0,
-    "last_sync": null
+    "orders_removed": 2,
+    "sync_operations": 282,
+    "last_sync": "2025-10-08T05:31:46.524044"
   },
-  "saved_at": "2025-10-08T04:53:26.896449"
+  "saved_at": "2025-10-08T05:31:46.524044"
 }
