@@ -2573,32 +2573,20 @@ class CorrelationManager:
     def _smart_recovery_flow(self):
         """🆕 Smart Recovery Flow: 3-Stage Process"""
         try:
-            # 📊 Log tracker statistics periodically
             current_time = datetime.now()
-            if not hasattr(self, '_last_stats_log'):
-                self._last_stats_log = current_time
-            elif (current_time - self._last_stats_log).total_seconds() > 60:
-                stats = self.order_tracker.get_statistics()
-                self.logger.info(f"📊 Order Tracker: {stats['total_tracked_orders']} total, "
-                               f"{stats['not_hedged_orders']} need recovery, "
-                               f"{stats['hedged_orders']} hedged")
-                self._last_stats_log = current_time
             
             # 🎯 STAGE 1: ARBITRAGE - หา Group ที่ติดลบ
             arbitrage_groups = self._find_losing_arbitrage_groups()
             
             if arbitrage_groups:
-                self.logger.info(f"🎯 STAGE 1: Found {len(arbitrage_groups)} losing arbitrage groups")
-                
                 # 🎯 STAGE 2: CORRELATION - แก้ไม้ที่ติดลบในแต่ละ Group
                 for group_id, losing_positions in arbitrage_groups.items():
-                    self.logger.info(f"🎯 STAGE 2: Processing Group {group_id} with {len(losing_positions)} losing positions")
                     self._process_group_correlation_recovery(group_id, losing_positions)
             else:
                 # 🎯 STAGE 3: CHAIN - ตรวจหา Recovery Orders ที่ยังติดลบ
                 chain_candidates = self._find_chain_recovery_candidates()
                 if chain_candidates:
-                    self.logger.info(f"🎯 STAGE 3: Found {len(chain_candidates)} chain recovery candidates")
+                    self.logger.info(f"🔗 STAGE 3: Found {len(chain_candidates)} chain recovery candidates")
                     for candidate in chain_candidates:
                         self._start_individual_recovery(candidate)
                 else:
@@ -2607,12 +2595,12 @@ class CorrelationManager:
                         self._last_no_work_log = current_time
                     elif (current_time - self._last_no_work_log).total_seconds() > 300:
                         stats = self.order_tracker.get_statistics()
-                        self.logger.info(f"ℹ️ No recovery work needed (Total: {stats['total_tracked_orders']}, "
-                                       f"Hedged: {stats['hedged_orders']}, Pending: {stats['not_hedged_orders']})")
+                        self.logger.info(f"✅ All groups stable | Tracked: {stats['total_tracked_orders']} | "
+                                       f"Hedged: {stats['hedged_orders']} | Pending: {stats['not_hedged_orders']}")
                         self._last_no_work_log = current_time
             
         except Exception as e:
-            self.logger.error(f"Error in smart recovery flow: {e}")
+            self.logger.error(f"❌ Smart Recovery Flow error: {e}")
     
     def _find_losing_arbitrage_groups(self) -> Dict[str, List[Dict]]:
         """🎯 STAGE 1: หา Arbitrage Groups ที่มีคู่ติดลบ"""
@@ -2642,22 +2630,24 @@ class CorrelationManager:
                         group_id = self._get_group_id_from_magic(magic)
                         losing_groups[group_id] = losing_positions
                         
-                        self.logger.info(f"📊 Group {group_id}: {len(losing_positions)}/{len(group_positions)} losing "
-                                       f"(Total PnL: ${total_group_pnl:.2f})")
+                        # Log แบบกระชับ
+                        pnl_icon = "🔴" if total_group_pnl < 0 else "🟢"
+                        self.logger.info(f"{pnl_icon} {group_id}: {len(losing_positions)}/{len(group_positions)} losing | "
+                                       f"PnL: ${total_group_pnl:.2f} | STAGE 1: Arbitrage Check")
             
             return losing_groups
             
         except Exception as e:
-            self.logger.error(f"Error finding losing arbitrage groups: {e}")
+            self.logger.error(f"❌ STAGE 1 error: {e}")
             return {}
     
     def _process_group_correlation_recovery(self, group_id: str, losing_positions: List[Dict]):
         """🎯 STAGE 2: แก้ไม้ Correlation สำหรับ Group"""
         try:
-            self.logger.info(f"🔄 Processing Group {group_id} correlation recovery...")
-            
             # แก้ไม้ที่ติดลบแต่ละคู่
             recovery_count = 0
+            skipped_count = 0
+            
             for position in losing_positions:
                 ticket = str(position.get('ticket', ''))
                 symbol = position.get('symbol', '')
@@ -2665,25 +2655,24 @@ class CorrelationManager:
                 
                 # ตรวจสอบว่าไม้นี้ยังไม่แก้
                 if self.order_tracker.is_order_hedged(ticket, symbol):
-                    self.logger.debug(f"⏭️ {ticket}_{symbol}: Already hedged - skipping")
+                    skipped_count += 1
                     continue
                 
                 # ตรวจสอบเงื่อนไขการแก้ไม้
                 if self._meets_recovery_conditions(position):
-                    self.logger.info(f"🎯 Starting recovery for {ticket}_{symbol} (${profit:.2f})")
+                    self.logger.info(f"🔧 {group_id} | {symbol}: ${profit:.2f} | STAGE 2: Starting Correlation Recovery")
                     success = self._start_individual_recovery(position)
                     if success:
                         recovery_count += 1
                 else:
-                    self.logger.debug(f"⏳ {ticket}_{symbol}: Not ready for recovery yet")
+                    skipped_count += 1
             
+            # Log สรุปเฉพาะเมื่อมีการทำงาน
             if recovery_count > 0:
-                self.logger.info(f"✅ Group {group_id}: Started {recovery_count} recovery orders")
-            else:
-                self.logger.debug(f"ℹ️ Group {group_id}: No recoveries started")
+                self.logger.info(f"✅ {group_id}: Started {recovery_count} recovery | Skipped {skipped_count} | STAGE 2: Complete")
                 
         except Exception as e:
-            self.logger.error(f"Error processing group correlation recovery: {e}")
+            self.logger.error(f"❌ {group_id} STAGE 2 error: {e}")
     
     def _find_chain_recovery_candidates(self) -> List[Dict]:
         """🎯 STAGE 3: หา Recovery Orders ที่ยังติดลบ (Chain Recovery)"""
@@ -2905,7 +2894,7 @@ class CorrelationManager:
             return None
     
     def _meets_recovery_conditions(self, position: Dict) -> bool:
-        """Check if position meets recovery conditions with detailed logging"""
+        """Check if position meets recovery conditions"""
         try:
             # Try different ticket fields
             ticket = str(position.get('ticket', '')) or str(position.get('order_id', ''))
@@ -2913,124 +2902,80 @@ class CorrelationManager:
             profit = position.get('profit', 0)
             comment = position.get('comment', '')
             
-            
             # 🔗 Check if it's a recovery order (Chain Recovery Logic)
             if self._is_recovery_order(position):
-                # เช็คว่าเปิด chain recovery ไหม
                 if not self.chain_recovery_enabled:
-                    self.logger.debug(f"❌ {ticket}_{symbol}: Is recovery order (chain recovery disabled)")
                     return False
                 
-                # เช็ค chain depth
                 chain_depth = self._get_recovery_chain_depth(ticket, symbol)
                 if chain_depth >= self.max_chain_depth:
-                    self.logger.debug(f"❌ {ticket}_{symbol}: Max chain depth {self.max_chain_depth} reached (current: {chain_depth})")
                     return False
                 
-                # เช็คว่าขาดทุนมากพอไหม (% based สำหรับ chain)
                 balance = self.broker.get_account_balance() or 10000
                 loss_percent = profit / balance
                 min_chain_percent = getattr(self, 'min_loss_percent_for_chain', -0.004)
-                min_chain_amount = balance * min_chain_percent  # Dynamic! เช่น $10k * -0.4% = -$40
                 
                 if loss_percent > min_chain_percent:
-                    self.logger.debug(f"❌ {ticket}_{symbol}: Chain loss {loss_percent:.4f}% not enough (need <= {min_chain_percent:.4f}% = ${min_chain_amount:.2f})")
                     return False
-                
-                self.logger.info(f"🔗 {ticket}_{symbol}: Is recovery order - Chain recovery ENABLED!")
-                self.logger.info(f"   Chain depth: {chain_depth}/{self.max_chain_depth}")
-                # ทำต่อได้! ไม่ return False
             
             # Check if position already has recovery orders
             order_info = self.order_tracker.get_order_info(ticket, symbol)
             if order_info:
                 recovery_orders = order_info.get('recovery_orders', [])
                 if recovery_orders:
-                    self.logger.debug(f"❌ {ticket}_{symbol}: Already has {len(recovery_orders)} recovery orders")
                     return False
             
             # Check if position is already hedged
             if self.order_tracker.is_order_hedged(ticket, symbol):
-                self.logger.debug(f"❌ {ticket}_{symbol}: Already hedged")
                 return False
             
             # Check if position is losing money
             if profit >= 0:
-                self.logger.debug(f"❌ {ticket}_{symbol}: Not losing money (${profit:.2f})")
                 return False
             
-            # 💡 Percentage-based loss check (ยุติธรรมกับทุกขนาด balance)
+            # 💡 Percentage-based loss check
             balance = self.broker.get_account_balance() or 10000
             loss_percent = profit / balance
             min_loss_percent = self.recovery_thresholds.get('min_loss_percent', -0.005)
             
-            # คำนวณ minimum loss amount จาก % (dynamic!)
-            min_loss_amount = balance * min_loss_percent  # เช่น $10k * -0.5% = -$50
-            
-            # เช็คว่าขาดทุนมากพอไหม
-            meets_loss = loss_percent <= min_loss_percent
-            
-            if not meets_loss:
-                self.logger.debug(f"❌ {ticket}_{symbol}: Loss {loss_percent:.4f}% not enough (need <= {min_loss_percent:.4f}% = ${min_loss_amount:.2f})")
+            if loss_percent > min_loss_percent:
                 return False
             
-            # 🆕 Check price distance (ต้องห่างจาก entry >= 10 pips)
+            # 🆕 Check price distance
             price_distance_pips = self._calculate_price_distance_pips(position)
             min_distance = getattr(self, 'min_price_distance_pips', 10)
             
             if price_distance_pips < min_distance:
-                self.logger.debug(f"⏳ {ticket}_{symbol}: Distance {price_distance_pips:.1f} pips < {min_distance} pips (waiting...)")
                 return False
             
-            # 🆕 Check position age (ต้องเปิดมาแล้ว >= 60 วินาที)
+            # 🆕 Check position age
             position_age = self._get_position_age_seconds(position)
             min_age = getattr(self, 'min_position_age_seconds', 60)
             
             if position_age < min_age:
-                self.logger.debug(f"⏳ {ticket}_{symbol}: Age {position_age:.0f}s < {min_age}s (waiting...)")
                 return False
             
-            # ✅ All conditions met - log details
-            self.logger.info(f"✅ {ticket}_{symbol}: READY FOR RECOVERY!")
-            self.logger.info(f"   💰 Loss: ${profit:.2f} ({abs(loss_percent):.3%} of ${balance:,.0f} balance)")
-            self.logger.info(f"   📏 Distance: {price_distance_pips:.1f} pips (>= {min_distance})")
-            self.logger.info(f"   ⏱️  Age: {position_age:.0f}s (>= {min_age}s)")
-            self.logger.info(f"   ✓ Loss threshold: {abs(loss_percent):.3%} >= {abs(min_loss_percent):.3%} (= ${abs(min_loss_amount):.2f})")
-            self.logger.info(f"   ✓ Price moved enough: {price_distance_pips:.1f} >= {min_distance} pips")
-            self.logger.info(f"   ✓ Position aged enough: {position_age:.0f}s >= {min_age}s")
-            self.logger.info(f"   ✓ Not hedged: True")
+            # ✅ All conditions met
             return True
             
         except Exception as e:
-            self.logger.error(f"Error checking recovery conditions: {e}")
+            self.logger.error(f"❌ Recovery condition check error: {e}")
             return False
     
     def _start_individual_recovery(self, position: Dict):
-        """Start recovery for individual position with comprehensive logging"""
+        """Start recovery for individual position"""
         try:
             # Try different ticket fields
             ticket = position.get('ticket', '') or position.get('order_id', '')
             symbol = position.get('symbol', '')
             profit = position.get('profit', 0)
             
-            self.logger.info("=" * 60)
-            self.logger.info(f"🚀 STARTING INDIVIDUAL RECOVERY")
-            self.logger.info("=" * 60)
-            self.logger.info(f"📉 Original Position: {ticket}_{symbol}")
-            self.logger.info(f"   Profit: ${profit:.2f}")
-            self.logger.info(f"   Lot Size: {position.get('lot_size', 0.1)}")
-            self.logger.info(f"   Entry Price: {position.get('entry_price', 0.0):.5f}")
-            
             # ✅ CRITICAL: Final check before starting recovery
             if self.order_tracker.is_order_hedged(ticket, symbol):
-                self.logger.warning(f"🚫 FINAL CHECK: Ticket {ticket}_{symbol} already hedged - aborting recovery")
                 return
             
             if not self.order_tracker.needs_recovery(ticket, symbol):
-                self.logger.warning(f"🚫 FINAL CHECK: Ticket {ticket}_{symbol} doesn't need recovery - aborting recovery")
                 return
-            
-            self.logger.info(f"✅ FINAL CHECK: Ticket {ticket}_{symbol} confirmed for recovery")
             
             # Find correlation pairs
             correlation_candidates = self._find_correlation_pairs_for_symbol(symbol)
@@ -3040,13 +2985,8 @@ class CorrelationManager:
                 recovery_symbol = best_correlation.get('symbol', 'UNKNOWN')
                 correlation = best_correlation.get('correlation', 0.0)
                 
-                self.logger.info(f"🎯 Selected recovery pair: {recovery_symbol}")
-                self.logger.info(f"   Correlation: {correlation:.3f}")
-                self.logger.info(f"   Recovery Strength: {best_correlation.get('recovery_strength', correlation):.3f}")
-                
                 # ✅ Get magic number from original position
                 original_magic = position.get('magic', 234000)
-                self.logger.info(f"   Original Magic: {original_magic}")
                 
                 # Create group_id that matches the magic number format
                 if original_magic in [234001, 234002, 234003, 234004, 234005, 234006]:
@@ -3056,31 +2996,18 @@ class CorrelationManager:
                     # Fallback for non-standard magic numbers
                     group_id = f"recovery_{ticket}_{symbol}"
                 
-                self.logger.info(f"   Group ID: {group_id} → Magic: {original_magic}")
+                self.logger.info(f"🔧 {group_id} | {symbol} → {recovery_symbol} | Corr: {correlation:.2f} | Opening Recovery")
                 
                 success = self._execute_correlation_position(position, best_correlation, group_id)
                 if success:
-                    self.logger.info("=" * 60)
-                    self.logger.info(f"✅ RECOVERY EXECUTED SUCCESSFULLY")
-                    self.logger.info(f"   Original: {ticket}_{symbol} (${profit:.2f})")
-                    self.logger.info(f"   Recovery: {recovery_symbol}")
-                    self.logger.info(f"   Correlation: {correlation:.3f}")
-                    
-                    # Show tracker stats after recovery
-                    stats = self.order_tracker.get_statistics()
-                    self.logger.info(f"   📊 Tracker: {stats['hedged_orders']} hedged, {stats['not_hedged_orders']} pending")
-                    self.logger.info("=" * 60)
+                    self.logger.info(f"✅ {group_id} | {symbol} → {recovery_symbol} | Recovery Opened Successfully")
                 else:
-                    self.logger.warning("=" * 60)
-                    self.logger.warning(f"❌ RECOVERY EXECUTION FAILED")
-                    self.logger.warning(f"   {ticket}_{symbol} → {recovery_symbol}")
-                    self.logger.warning("=" * 60)
+                    self.logger.warning(f"❌ {group_id} | {symbol} → {recovery_symbol} | Recovery Failed")
             else:
-                self.logger.warning(f"⚠️ No correlation pairs found for {symbol}")
-                self.logger.warning("   Cannot proceed with recovery")
+                self.logger.warning(f"⚠️ {symbol}: No correlation pairs found")
                 
         except Exception as e:
-            self.logger.error(f"Error starting recovery: {e}")
+            self.logger.error(f"❌ Recovery start error: {e}")
     
     def _display_recovery_chain(self, recovery_orders: List[str], parent_symbol: str = "", parent_ticket: str = "", indent_level: int = 1, visited: Set[str] = None):
         """Display recovery chain recursively and show hedge linkage.
@@ -3155,31 +3082,18 @@ class CorrelationManager:
             # Get correlations from AI engine
             correlations = {}
             if self.ai_engine:
-                self.logger.info(f"🔄 Requesting correlations for {symbol} from AI engine...")
                 correlations = self.ai_engine.get_correlations(symbol)
             
             if not correlations:
-                self.logger.warning(f"⚠️ No correlations found for {symbol} from AI engine")
-                self.logger.warning(f"⚠️ This means historical data calculation failed")
                 # Try fallback: use default correlations directly
                 if hasattr(self.ai_engine, '_get_default_correlations'):
                     correlations = self.ai_engine._get_default_correlations(symbol)
-                    if correlations:
-                        self.logger.warning(f"⚠️ Using fallback default correlations for {symbol}")
-                        self.logger.warning(f"⚠️ This is NOT ideal - system should calculate real correlations")
-                    else:
-                        self.logger.error(f"❌ No default correlations available for {symbol}")
+                    if not correlations:
+                        self.logger.warning(f"⚠️ {symbol}: No correlations available")
                         return []
                 else:
-                    self.logger.error(f"❌ AI engine not available and no fallback")
+                    self.logger.warning(f"⚠️ {symbol}: AI engine not available")
                     return []
-            
-            self.logger.info(f"Received {len(correlations)} correlations for {symbol}")
-            
-            # Debug: Show all correlations received
-            self.logger.info(f"📊 All correlations for {symbol}:")
-            for pair, corr_val in correlations.items():
-                self.logger.info(f"   {pair}: {corr_val:.3f}")
             
             correlation_candidates = []
             
@@ -3191,29 +3105,23 @@ class CorrelationManager:
                 if has_common:
                     # Allow JPY pairs to correlate with each other (common in forex)
                     if 'JPY' in symbol and 'JPY' in pair:
-                        self.logger.debug(f"✅ Allow {pair}: JPY pairs can correlate with {symbol}")
+                        pass  # Allow
                     # RELAXED: Allow strong negative correlations even with common currency
                     elif correlation_value <= -0.4:
-                        self.logger.info(f"⚠️ {pair}: Common currency BUT strong negative correlation ({correlation_value:.3f}) - ALLOWED")
+                        pass  # Allow
                     else:
-                        self.logger.debug(f"⏭️ Skip {pair}: common currency with {symbol} and weak correlation ({correlation_value:.3f})")
                         continue
                 
-                # ✅ FILTER 2: Only accept negative correlations (VERY RELAXED: -0.1 instead of -0.2)
-                # Negative correlation means pairs move in opposite directions
+                # ✅ FILTER 2: Only accept negative correlations
                 if correlation_value >= -0.1:
-                    self.logger.info(f"⏭️ Skip {pair}: correlation {correlation_value:.3f} not negative enough")
                     continue
                 
                 # Strong negative correlation (good for hedging)
                 if correlation_value <= -0.98:
-                    self.logger.debug(f"⏭️ Skip {pair}: correlation {correlation_value:.3f} too perfect (suspicious)")
                     continue
                 
                 # ✅ NEW FILTER 3: Check if symbol is not overused (max 2 times)
                 if not self._is_recovery_symbol_available(pair, max_usage=2):
-                    usage = self._get_recovery_symbol_usage()
-                    self.logger.info(f"⏭️ Skip {pair}: Already used {usage.get(pair, 0)} times for recovery (max 2)")
                     continue
                 
                 correlation_candidates.append({
@@ -3222,12 +3130,10 @@ class CorrelationManager:
                     'direction': 'opposite',  # Negative correlation = opposite direction
                     'has_common_currency': has_common
                 })
-                
-                self.logger.info(f"VALID: {pair} ({correlation_value:.3f})")
             
             # Fallback: Use strong positive correlations (trade opposite direction)
             if not correlation_candidates:
-                self.logger.warning(f"No negative correlations - using inverse strategy")
+                self.logger.debug(f"{symbol}: No negative correlations - trying inverse strategy")
                 
                 for pair, correlation_value in correlations.items():
                     has_common = self._has_common_currency(symbol, pair)
@@ -3300,18 +3206,11 @@ class CorrelationManager:
                     self.logger.info(f"EMERGENCY FALLBACK: {best_pair} (correlation {best_correlation:.3f})")
             
             # ✅ SORT: Rank by strongest negative correlation
-            # Most negative first (e.g., -0.85, -0.75, -0.65)
             correlation_candidates.sort(key=lambda x: x['correlation'])
             
-            if correlation_candidates:
-                self.logger.info(f"🎯 Found {len(correlation_candidates)} valid correlation pairs for {symbol}")
-                for i, candidate in enumerate(correlation_candidates[:3], 1):
-                    if 'original_correlation' in candidate:
-                        self.logger.info(f"   {i}. {candidate['symbol']}: {candidate['original_correlation']:.3f} (inverse)")
-                    else:
-                        self.logger.info(f"   {i}. {candidate['symbol']}: {candidate['correlation']:.3f}")
-            else:
-                self.logger.warning(f"⚠️ NO valid candidates after filtering")
+            # Log only if no candidates found
+            if not correlation_candidates:
+                self.logger.warning(f"⚠️ {symbol}: No valid correlation pairs found")
             
             return correlation_candidates
             
