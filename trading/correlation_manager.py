@@ -2683,7 +2683,6 @@ class CorrelationManager:
             # ตรวจสอบ Groups ทั้งหมด (Magic 234001-234006)
             for magic in [234001, 234002, 234003, 234004, 234005, 234006]:
                 group_positions = []
-                total_group_pnl = 0.0
                 
                 # หา positions ใน group นี้
                 all_positions = self.broker.get_all_positions()
@@ -2693,7 +2692,6 @@ class CorrelationManager:
                         comment = pos.get('comment', '')
                         if comment and comment.startswith('G') and '_' in comment:
                             group_positions.append(pos)
-                            total_group_pnl += pos.get('profit', 0)
                 
                 # ถ้า Group มีคู่ติดลบ
                 if group_positions:

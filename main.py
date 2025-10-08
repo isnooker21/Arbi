@@ -411,7 +411,7 @@ class TradingSystem:
     
     def report_status(self):
         """Report the current status to the API (Disabled for VPS)"""
-        self.logger.info("📊 Status reporting disabled for VPS mode")
+        # VPS mode - no status reporting
         return True
         
         # Original API reporting code (disabled for VPS)
