@@ -586,20 +586,24 @@ class BrokerAPI:
                 # Check result
                 if result is None:
                     last_error = mt5.last_error()
-                    error_msg = f"MT5 Error: {last_error[1] if last_error else 'Unknown error'}"
+                    error_code = last_error[0] if last_error else 0
+                    error_msg = last_error[1] if last_error else 'Unknown error'
+                    
+                    # Provide specific error messages and solutions
+                    specific_error = self._get_specific_error_message(error_code, error_msg, symbol, volume)
+                    
                     self.logger.error(f"❌ Order failed: {error_msg}")
                     self.logger.error(f"   Symbol: {symbol}, Type: {order_type}, Volume: {volume}")
-                    self.logger.error(f"   Please check:")
-                    self.logger.error(f"   1. MT5 terminal is running and logged in")
-                    self.logger.error(f"   2. 'Allow automated trading' is enabled in MT5")
-                    self.logger.error(f"   3. Symbol {symbol} is tradeable")
-                    self.logger.error(f"   4. Market is open")
-                    self.logger.error(f"   5. Account has sufficient margin")
-                    self.logger.error(f"❌ ส่ง Order ไม่สำเร็จ: {error_msg}")
-                    self.logger.error(f"❌ Error Code: {last_error[0] if last_error else 'Unknown'}")
+                    self.logger.error(f"   Error Code: {error_code}")
+                    self.logger.error(f"   Specific Issue: {specific_error['issue']}")
+                    self.logger.error(f"   Solution: {specific_error['solution']}")
+                    
                     return {
                         'success': False,
                         'error': error_msg,
+                        'error_code': error_code,
+                        'specific_issue': specific_error['issue'],
+                        'solution': specific_error['solution'],
                         'symbol': symbol,
                         'type': order_type
                     }
@@ -1007,3 +1011,186 @@ class BrokerAPI:
             status['issues'].append(f"Error checking MT5 status: {e}")
         
         return status
+    
+    def _get_specific_error_message(self, error_code: int, error_msg: str, symbol: str, volume: float) -> dict:
+        """Get specific error message and solution based on error code"""
+        
+        error_solutions = {
+            10004: {  # TRADE_RETCODE_INVALID_VOLUME
+                'issue': f'Volume {volume} is invalid for {symbol}',
+                'solution': 'Check minimum/maximum volume limits for this symbol'
+            },
+            10006: {  # TRADE_RETCODE_MARKET_CLOSED
+                'issue': f'Market is closed for {symbol}',
+                'solution': 'Wait for market to open or trade during market hours'
+            },
+            10014: {  # TRADE_RETCODE_NO_MONEY
+                'issue': 'Insufficient funds in account',
+                'solution': 'Deposit more funds or reduce position size'
+            },
+            10064: {  # TRADE_RETCODE_TRADE_DISABLED
+                'issue': 'Automated trading is disabled',
+                'solution': 'Enable "Allow automated trading" in MT5 Options > Expert Advisors'
+            },
+            10027: {  # TRADE_RETCODE_INVALID_PRICE
+                'issue': f'Invalid price for {symbol}',
+                'solution': 'Check current market price and spread'
+            },
+            10028: {  # TRADE_RETCODE_INVALID_STOPS
+                'issue': 'Invalid stop loss or take profit levels',
+                'solution': 'Check minimum distance requirements for stops'
+            },
+            10029: {  # TRADE_RETCODE_TRADE_MODIFY_DENIED
+                'issue': 'Trade modification denied',
+                'solution': 'Check if order can be modified or close and reopen'
+            },
+            10030: {  # TRADE_RETCODE_LONG_ONLY
+                'issue': f'Only long positions allowed for {symbol}',
+                'solution': 'Use BUY orders only for this symbol'
+            },
+            10031: {  # TRADE_RETCODE_SHORT_ONLY
+                'issue': f'Only short positions allowed for {symbol}',
+                'solution': 'Use SELL orders only for this symbol'
+            },
+            10032: {  # TRADE_RETCODE_CLOSE_ONLY
+                'issue': f'Only closing positions allowed for {symbol}',
+                'solution': 'Close existing positions first'
+            },
+            10033: {  # TRADE_RETCODE_FIFO_CLOSE
+                'issue': 'FIFO rule violation',
+                'solution': 'Close positions in correct order (FIFO)'
+            },
+            10034: {  # TRADE_RETCODE_CLOSE_BY
+                'issue': 'Position closed by opposite order',
+                'solution': 'Check if position was closed by hedging'
+            },
+            10035: {  # TRADE_RETCODE_INVALID_EXPIRATION
+                'issue': 'Invalid expiration time',
+                'solution': 'Check expiration time format and validity'
+            },
+            10036: {  # TRADE_RETCODE_INVALID_ORDER
+                'issue': 'Invalid order parameters',
+                'solution': 'Check all order parameters (symbol, volume, price, etc.)'
+            },
+            10037: {  # TRADE_RETCODE_INVALID_POSITION
+                'issue': 'Invalid position',
+                'solution': 'Check if position exists and is valid'
+            },
+            10038: {  # TRADE_RETCODE_INVALID_REQUEST
+                'issue': 'Invalid request format',
+                'solution': 'Check request structure and parameters'
+            },
+            10039: {  # TRADE_RETCODE_INVALID_STOPS_LEVEL
+                'issue': 'Invalid stops level',
+                'solution': 'Check minimum distance from current price'
+            },
+            10040: {  # TRADE_RETCODE_INVALID_TRADE_VOLUME
+                'issue': f'Invalid trade volume {volume}',
+                'solution': 'Check volume step and limits for this symbol'
+            },
+            10041: {  # TRADE_RETCODE_INVALID_TRADE_PRICE
+                'issue': 'Invalid trade price',
+                'solution': 'Check price format and current market price'
+            },
+            10042: {  # TRADE_RETCODE_INVALID_TRADE_STOPS
+                'issue': 'Invalid trade stops',
+                'solution': 'Check stop loss and take profit levels'
+            },
+            10043: {  # TRADE_RETCODE_TRADE_DISABLED
+                'issue': 'Trading disabled for this symbol',
+                'solution': 'Check if symbol is tradeable and market is open'
+            },
+            10044: {  # TRADE_RETCODE_MARKET_CLOSED
+                'issue': 'Market is closed',
+                'solution': 'Wait for market to open'
+            },
+            10045: {  # TRADE_RETCODE_NO_MONEY
+                'issue': 'No money',
+                'solution': 'Deposit funds or reduce position size'
+            },
+            10046: {  # TRADE_RETCODE_PRICE_CHANGED
+                'issue': 'Price changed during order execution',
+                'solution': 'Retry order with current market price'
+            },
+            10047: {  # TRADE_RETCODE_OFF_QUOTES
+                'issue': 'Off quotes',
+                'solution': 'Check if symbol is available for trading'
+            },
+            10048: {  # TRADE_RETCODE_BROKER_BUSY
+                'issue': 'Broker is busy',
+                'solution': 'Retry order after a short delay'
+            },
+            10049: {  # TRADE_RETCODE_REQUOTE
+                'issue': 'Requote',
+                'solution': 'Accept new price or cancel order'
+            },
+            10050: {  # TRADE_RETCODE_ORDER_LOCKED
+                'issue': 'Order is locked',
+                'solution': 'Wait for order to be processed'
+            },
+            10051: {  # TRADE_RETCODE_LONG_POSITIONS_ONLY_ALLOWED
+                'issue': 'Only long positions allowed',
+                'solution': 'Use BUY orders only'
+            },
+            10052: {  # TRADE_RETCODE_TOO_MANY_REQUESTS
+                'issue': 'Too many requests',
+                'solution': 'Reduce order frequency'
+            },
+            10053: {  # TRADE_RETCODE_MISMATCH
+                'issue': 'Order mismatch',
+                'solution': 'Check order parameters'
+            },
+            10054: {  # TRADE_RETCODE_NO_MARGIN
+                'issue': 'No margin',
+                'solution': 'Deposit funds or reduce position size'
+            },
+            10055: {  # TRADE_RETCODE_NOT_ENOUGH_MONEY
+                'issue': 'Not enough money',
+                'solution': 'Deposit more funds'
+            },
+            10056: {  # TRADE_RETCODE_PRICE_OFF
+                'issue': 'Price is off',
+                'solution': 'Check current market price'
+            },
+            10057: {  # TRADE_RETCODE_INVALID_VOLUME
+                'issue': f'Invalid volume {volume}',
+                'solution': 'Check volume step and limits'
+            },
+            10058: {  # TRADE_RETCODE_INVALID_AMOUNT
+                'issue': 'Invalid amount',
+                'solution': 'Check amount calculation'
+            },
+            10059: {  # TRADE_RETCODE_INVALID_PRICE
+                'issue': 'Invalid price',
+                'solution': 'Check price format and current market price'
+            },
+            10060: {  # TRADE_RETCODE_INVALID_STOPS
+                'issue': 'Invalid stops',
+                'solution': 'Check stop loss and take profit levels'
+            },
+            10061: {  # TRADE_RETCODE_TRADE_DISABLED
+                'issue': 'Trade disabled',
+                'solution': 'Enable automated trading in MT5'
+            },
+            10062: {  # TRADE_RETCODE_MARKET_CLOSED
+                'issue': 'Market closed',
+                'solution': 'Wait for market to open'
+            },
+            10063: {  # TRADE_RETCODE_NO_MONEY
+                'issue': 'No money',
+                'solution': 'Deposit funds'
+            },
+            10064: {  # TRADE_RETCODE_TRADE_DISABLED
+                'issue': 'Trade disabled',
+                'solution': 'Enable automated trading in MT5 Options > Expert Advisors'
+            }
+        }
+        
+        # Get specific error info
+        if error_code in error_solutions:
+            return error_solutions[error_code]
+        else:
+            return {
+                'issue': f'Unknown error code {error_code}: {error_msg}',
+                'solution': 'Check MT5 terminal settings and market conditions'
+            }
