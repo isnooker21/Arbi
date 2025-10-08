@@ -2812,8 +2812,33 @@ class CorrelationManager:
                         
                         self.logger.info(f"      {profit_icon} {symbol} | Ticket: {ticket} | Lot: {lot_size} | PnL: ${profit:.2f} | {hedge_status}")
                         
-                        # แสดง recovery chain แบบ recursive (หลายขั้น)
-                        self._log_recovery_chain(ticket, recovery_map, 1)
+                        # แสดง recovery chain ใต้ไม้ที่แก้
+                        if ticket in recovery_map:
+                            recovery_chain = recovery_map[ticket]
+                            for i, recovery_pos in enumerate(recovery_chain, 1):
+                                rec_ticket = recovery_pos.get('ticket', '')
+                                rec_symbol = recovery_pos.get('symbol', '')
+                                rec_profit = recovery_pos.get('profit', 0)
+                                rec_lot_size = recovery_pos.get('volume', 0)
+                                
+                                rec_profit_icon = "🔴" if rec_profit < 0 else "🟢"
+                                indent = "         "  # indent ใต้ไม้ที่แก้
+                                
+                                self.logger.info(f"{indent}🔧 Recovery #{i}: {rec_symbol} | Ticket: {rec_ticket} | Lot: {rec_lot_size} | PnL: ${rec_profit:.2f}")
+                                
+                                # แสดง recovery ของ recovery (ขั้นที่ 2)
+                                if rec_ticket in recovery_map:
+                                    rec_rec_chain = recovery_map[rec_ticket]
+                                    for j, rec_rec_pos in enumerate(rec_rec_chain, 1):
+                                        rec_rec_ticket = rec_rec_pos.get('ticket', '')
+                                        rec_rec_symbol = rec_rec_pos.get('symbol', '')
+                                        rec_rec_profit = rec_rec_pos.get('profit', 0)
+                                        rec_rec_lot_size = rec_rec_pos.get('volume', 0)
+                                        
+                                        rec_rec_profit_icon = "🔴" if rec_rec_profit < 0 else "🟢"
+                                        rec_indent = indent + "  "  # indent เพิ่มขึ้น
+                                        
+                                        self.logger.info(f"{rec_indent}🔧 Recovery #{i}.{j}: {rec_rec_symbol} | Ticket: {rec_rec_ticket} | Lot: {rec_rec_lot_size} | PnL: ${rec_rec_profit:.2f}")
                     
                     self.logger.info("")
             
