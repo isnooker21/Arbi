@@ -107,12 +107,16 @@ class BrokerAPI:
                                    f"Server: {account_info.server}, Balance: {account_info.balance}")
                     return True
             
-            # Try to connect with config credentials
+            # Try to connect with config credentials (if password is provided)
             mt5_config = self.config.get('MetaTrader5', {})
-            if mt5_config.get('login') and mt5_config.get('password') and mt5_config.get('server'):
-                self.logger.info("Attempting to connect with config credentials...")
-                if self._connect_with_credentials():
-                    return True
+            if mt5_config.get('login') and mt5_config.get('server'):
+                password = mt5_config.get('password', '')
+                if password and password.strip():
+                    self.logger.info("Attempting to connect with config credentials...")
+                    if self._connect_with_credentials():
+                        return True
+                else:
+                    self.logger.warning("No valid credentials provided for MT5 connection")
             
             self.logger.warning("Could not auto-connect to MT5 - will try manual connection")
             return False
@@ -583,6 +587,14 @@ class BrokerAPI:
                 if result is None:
                     last_error = mt5.last_error()
                     error_msg = f"MT5 Error: {last_error[1] if last_error else 'Unknown error'}"
+                    self.logger.error(f"❌ Order failed: {error_msg}")
+                    self.logger.error(f"   Symbol: {symbol}, Type: {order_type}, Volume: {volume}")
+                    self.logger.error(f"   Please check:")
+                    self.logger.error(f"   1. MT5 terminal is running and logged in")
+                    self.logger.error(f"   2. 'Allow automated trading' is enabled in MT5")
+                    self.logger.error(f"   3. Symbol {symbol} is tradeable")
+                    self.logger.error(f"   4. Market is open")
+                    self.logger.error(f"   5. Account has sufficient margin")
                     self.logger.error(f"❌ ส่ง Order ไม่สำเร็จ: {error_msg}")
                     self.logger.error(f"❌ Error Code: {last_error[0] if last_error else 'Unknown'}")
                     return {
@@ -930,3 +942,68 @@ class BrokerAPI:
             self.logger.error(f"Error checking connection: {e}")
             self._connected = False
             return False
+    
+    def check_mt5_status(self) -> dict:
+        """Check MT5 connection status and provide diagnostics"""
+        status = {
+            'connected': False,
+            'mt5_available': False,
+            'terminal_running': False,
+            'account_connected': False,
+            'config_valid': False,
+            'issues': [],
+            'recommendations': []
+        }
+        
+        try:
+            # Check if MT5 module is available
+            try:
+                import MetaTrader5 as mt5
+                status['mt5_available'] = True
+            except ImportError:
+                status['issues'].append("MetaTrader5 module not installed")
+                status['recommendations'].append("Install MetaTrader5: pip install MetaTrader5")
+                return status
+            
+            # Check if MT5 is initialized
+            if mt5.initialize():
+                status['terminal_running'] = True
+                
+                # Check account connection
+                account_info = mt5.account_info()
+                if account_info:
+                    status['account_connected'] = True
+                    status['connected'] = True
+                else:
+                    status['issues'].append("MT5 terminal running but no account connected")
+                    status['recommendations'].append("Login to your account in MT5 terminal")
+            else:
+                status['issues'].append("MT5 terminal not running or not accessible")
+                status['recommendations'].append("Start MetaTrader5 terminal")
+            
+            # Check config
+            mt5_config = self.config.get('MetaTrader5', {})
+            if mt5_config.get('login') and mt5_config.get('server'):
+                password = mt5_config.get('password', '')
+                if password and password.strip():
+                    status['config_valid'] = True
+                else:
+                    status['issues'].append("Password not set in broker_config.json")
+                    status['recommendations'].append("Set password in config/broker_config.json")
+            else:
+                status['issues'].append("Incomplete MT5 configuration")
+                status['recommendations'].append("Set login, password, and server in broker_config.json")
+            
+            # Add general recommendations
+            if not status['connected']:
+                status['recommendations'].extend([
+                    "Ensure MT5 terminal is running",
+                    "Login to your trading account in MT5",
+                    "Enable 'Allow automated trading' in MT5 options",
+                    "Check if Expert Advisors are allowed"
+                ])
+            
+        except Exception as e:
+            status['issues'].append(f"Error checking MT5 status: {e}")
+        
+        return status
