@@ -2814,6 +2814,9 @@ class CorrelationManager:
                                 # ถ้าเป็น format R{ticket}_{symbol} ให้ข้าม (เป็น recovery)
                                 continue
                             group_positions.append(pos)
+                        # 🆕 ถ้าไม่มี comment หรือ comment ไม่ตรง format ให้รวมด้วย (ไม้เก่า)
+                        elif not comment or (not comment.startswith('G') and not comment.startswith('R')):
+                            group_positions.append(pos)
                 
                 # ถ้า Group มีคู่ติดลบ
                 if group_positions:
@@ -3119,9 +3122,9 @@ class CorrelationManager:
                 if recovery_orders:
                     return False
             
-            # Check if position is already hedged
-            if self.order_tracker.is_order_hedged(ticket, symbol):
-                return False
+            # Check if position is already hedged (ข้ามการตรวจสอบ tracking ชั่วคราว)
+            # if self.order_tracker.is_order_hedged(ticket, symbol):
+            #     return False
             
             # Check if position is losing money
             if profit >= 0:
