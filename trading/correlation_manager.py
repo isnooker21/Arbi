@@ -2546,9 +2546,9 @@ class CorrelationManager:
             }
     
     def check_recovery_positions(self):
-        """🆕 Smart Recovery Flow: 3-Stage Process (Arbitrage → Correlation → Chain)"""
+        """🆕 Direct Order Processing: ตรวจสอบและแก้ไม้ทุกคู่โดยตรง"""
         try:
-            # Cooldown check to prevent excessive logging
+            # Cooldown check to prevent excessive logging (ใช้ค่าจาก config)
             current_time = datetime.now()
             cooldown = self.recovery_thresholds.get('cooldown_between_checks', 10)
             
@@ -2564,11 +2564,11 @@ class CorrelationManager:
             if sync_results.get('orders_removed', 0) > 0:
                 self.logger.info(f"🔄 Synced: {sync_results['orders_removed']} orders removed")
             
-            # 🆕 STEP 2: Smart Recovery Flow
-            self._smart_recovery_flow()
+            # 🆕 STEP 2: Direct Order Processing
+            self._direct_order_recovery()
             
         except Exception as e:
-            self.logger.error(f"Error in smart recovery check: {e}")
+            self.logger.error(f"Error in direct order recovery check: {e}")
     
     def _smart_recovery_flow(self):
         """🆕 Smart Recovery Flow: 3-Stage Process"""
@@ -2604,6 +2604,61 @@ class CorrelationManager:
             
         except Exception as e:
             self.logger.error(f"❌ Smart Recovery Flow error: {e}")
+    
+    def _direct_order_recovery(self):
+        """🆕 Direct Order Processing: ตรวจสอบและแก้ไม้ทุกคู่โดยตรง"""
+        try:
+            self.logger.info(f"🚀 Direct Order Processing: Starting recovery check...")
+            
+            # ดึง positions ทั้งหมดจาก MT5
+            all_positions = self.broker.get_all_positions()
+            self.logger.info(f"📊 Total positions from MT5: {len(all_positions)}")
+            
+            # แยกประเภทไม้
+            arbitrage_orders = []
+            recovery_orders = []
+            
+            for position in all_positions:
+                profit = position.get('profit', 0)
+                comment = position.get('comment', '')
+                
+                # ตรวจสอบว่าเป็นไม้ติดลบ
+                if profit >= 0:
+                    continue
+                
+                # แยกประเภทไม้
+                if self._is_recovery_order(position):
+                    recovery_orders.append(position)
+                else:
+                    arbitrage_orders.append(position)
+            
+            self.logger.info(f"📊 Arbitrage Orders: {len(arbitrage_orders)} | Recovery Orders: {len(recovery_orders)}")
+            
+            # 1. แก้ไม้ Arbitrage (ด้วย Correlation)
+            arbitrage_recovery_count = 0
+            for position in arbitrage_orders:
+                if self._meets_recovery_conditions(position):
+                    success = self._start_individual_recovery(position)
+                    if success:
+                        arbitrage_recovery_count += 1
+            
+            # 2. แก้ไม้ Recovery (ด้วย Chain Recovery)
+            chain_recovery_count = 0
+            for position in recovery_orders:
+                if self._meets_recovery_conditions(position):
+                    success = self._start_individual_recovery(position)
+                    if success:
+                        chain_recovery_count += 1
+            
+            # แสดงสรุป
+            total_recovery = arbitrage_recovery_count + chain_recovery_count
+            if total_recovery > 0:
+                self.logger.info(f"✅ Direct Processing: Arbitrage Recovery: {arbitrage_recovery_count} | Chain Recovery: {chain_recovery_count}")
+            else:
+                self.logger.info(f"📊 Direct Processing: No recovery started")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Direct Order Processing error: {e}")
     
     def _log_all_groups_status(self):
         """📊 แสดงตารางสถานะทุก Group"""
@@ -3105,17 +3160,22 @@ class CorrelationManager:
             # 🔗 Check if it's a recovery order (Chain Recovery Logic)
             if self._is_recovery_order(position):
                 if not self.chain_recovery_enabled:
+                    self.logger.debug(f"❌ {symbol} (Ticket: {ticket}): Chain recovery disabled")
                     return False
                 
                 chain_depth = self._get_recovery_chain_depth(ticket, symbol)
-                if chain_depth >= self.max_chain_depth:
+                max_chain_depth = self.recovery_thresholds.get('max_chain_depth', 5)
+                
+                if chain_depth >= max_chain_depth:
+                    self.logger.debug(f"❌ {symbol} (Ticket: {ticket}): Chain depth {chain_depth} >= {max_chain_depth}")
                     return False
                 
                 balance = self.broker.get_account_balance() or 10000
                 loss_percent = profit / balance
-                min_chain_percent = getattr(self, 'min_loss_percent_for_chain', -0.004)
+                min_chain_percent = self.recovery_thresholds.get('min_loss_percent_for_chain', -0.004)
                 
                 if loss_percent > min_chain_percent:
+                    self.logger.debug(f"❌ {symbol} (Ticket: {ticket}): Chain loss {loss_percent:.4f} ({loss_percent*100:.2f}%) > {min_chain_percent:.4f}")
                     return False
             
             # Check if position already has recovery orders
@@ -3134,26 +3194,26 @@ class CorrelationManager:
                 self.logger.debug(f"💰 {symbol} (Ticket: {ticket}): PROFIT ${profit:.2f} - No recovery needed")
                 return False
             
-            # 💡 Percentage-based loss check
+            # 💡 Percentage-based loss check (ใช้ค่าจาก config)
             balance = self.broker.get_account_balance() or 10000
             loss_percent = profit / balance
             min_loss_percent = self.recovery_thresholds.get('min_loss_percent', -0.005)
             
             if loss_percent > min_loss_percent:
-                self.logger.debug(f"❌ {symbol} (Ticket: {ticket}): Loss {loss_percent:.4f} ({loss_percent*100:.2f}%) < {min_loss_percent:.4f} (0.5%)")
+                self.logger.debug(f"❌ {symbol} (Ticket: {ticket}): Loss {loss_percent:.4f} ({loss_percent*100:.2f}%) < {min_loss_percent:.4f} ({abs(min_loss_percent)*100:.1f}%)")
                 return False
             
-            # 🆕 Check price distance
+            # 🆕 Check price distance (ใช้ค่าจาก config)
             price_distance_pips = self._calculate_price_distance_pips(position)
-            min_distance = getattr(self, 'min_price_distance_pips', 10)
+            min_distance = self.recovery_thresholds.get('min_price_distance_pips', 10)
             
             if price_distance_pips < min_distance:
                 self.logger.debug(f"❌ {symbol} (Ticket: {ticket}): Distance {price_distance_pips:.1f} pips < {min_distance} pips")
                 return False
             
-            # 🆕 Check position age
+            # 🆕 Check position age (ใช้ค่าจาก config)
             position_age = self._get_position_age_seconds(position)
-            min_age = getattr(self, 'min_position_age_seconds', 60)
+            min_age = self.recovery_thresholds.get('min_position_age_seconds', 60)
             
             if position_age < min_age:
                 self.logger.debug(f"❌ {symbol} (Ticket: {ticket}): Age {position_age:.0f}s < {min_age}s")
