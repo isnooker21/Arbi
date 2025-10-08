@@ -1338,51 +1338,24 @@ class TriangleArbitrageDetector:
     
     
     def _start_correlation_recovery(self, group_id: str, group_data: Dict, total_pnl: float):
-        """เริ่ม correlation recovery สำหรับกลุ่มที่ขาดทุน"""
+        """🆕 เริ่ม Smart Recovery สำหรับกลุ่มที่ขาดทุน"""
         try:
             if not self.correlation_manager:
                 self.logger.warning("Correlation manager not available")
                 return
             
-            # หาตำแหน่งที่ขาดทุน
-            losing_pairs = []
-            for position in group_data['positions']:
-                order_id = position.get('order_id')
-                if order_id:
-                    # ตรวจสอบ PnL จาก broker API
-                    all_positions = self.broker.get_all_positions()
-                    position_pnl = 0.0
-                    
-                    for pos in all_positions:
-                        if pos['ticket'] == order_id:
-                            position_pnl = pos['profit']
-                            break
-                    
-                    if position_pnl < 0:
-                        losing_pairs.append({
-                            'symbol': position['symbol'],
-                            'direction': position['direction'],
-                            'loss_percent': (position_pnl / 100) * 100,  # แปลงเป็นเปอร์เซ็นต์
-                            'order_id': order_id,
-                            'volume': position.get('lot_size', 0.1)
-                        })
+            # 🆕 ใช้ Smart Recovery Flow แทนการส่งข้อมูลแบบเก่า
+            self.logger.info(f"🔄 Starting Smart Recovery for Group {group_id}")
+            self.logger.info(f"   Total PnL: ${total_pnl:.2f}")
             
-            if losing_pairs:
-                # แก้ทุกคู่ที่ติดลบพร้อมกัน
-                self.logger.info(f"🔄 Starting correlation recovery for {len(losing_pairs)} losing pairs")
-                for pair in losing_pairs:
-                    self.logger.info(f"   📉 {pair['symbol']}: {pair['loss_percent']:.2f}% loss")
-                
-                # ตั้งค่าว่ากำลัง recovery
-                self.recovery_in_progress.add(group_id)
-                
-                # ส่ง recovery สำหรับทุกคู่ที่ติดลบพร้อมกัน
-                self.correlation_manager.start_chain_recovery(group_id, losing_pairs)
-            else:
-                self.logger.info("No losing pairs found for correlation recovery")
-                
+            # ตั้งค่าว่ากำลัง recovery
+            self.recovery_in_progress.add(group_id)
+            
+            # Smart Recovery จะทำงานผ่าน check_recovery_positions() อัตโนมัติ
+            # ไม่ต้องส่งข้อมูลแบบเก่าแล้ว เพราะ Smart Recovery หาเองจาก MT5
+            
         except Exception as e:
-            self.logger.error(f"Error starting correlation recovery: {e}")
+            self.logger.error(f"Error starting smart recovery: {e}")
     
     def _close_group(self, group_id: str):
         """ปิดกลุ่ม arbitrage พร้อมกันทั้งกลุ่ม"""

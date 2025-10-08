@@ -2546,11 +2546,11 @@ class CorrelationManager:
             }
     
     def check_recovery_positions(self):
-        """Check recovery with smart logging and proper recovery order exclusion"""
+        """🆕 Smart Recovery Flow: 3-Stage Process (Arbitrage → Correlation → Chain)"""
         try:
-            # Cooldown check to prevent excessive logging (อ่านจาก config)
+            # Cooldown check to prevent excessive logging
             current_time = datetime.now()
-            cooldown = self.recovery_thresholds.get('cooldown_between_checks', 10)  # Default 10 seconds
+            cooldown = self.recovery_thresholds.get('cooldown_between_checks', 10)
             
             if hasattr(self, 'last_recovery_check'):
                 elapsed = (current_time - self.last_recovery_check).total_seconds()
@@ -2564,113 +2564,149 @@ class CorrelationManager:
             if sync_results.get('orders_removed', 0) > 0:
                 self.logger.info(f"🔄 Synced: {sync_results['orders_removed']} orders removed")
             
-            # 🔄 STEP 1.5: Auto-register any new orders that aren't tracked yet (DISABLED)
-            # self._auto_register_new_orders()  # Disabled to prevent tracking unwanted orders
-            # Use self._enable_auto_registration() to enable this feature
+            # 🆕 STEP 2: Smart Recovery Flow
+            self._smart_recovery_flow()
             
-            # Get orders needing recovery from individual order tracker
-            orders_needing_recovery = self.order_tracker.get_orders_needing_recovery()
-            
+        except Exception as e:
+            self.logger.error(f"Error in smart recovery check: {e}")
+    
+    def _smart_recovery_flow(self):
+        """🆕 Smart Recovery Flow: 3-Stage Process"""
+        try:
             # 📊 Log tracker statistics periodically
+            current_time = datetime.now()
             if not hasattr(self, '_last_stats_log'):
                 self._last_stats_log = current_time
-            elif (current_time - self._last_stats_log).total_seconds() > 60:  # Every minute
+            elif (current_time - self._last_stats_log).total_seconds() > 60:
                 stats = self.order_tracker.get_statistics()
                 self.logger.info(f"📊 Order Tracker: {stats['total_tracked_orders']} total, "
                                f"{stats['not_hedged_orders']} need recovery, "
                                f"{stats['hedged_orders']} hedged")
                 self._last_stats_log = current_time
             
-            if not orders_needing_recovery:
-                # Only log once per 5 minutes if no orders
-                if not hasattr(self, '_last_no_orders_log'):
-                    self._last_no_orders_log = current_time
-                elif (current_time - self._last_no_orders_log).total_seconds() > 300:
-                    stats = self.order_tracker.get_statistics()
-                    self.logger.info(f"ℹ️ No orders need recovery (Total tracked: {stats['total_tracked_orders']}, "
-                                   f"Hedged: {stats['hedged_orders']})")
-                    self._last_no_orders_log = current_time
-                return
+            # 🎯 STAGE 1: ARBITRAGE - หา Group ที่ติดลบ
+            arbitrage_groups = self._find_losing_arbitrage_groups()
             
-            # Find valid candidates with detailed tracking
-            valid_candidates = []
-            skipped_reasons = {
-                'already_recovery': 0,
-                'already_hedged': 0,
-                'insufficient_loss': 0,
-                'not_found_mt5': 0
-            }
-            
-            for order_info in orders_needing_recovery:
-                ticket = order_info.get('ticket')
-                symbol = order_info.get('symbol')
+            if arbitrage_groups:
+                self.logger.info(f"🎯 STAGE 1: Found {len(arbitrage_groups)} losing arbitrage groups")
                 
-                # Get actual position from MT5
-                position = self._get_position_by_ticket(ticket)
-                if not position:
-                    skipped_reasons['not_found_mt5'] += 1
-                    continue
-                
-                # 🔗 ไม่ Skip Recovery Orders - ให้ _meets_recovery_conditions() จัดการ Chain Recovery
-                # (มี logic chain recovery อยู่แล้วใน _meets_recovery_conditions)
-                
-                # ✅ CRITICAL: Double-check if this specific ticket is already hedged
-                if self.order_tracker.is_order_hedged(ticket, symbol):
-                    skipped_reasons['already_hedged'] += 1
-                    continue
-                
-                # ✅ CRITICAL: Check if this ticket needs recovery
-                if not self.order_tracker.needs_recovery(ticket, symbol):
-                    skipped_reasons['already_hedged'] += 1
-                    continue
-                
-                # Check recovery conditions
-                if self._meets_recovery_conditions(position):
-                    valid_candidates.append(position)
-                else:
-                    skipped_reasons['insufficient_loss'] += 1
-            
-            # Only log if there's something meaningful to report
-            if valid_candidates:
-                self.logger.info(f"🎯 Found {len(valid_candidates)} valid recovery candidates")
-                best_candidate = max(valid_candidates, key=lambda x: abs(x.get('profit', 0)))
-                ticket = best_candidate.get('ticket')
-                symbol = best_candidate.get('symbol')
-                profit = best_candidate.get('profit', 0)
-                
-                self.logger.info(f"🎯 Processing best candidate: {ticket}_{symbol} (${profit:.2f})")
-                
-                # Start recovery
-                self._start_individual_recovery(best_candidate)
-                
-                # ✅ NEW: Log recovery metrics after processing
-                try:
-                    metrics = self.calculate_recovery_metrics()
-                    if metrics['total_recovery_orders'] > 0:
-                        self.logger.info(f"📊 Recovery Metrics: Diversity={metrics['symbol_diversity']:.2%}, Total Orders={metrics['total_recovery_orders']}")
-                        
-                        # Show top symbol usage
-                        if metrics['symbol_usage']:
-                            top_symbols = sorted(metrics['symbol_usage'].items(), key=lambda x: x[1], reverse=True)[:3]
-                            usage_str = ", ".join([f"{s}:{c}x" for s, c in top_symbols])
-                            self.logger.info(f"📊 Top Symbol Usage: {usage_str}")
-                except:
-                    pass  # Don't fail if metrics calculation fails
+                # 🎯 STAGE 2: CORRELATION - แก้ไม้ที่ติดลบในแต่ละ Group
+                for group_id, losing_positions in arbitrage_groups.items():
+                    self.logger.info(f"🎯 STAGE 2: Processing Group {group_id} with {len(losing_positions)} losing positions")
+                    self._process_group_correlation_recovery(group_id, losing_positions)
             else:
-                # Log skip reasons only at debug level
-                total_skipped = sum(skipped_reasons.values())
-                if total_skipped > 0:
-                    self.logger.debug(f"⏭️ Skipped {total_skipped} orders: {skipped_reasons}")
-                
-                # Only log "no candidates" once per 5 minutes
-                if not hasattr(self, '_last_no_candidates_log'):
-                    self._last_no_candidates_log = current_time
-                elif (current_time - self._last_no_candidates_log).total_seconds() > 300:
-                    self.logger.info(f"ℹ️ No valid candidates (Reasons: {skipped_reasons})")
-                    self._last_no_candidates_log = current_time
+                # 🎯 STAGE 3: CHAIN - ตรวจหา Recovery Orders ที่ยังติดลบ
+                chain_candidates = self._find_chain_recovery_candidates()
+                if chain_candidates:
+                    self.logger.info(f"🎯 STAGE 3: Found {len(chain_candidates)} chain recovery candidates")
+                    for candidate in chain_candidates:
+                        self._start_individual_recovery(candidate)
+                else:
+                    # Log "no work" once per 5 minutes
+                    if not hasattr(self, '_last_no_work_log'):
+                        self._last_no_work_log = current_time
+                    elif (current_time - self._last_no_work_log).total_seconds() > 300:
+                        stats = self.order_tracker.get_statistics()
+                        self.logger.info(f"ℹ️ No recovery work needed (Total: {stats['total_tracked_orders']}, "
+                                       f"Hedged: {stats['hedged_orders']}, Pending: {stats['not_hedged_orders']})")
+                        self._last_no_work_log = current_time
             
         except Exception as e:
-            self.logger.error(f"Error in recovery check: {e}")
+            self.logger.error(f"Error in smart recovery flow: {e}")
+    
+    def _find_losing_arbitrage_groups(self) -> Dict[str, List[Dict]]:
+        """🎯 STAGE 1: หา Arbitrage Groups ที่มีคู่ติดลบ"""
+        try:
+            losing_groups = {}
+            
+            # ตรวจสอบ Groups ทั้งหมด (Magic 234001-234006)
+            for magic in [234001, 234002, 234003, 234004, 234005, 234006]:
+                group_positions = []
+                total_group_pnl = 0.0
+                
+                # หา positions ใน group นี้
+                all_positions = self.broker.get_all_positions()
+                for pos in all_positions:
+                    if pos.get('magic', 0) == magic:
+                        # ตรวจสอบว่าเป็น original arbitrage order (ไม่ใช่ recovery)
+                        comment = pos.get('comment', '')
+                        if comment and comment.startswith('G') and '_' in comment:
+                            group_positions.append(pos)
+                            total_group_pnl += pos.get('profit', 0)
+                
+                # ถ้า Group มีคู่ติดลบ
+                if group_positions:
+                    losing_positions = [pos for pos in group_positions if pos.get('profit', 0) < 0]
+                    
+                    if losing_positions:
+                        group_id = self._get_group_id_from_magic(magic)
+                        losing_groups[group_id] = losing_positions
+                        
+                        self.logger.info(f"📊 Group {group_id}: {len(losing_positions)}/{len(group_positions)} losing "
+                                       f"(Total PnL: ${total_group_pnl:.2f})")
+            
+            return losing_groups
+            
+        except Exception as e:
+            self.logger.error(f"Error finding losing arbitrage groups: {e}")
+            return {}
+    
+    def _process_group_correlation_recovery(self, group_id: str, losing_positions: List[Dict]):
+        """🎯 STAGE 2: แก้ไม้ Correlation สำหรับ Group"""
+        try:
+            self.logger.info(f"🔄 Processing Group {group_id} correlation recovery...")
+            
+            # แก้ไม้ที่ติดลบแต่ละคู่
+            recovery_count = 0
+            for position in losing_positions:
+                ticket = str(position.get('ticket', ''))
+                symbol = position.get('symbol', '')
+                profit = position.get('profit', 0)
+                
+                # ตรวจสอบว่าไม้นี้ยังไม่แก้
+                if self.order_tracker.is_order_hedged(ticket, symbol):
+                    self.logger.debug(f"⏭️ {ticket}_{symbol}: Already hedged - skipping")
+                    continue
+                
+                # ตรวจสอบเงื่อนไขการแก้ไม้
+                if self._meets_recovery_conditions(position):
+                    self.logger.info(f"🎯 Starting recovery for {ticket}_{symbol} (${profit:.2f})")
+                    success = self._start_individual_recovery(position)
+                    if success:
+                        recovery_count += 1
+                else:
+                    self.logger.debug(f"⏳ {ticket}_{symbol}: Not ready for recovery yet")
+            
+            if recovery_count > 0:
+                self.logger.info(f"✅ Group {group_id}: Started {recovery_count} recovery orders")
+            else:
+                self.logger.debug(f"ℹ️ Group {group_id}: No recoveries started")
+                
+        except Exception as e:
+            self.logger.error(f"Error processing group correlation recovery: {e}")
+    
+    def _find_chain_recovery_candidates(self) -> List[Dict]:
+        """🎯 STAGE 3: หา Recovery Orders ที่ยังติดลบ (Chain Recovery)"""
+        try:
+            chain_candidates = []
+            
+            # หา Recovery Orders ที่ยังติดลบ
+            all_positions = self.broker.get_all_positions()
+            for pos in all_positions:
+                comment = pos.get('comment', '')
+                profit = pos.get('profit', 0)
+                
+                # ตรวจสอบว่าเป็น Recovery Order
+                if self._is_recovery_order(pos) and profit < 0:
+                    # ตรวจสอบเงื่อนไข Chain Recovery
+                    if self._meets_recovery_conditions(pos):
+                        chain_candidates.append(pos)
+            
+            return chain_candidates
+            
+        except Exception as e:
+            self.logger.error(f"Error finding chain recovery candidates: {e}")
+            return []
     
     def _has_common_currency(self, symbol1: str, symbol2: str) -> bool:
         """

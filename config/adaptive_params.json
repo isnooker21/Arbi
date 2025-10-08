@@ -168,7 +168,18 @@
       "sync_interval_seconds": 30,
       "description": "Auto register orders for tracking"
     },
-    "description": "Smart recovery with trend analysis, conditional chain recovery, and ML-ready logging"
+    "smart_recovery_flow": {
+      "enabled": true,
+      "flow_type": "3_stage",
+      "stage_1_arbitrage_enabled": true,
+      "stage_2_correlation_enabled": true,
+      "stage_3_chain_enabled": true,
+      "priority_queue_enabled": true,
+      "max_priority_queue_size": 50,
+      "smart_cooldown_seconds": 5,
+      "description": "Smart Recovery Flow: 3-Stage Process (Arbitrage → Correlation → Chain)"
+    },
+    "description": "Smart recovery with trend analysis, conditional chain recovery, ML-ready logging, and Smart Recovery Flow"
   },
   "arbitrage_params": {
     "detection": {

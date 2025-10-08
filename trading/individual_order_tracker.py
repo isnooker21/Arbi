@@ -42,6 +42,10 @@ class IndividualOrderTracker:
         # Key: f"{ticket}_{symbol}", Value: order_info
         self.order_tracking: Dict[str, Dict] = {}
         
+        # 🆕 Smart Recovery Priority Queue
+        # Priority based on loss amount and urgency
+        self.recovery_priority_queue: List[Dict] = []
+        
         # Thread safety
         self._lock = threading.RLock()
         
@@ -434,6 +438,7 @@ class IndividualOrderTracker:
                 'hedged_orders': hedged_orders,
                 'not_hedged_orders': not_hedged_orders,
                 'orphaned_orders': orphaned_orders,
+                'priority_queue_size': len(self.recovery_priority_queue),
                 'last_sync': self.stats.get('last_sync'),
                 # Keep accumulated stats for reference
                 'total_original_registered': self.stats.get('original_orders_registered', 0),
@@ -485,6 +490,9 @@ class IndividualOrderTracker:
             }
             
             self.logger.warning(f"🚨 FORCE RESET: Cleared {order_count} tracked orders and reset statistics")
+            
+            # Clear priority queue
+            self.recovery_priority_queue.clear()
             
             # Save to file after clearing
             self._save_to_file()
@@ -638,6 +646,85 @@ class IndividualOrderTracker:
         clean2 = sym2.replace('.v', '').replace('.m', '').replace('p', '').replace('a', '')
         
         return clean1 == clean2
+    
+    # 🆕 Smart Recovery Priority Queue Methods
+    
+    def add_to_priority_queue(self, order_key: str, priority_score: float, order_data: Dict):
+        """
+        Add order to priority queue for Smart Recovery.
+        
+        Args:
+            order_key: Order key (ticket_symbol)
+            priority_score: Priority score (higher = more urgent)
+            order_data: Order information
+        """
+        with self._lock:
+            # Remove if already exists
+            self.recovery_priority_queue = [item for item in self.recovery_priority_queue 
+                                          if item.get('order_key') != order_key]
+            
+            # Add new item
+            queue_item = {
+                'order_key': order_key,
+                'priority_score': priority_score,
+                'order_data': order_data,
+                'added_at': datetime.now()
+            }
+            
+            self.recovery_priority_queue.append(queue_item)
+            
+            # Sort by priority (highest first)
+            self.recovery_priority_queue.sort(key=lambda x: x['priority_score'], reverse=True)
+            
+            self.logger.debug(f"🎯 Added {order_key} to priority queue (score: {priority_score:.2f})")
+    
+    def get_next_priority_order(self) -> Optional[Dict]:
+        """
+        Get the next highest priority order from queue.
+        
+        Returns:
+            Optional[Dict]: Next priority order or None if queue is empty
+        """
+        with self._lock:
+            if not self.recovery_priority_queue:
+                return None
+            
+            # Get highest priority item
+            next_item = self.recovery_priority_queue[0]
+            
+            # Remove from queue
+            self.recovery_priority_queue.pop(0)
+            
+            return next_item
+    
+    def clear_priority_queue(self):
+        """Clear the priority queue."""
+        with self._lock:
+            queue_size = len(self.recovery_priority_queue)
+            self.recovery_priority_queue.clear()
+            if queue_size > 0:
+                self.logger.info(f"🧹 Cleared {queue_size} items from priority queue")
+    
+    def get_priority_queue_status(self) -> Dict:
+        """
+        Get priority queue status.
+        
+        Returns:
+            Dict: Queue status information
+        """
+        with self._lock:
+            if not self.recovery_priority_queue:
+                return {'size': 0, 'top_priority': None}
+            
+            top_item = self.recovery_priority_queue[0]
+            return {
+                'size': len(self.recovery_priority_queue),
+                'top_priority': {
+                    'order_key': top_item['order_key'],
+                    'priority_score': top_item['priority_score'],
+                    'added_at': top_item['added_at']
+                }
+            }
     
     def _save_to_file(self):
         """Save order tracking data to file"""
