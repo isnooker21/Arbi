@@ -2815,29 +2815,6 @@ class CorrelationManager:
                         # แสดง recovery chain แบบ recursive (หลายขั้น)
                         self._log_recovery_chain(ticket, recovery_map, 1)
                     
-                    # แสดง recovery positions ที่ไม่ได้ link (orphaned)
-                    orphaned_recoveries = []
-                    for pos in recovery_positions:
-                        comment = pos.get('comment', '')
-                        if comment.startswith('R') and '_' in comment:
-                            original_ticket = comment[1:].split('_')[0] if len(comment.split('_')) > 1 else "Unknown"
-                            if original_ticket not in [str(p.get('ticket', '')) for p in group_positions]:
-                                orphaned_recoveries.append(pos)
-                        else:
-                            orphaned_recoveries.append(pos)
-                    
-                    if orphaned_recoveries:
-                        self.logger.info(f"   ⚠️ Orphaned Recovery Positions:")
-                        for pos in orphaned_recoveries:
-                            ticket = pos.get('ticket', '')
-                            symbol = pos.get('symbol', '')
-                            profit = pos.get('profit', 0)
-                            lot_size = pos.get('volume', 0)
-                            comment = pos.get('comment', '')
-                            
-                            profit_icon = "🔴" if profit < 0 else "🟢"
-                            self.logger.info(f"      {profit_icon} {symbol} | Ticket: {ticket} | Lot: {lot_size} | PnL: ${profit:.2f} | Comment: {comment}")
-                    
                     self.logger.info("")
             
         except Exception as e:
