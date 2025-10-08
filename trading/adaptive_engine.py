@@ -20,6 +20,7 @@ import logging
 from typing import Dict, List, Optional, Tuple
 import threading
 import json
+from utils.symbol_mapper import SymbolMapper
 
 class AdaptiveEngine:
     """
@@ -44,7 +45,13 @@ class AdaptiveEngine:
         self.correlation_manager = correlation_manager
         # self.market_analyzer = market_analyzer  # DISABLED for simple trading system
         
+        # 🆕 Symbol Mapper for translating broker symbols to standard format
+        self.symbol_mapper = SymbolMapper()
+        
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize symbol mapping first
+        self._initialize_symbol_mapping()
         
         # Initialize correlation matrix
         self.correlation_matrix = {}
@@ -672,6 +679,34 @@ class AdaptiveEngine:
             self.logger.error(f"Error getting correlations for {symbol}: {e}")
             return self._get_default_correlations(symbol)
 
+    def _initialize_symbol_mapping(self):
+        """Initialize symbol mapping from broker"""
+        try:
+            self.logger.info("🔄 Initializing symbol mapping...")
+            
+            # Get available pairs from broker
+            all_pairs = self.broker.get_available_pairs()
+            if not all_pairs:
+                self.logger.warning("No pairs available from broker for symbol mapping")
+                return
+            
+            # Define required pairs for correlation calculation
+            required_pairs = [
+                'EURUSD', 'GBPUSD', 'USDJPY', 'EURJPY', 'GBPJPY',
+                'AUDUSD', 'NZDUSD', 'USDCAD', 'USDCHF', 'EURGBP',
+                'AUDNZD', 'AUDCAD', 'NZDCAD', 'AUDCHF', 'NZDCHF',
+                'CADCHF', 'EURCHF', 'GBPCHF', 'EURAUD', 'GBPAUD'
+            ]
+            
+            # Scan and map symbols
+            mapping_result = self.symbol_mapper.scan_and_map(all_pairs, required_pairs)
+            
+            # Show mapping summary
+            self.logger.info("\n" + self.symbol_mapper.get_mapping_summary())
+            
+        except Exception as e:
+            self.logger.error(f"Error initializing symbol mapping: {e}")
+
     def _calculate_on_demand_correlations(self, symbol: str, lookback_days: int = 30) -> Dict[str, float]:
         """
         Calculate correlations on-demand from historical data.
@@ -696,17 +731,27 @@ class AdaptiveEngine:
             major_minor_currencies = ['EUR', 'USD', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD']
             filtered_pairs = []
             
+            self.logger.info(f"📊 Filtering pairs from {len(all_pairs)} total pairs...")
+            
             for pair in all_pairs:
-                if len(pair) == 6:
+                if len(pair) >= 6:  # Support both 6-char and 7-char symbols (like AUDNZDP)
                     currency1 = pair[:3]
-                    currency2 = pair[3:]
+                    currency2 = pair[3:6] if len(pair) == 6 else pair[3:6]  # Handle AUDNZDP format
                     if currency1 in major_minor_currencies and currency2 in major_minor_currencies:
                         if pair != symbol:  # Don't correlate with self
                             filtered_pairs.append(pair)
             
-            # Get historical data for base symbol
-            self.logger.info(f"📊 Getting historical data for {symbol} ({lookback_days} days)")
-            base_data = self.broker.get_historical_data(symbol, 'H1', lookback_days * 24)
+            self.logger.info(f"✅ Filtered to {len(filtered_pairs)} major/minor pairs")
+            if len(filtered_pairs) == 0:
+                self.logger.warning("❌ No major/minor pairs found - this will cause correlation calculation to fail")
+                self.logger.warning(f"   Symbol format: {symbol} (length: {len(symbol)})")
+                self.logger.warning(f"   Sample pairs: {all_pairs[:5] if all_pairs else 'None'}")
+                return {}
+            
+            # Get historical data for base symbol (convert to real broker symbol)
+            real_symbol = self.symbol_mapper.get_real_symbol(symbol)
+            self.logger.info(f"📊 Getting historical data for {symbol} → {real_symbol} ({lookback_days} days)")
+            base_data = self.broker.get_historical_data(real_symbol, 'H1', lookback_days * 24)
             
             if base_data is None:
                 self.logger.warning(f"❌ No historical data returned for {symbol}")
@@ -724,8 +769,10 @@ class AdaptiveEngine:
             self.logger.info(f"🔄 Calculating correlations with {len(filtered_pairs[:20])} pairs...")
             for i, pair in enumerate(filtered_pairs[:20]):  # Limit to 20 pairs to save time
                 try:
-                    self.logger.debug(f"   [{i+1}/20] Getting data for {pair}")
-                    pair_data = self.broker.get_historical_data(pair, 'H1', lookback_days * 24)
+                    # Convert pair to real broker symbol
+                    real_pair = self.symbol_mapper.get_real_symbol(pair)
+                    self.logger.debug(f"   [{i+1}/20] Getting data for {pair} → {real_pair}")
+                    pair_data = self.broker.get_historical_data(real_pair, 'H1', lookback_days * 24)
                     
                     if pair_data is None:
                         self.logger.debug(f"   ❌ No data for {pair}")
@@ -809,7 +856,7 @@ class AdaptiveEngine:
             self.logger.info(f"🔄 Trying alternative correlation calculation for {symbol}")
             
             # Get current tick data for all pairs
-            tick_data = self.broker.get_current_tick_data()
+            tick_data = self.broker.get_tick_data()
             if not tick_data:
                 self.logger.warning("No tick data available for alternative calculation")
                 return {}
@@ -819,19 +866,21 @@ class AdaptiveEngine:
             filtered_pairs = []
             
             for pair in tick_data.keys():
-                if len(pair) == 6:
+                if len(pair) >= 6:  # Support both 6-char and 7-char symbols
                     currency1 = pair[:3]
-                    currency2 = pair[3:]
+                    currency2 = pair[3:6] if len(pair) == 6 else pair[3:6]  # Handle AUDNZDP format
                     if currency1 in major_minor_currencies and currency2 in major_minor_currencies:
                         if pair != symbol and pair in tick_data:
                             filtered_pairs.append(pair)
             
-            if symbol not in tick_data:
-                self.logger.warning(f"Base symbol {symbol} not in tick data")
+            # Convert symbol to real broker symbol
+            real_symbol = self.symbol_mapper.get_real_symbol(symbol)
+            if real_symbol not in tick_data:
+                self.logger.warning(f"Base symbol {symbol} → {real_symbol} not in tick data")
                 return {}
             
             correlations = {}
-            base_price = tick_data[symbol].get('last', 0)
+            base_price = tick_data[real_symbol].get('last', 0)
             
             if base_price <= 0:
                 self.logger.warning(f"Invalid base price for {symbol}: {base_price}")
@@ -840,7 +889,12 @@ class AdaptiveEngine:
             # Calculate price-based correlations (simplified)
             for pair in filtered_pairs[:15]:  # Limit to 15 pairs
                 try:
-                    pair_price = tick_data[pair].get('last', 0)
+                    # Convert pair to real broker symbol
+                    real_pair = self.symbol_mapper.get_real_symbol(pair)
+                    if real_pair not in tick_data:
+                        continue
+                    
+                    pair_price = tick_data[real_pair].get('last', 0)
                     if pair_price <= 0:
                         continue
                     
@@ -956,6 +1010,10 @@ class AdaptiveEngine:
                 'GBPCHF': -0.60, 'AUDUSD': -0.72
             },
             'AUDNZD': {
+                'EURUSD': -0.68, 'GBPUSD': -0.65, 'USDJPY': -0.60,
+                'EURJPY': -0.65, 'GBPJPY': -0.62
+            },
+            'AUDNZDP': {
                 'EURUSD': -0.68, 'GBPUSD': -0.65, 'USDJPY': -0.60,
                 'EURJPY': -0.65, 'GBPJPY': -0.62
             },

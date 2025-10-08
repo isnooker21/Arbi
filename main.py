@@ -253,7 +253,8 @@ class TradingSystem:
             # Initialize trading components with adaptive engine
             self.correlation_manager = CorrelationManager(
                 self.broker_api, 
-                self.adaptive_engine  # Pass adaptive_engine to correlation_manager
+                self.adaptive_engine,  # Pass adaptive_engine to correlation_manager
+                self.adaptive_engine.symbol_mapper  # Pass symbol_mapper for symbol translation
             )
             self.arbitrage_detector = TriangleArbitrageDetector(
                 self.broker_api, 
