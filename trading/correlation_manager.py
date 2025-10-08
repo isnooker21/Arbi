@@ -31,6 +31,8 @@ try:
         sys.path.append(PROJECT_ROOT)
 except Exception:
     pass
+
+from utils.account_tier_manager import AccountTierManager
 from utils.calculations import TradingCalculations
 from trading.individual_order_tracker import IndividualOrderTracker
 
@@ -1498,20 +1500,19 @@ class CorrelationManager:
                 
                 # คำนวณ lot จาก balance และ risk percent
                 # ใช้ TradingCalculations.calculate_lot_from_balance()
-                # สมมติ max_loss_pips = 100 pips (สามารถปรับได้ตามต้องการ)
-                max_loss_pips = 100
+                # ไม่ใช้ Stop Loss - Recovery Mode เท่านั้น
                 
                 # คำนวณ pip value ของ hedge symbol
                 pip_value = TradingCalculations.calculate_pip_value(hedge_symbol, 0.01, self.broker)
                 if pip_value <= 0:
                     pip_value = 1.0  # fallback
                 
-                # คำนวณ lot size โดยใช้ risk_per_trade_percent
+                # คำนวณ lot size โดยใช้ risk_per_trade_percent (Risk-Based Sizing)
                 hedge_lot = TradingCalculations.calculate_lot_from_balance(
                     balance=balance,
                     pip_value=pip_value,
                     risk_percent=self.risk_per_trade_percent,
-                    max_loss_pips=max_loss_pips
+                    max_loss_pips=0  # ไม่ใช้ SL - Recovery Mode
                 )
                 
                 # ปรับตาม correlation
@@ -3105,12 +3106,33 @@ class CorrelationManager:
         4. Rank by strongest negative correlation
         """
         try:
+            # Check broker connection first
+            if not self.broker or not hasattr(self.broker, '_connected') or not self.broker._connected:
+                self.logger.error(f"❌ Broker not connected - cannot calculate real correlations for {symbol}")
+                self.logger.error(f"❌ This is why the system falls back to default correlations")
+                return []
+            
             # Get correlations from AI engine
-            correlations = self.ai_engine.get_correlations(symbol)
+            correlations = {}
+            if self.ai_engine:
+                self.logger.info(f"🔄 Requesting correlations for {symbol} from AI engine...")
+                correlations = self.ai_engine.get_correlations(symbol)
             
             if not correlations:
-                self.logger.debug(f"No correlations found for {symbol}")
-                return []
+                self.logger.warning(f"⚠️ No correlations found for {symbol} from AI engine")
+                self.logger.warning(f"⚠️ This means historical data calculation failed")
+                # Try fallback: use default correlations directly
+                if hasattr(self.ai_engine, '_get_default_correlations'):
+                    correlations = self.ai_engine._get_default_correlations(symbol)
+                    if correlations:
+                        self.logger.warning(f"⚠️ Using fallback default correlations for {symbol}")
+                        self.logger.warning(f"⚠️ This is NOT ideal - system should calculate real correlations")
+                    else:
+                        self.logger.error(f"❌ No default correlations available for {symbol}")
+                        return []
+                else:
+                    self.logger.error(f"❌ AI engine not available and no fallback")
+                    return []
             
             self.logger.info(f"Received {len(correlations)} correlations for {symbol}")
             

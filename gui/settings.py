@@ -180,15 +180,37 @@ class SettingsWindow:
              "float", 0.1, 0.9, "เช่น 0.4 = ต้องมั่นใจ 40%")
         ])
         
+        # 5. Market Regimes (สภาวะตลาด)
+        self.create_section(left_column, "🌊 Market Regimes (สภาวะตลาด)", [
+            ("Threshold Volatile", "market_regimes.volatile.arbitrage_threshold", 
+             "float", 0.001, 0.01, "เช่น 0.002 = ตลาดผันผวน threshold 0.2%"),
+            ("Threshold Trending", "market_regimes.trending.arbitrage_threshold", 
+             "float", 0.001, 0.01, "เช่น 0.0015 = ตลาดเทรนด์ threshold 0.15%"),
+            ("Threshold Ranging", "market_regimes.ranging.arbitrage_threshold", 
+             "float", 0.0005, 0.005, "เช่น 0.0008 = ตลาดไซด์เวย์ threshold 0.08%"),
+            ("Threshold Normal", "market_regimes.normal.arbitrage_threshold", 
+             "float", 0.0005, 0.005, "เช่น 0.001 = ตลาดปกติ threshold 0.1%")
+        ])
+        
         # === RIGHT COLUMN ===
         
-        # 5. Lot Sizing (Risk-Based) ⭐ แนะนำ
+        # 6. Account Tier Management 🏆 ใหม่!
+        self.create_section(right_column, "🏆 Account Tier Management", [
+            ("Auto-Detect Tier", "position_sizing.auto_detect_tier", 
+             "bool", "เปิด = ตรวจจับระดับบัญชีอัตโนมัติตามยอดเงิน"),
+            ("Force Tier", "position_sizing.force_tier", 
+             "string", "starter/standard/premium/vip หรือ auto"),
+            ("Custom Risk (%)", "position_sizing.custom_risk_percent", 
+             "float", 0.5, 5.0, "ถ้าไม่ใช้ auto-detect ใช้ค่านี้")
+        ])
+        
+        # 7. Lot Sizing (Risk-Based) ⭐ แนะนำ
         self.create_section(right_column, "💰 Lot Sizing (Risk-Based) ⭐ แนะนำ", [
             ("Risk per Trade (%)", "position_sizing.lot_calculation.risk_per_trade_percent", 
              "float", 0.5, 5.0, "เช่น 1.5 = เสี่ยง 1.5% ของ balance ต่อไม้")
         ])
         
-        # 6. Recovery Lot Sizing (ขนาดไม้แก้)
+        # 8. Recovery Lot Sizing (ขนาดไม้แก้)
         self.create_section(right_column, "🔧 Recovery Lot Sizing (ขนาดไม้แก้)", [
             ("Lot สูงสุด (Recovery)", "recovery_params.dynamic_hedge.max_hedge_lot", 
              "float", 0.1, 10.0, "เช่น 3.0 = recovery สูงสุด 3.0 lot"),
@@ -196,7 +218,7 @@ class SettingsWindow:
              "float", 0.01, 1.0, "เช่น 0.1 = recovery ต่ำสุด 0.1 lot")
         ])
         
-        # 7. Arbitrage Settings
+        # 9. Arbitrage Settings
         self.create_section(right_column, "⚡ Arbitrage Settings", [
             ("Threshold ขั้นต่ำ", "arbitrage_params.detection.min_threshold", 
              "float", 0.00001, 0.01, "เช่น 0.0001 = ต้องมีส่วนต่าง >= 0.01%"),
@@ -206,7 +228,7 @@ class SettingsWindow:
              "float", 0.1, 2.0, "เช่น 0.5 = ยอมรับ spread 0.5 pips")
         ])
         
-        # 8. Multi-Armed Bandit
+        # 10. Multi-Armed Bandit
         self.create_section(right_column, "🤖 Multi-Armed Bandit (ML)", [
             ("เปิดใช้งาน ML", "recovery_params.multi_armed_bandit.enabled", 
              "bool", "เปิด = ระบบเรียนรู้เลือก pair อัตโนมัติ"),
@@ -216,7 +238,59 @@ class SettingsWindow:
              "float", 0.0, 1.0, "เช่น 0.1 = เรียนรู้ช้าๆ แต่มั่นคง")
         ])
         
-        # 9. System Limits
+        # 11. Hedge Ratios (อัตราส่วนการแก้ไม้)
+        self.create_section(right_column, "⚖️ Hedge Ratios (อัตราส่วนการแก้ไม้)", [
+            ("อัตราส่วนต่ำสุด", "recovery_params.hedge_ratios.min_ratio", 
+             "float", 0.1, 2.0, "เช่น 0.7 = hedge lot ไม่ต่ำกว่า 70% ของไม้เดิม"),
+            ("อัตราส่วนสูงสุด", "recovery_params.hedge_ratios.max_ratio", 
+             "float", 0.5, 5.0, "เช่น 2.0 = hedge lot ไม่เกิน 200% ของไม้เดิม"),
+            ("อัตราส่วนเริ่มต้น", "recovery_params.hedge_ratios.default_ratio", 
+             "float", 0.5, 2.0, "เช่น 1.0 = hedge lot เท่ากับไม้เดิม")
+        ])
+        
+        # 12. Diversification (การกระจายความเสี่ยง)
+        self.create_section(right_column, "🎯 Diversification (การกระจายความเสี่ยง)", [
+            ("การใช้คู่เงินสูงสุด", "recovery_params.diversification.max_usage_per_symbol", 
+             "int", 1, 10, "เช่น 3 = ใช้คู่เงินเดียวกันได้สูงสุด 3 ครั้ง"),
+            ("บังคับใช้ขีดจำกัด", "recovery_params.diversification.enforce_limit", 
+             "bool", "เปิด = บังคับใช้ขีดจำกัดการกระจายความเสี่ยง")
+        ])
+        
+        # 13. Triangle Management
+        self.create_section(right_column, "🔺 Triangle Management", [
+            ("เวลาถือ Triangle (นาที)", "arbitrage_params.triangles.triangle_hold_time_minutes", 
+             "int", 30, 480, "เช่น 120 = ถือ triangle สูงสุด 2 ชั่วโมง"),
+            ("เช็ค Correlation ทุก (วินาที)", "arbitrage_params.triangles.correlation_check_interval", 
+             "int", 30, 300, "เช่น 60 = เช็ค correlation ทุก 1 นาที"),
+            ("เปอร์เซ็นต์ล็อคกำไร", "arbitrage_params.closing.lock_profit_percentage", 
+             "float", 0.1, 1.0, "เช่น 0.5 = ล็อค 50% ของกำไรสูงสุด")
+        ])
+        
+        # 14. ML Logging
+        self.create_section(right_column, "🤖 ML Logging (บันทึกข้อมูล)", [
+            ("เปิดใช้งาน ML Logging", "recovery_params.ml_logging.enabled", 
+             "bool", "เปิด = บันทึกข้อมูลสำหรับ ML Training"),
+            ("บันทึกลง Database", "recovery_params.ml_logging.log_to_database", 
+             "bool", "เปิด = บันทึกข้อมูลลงฐานข้อมูล"),
+            ("บันทึก Market Features", "recovery_params.ml_logging.log_market_features", 
+             "bool", "เปิด = บันทึกข้อมูลตลาด"),
+            ("บันทึก Decision Process", "recovery_params.ml_logging.log_decision_process", 
+             "bool", "เปิด = บันทึกกระบวนการตัดสินใจ")
+        ])
+        
+        # 15. Auto Registration
+        self.create_section(right_column, "📝 Auto Registration (ลงทะเบียนอัตโนมัติ)", [
+            ("เปิดใช้งาน Auto Registration", "recovery_params.auto_registration.enabled", 
+             "bool", "เปิด = ลงทะเบียนออเดอร์อัตโนมัติ"),
+            ("ลงทะเบียนตอนเริ่มระบบ", "recovery_params.auto_registration.register_on_startup", 
+             "bool", "เปิด = ลงทะเบียนออเดอร์เก่าตอนเริ่มระบบ"),
+            ("ลงทะเบียนออเดอร์ใหม่", "recovery_params.auto_registration.register_on_new_orders", 
+             "bool", "เปิด = ลงทะเบียนออเดอร์ใหม่ทันที"),
+            ("Sync ทุก (วินาที)", "recovery_params.auto_registration.sync_interval_seconds", 
+             "int", 10, 300, "เช่น 30 = sync กับ MT5 ทุก 30 วินาที")
+        ])
+        
+        # 16. System Limits
         self.create_section(right_column, "⚙️ System Limits (ข้อจำกัดระบบ)", [
             ("Max Portfolio Risk (%)", "position_sizing.risk_management.max_portfolio_risk", 
              "float", 1.0, 20.0, "เช่น 8.0 = ความเสี่ยงรวมสูงสุด 8% ของ balance"),
@@ -317,6 +391,38 @@ class SettingsWindow:
                 )
             var.trace('w', update_status)
             
+        elif param_type == "string":
+            # String entry with dropdown for tier selection
+            if "force_tier" in param_path:
+                # Tier dropdown
+                tier_options = ["auto", "starter", "standard", "premium", "vip"]
+                var = tk.StringVar(value=str(current_value) if current_value else "auto")
+                dropdown = ttk.Combobox(
+                    input_frame,
+                    textvariable=var,
+                    values=tier_options,
+                    state="readonly",
+                    width=12,
+                    font=('Arial', 11, 'bold')
+                )
+                dropdown.pack(side='left', padx=5, pady=2)
+            else:
+                # Regular string entry
+                var = tk.StringVar(value=str(current_value))
+                entry = tk.Entry(
+                    input_frame,
+                    textvariable=var,
+                    width=15,
+                    font=('Consolas', 12, 'bold'),
+                    bg='#FFFFFF',
+                    fg='#000000',
+                    insertbackground='#FF0000',
+                    relief='solid',
+                    bd=2,
+                    justify='center'
+                )
+                entry.pack(side='left', padx=5, pady=2, ipady=3)
+        
         elif param_type == "int" or param_type == "float":
             # Number entry with custom style
             var = tk.StringVar(value=str(current_value))

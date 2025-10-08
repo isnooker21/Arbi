@@ -35,44 +35,55 @@
   },
   "position_sizing": {
     "account_tiers": {
-      "small": {
+      "starter": {
+        "min_balance": 1000,
+        "max_balance": 5000,
+        "risk_per_trade_percent": 2.0,
+        "max_triangles": 2,
+        "lot_multiplier": 1.0,
+        "base_lot_size": 0.01,
+        "max_position_size": 0.5,
+        "description": "Starter account - สำหรับนักเทรดใหม่, risk สูงกว่าเล็กน้อย"
+      },
+      "standard": {
         "min_balance": 5000,
-        "max_balance": 10000,
+        "max_balance": 25000,
+        "risk_per_trade_percent": 1.5,
+        "max_triangles": 3,
         "lot_multiplier": 1.0,
         "base_lot_size": 0.01,
-        "max_position_size": 5.0,
-        "description": "Small account - optimized sizing for better recovery"
-      },
-      "medium": {
-        "min_balance": 10000,
-        "max_balance": 50000,
-        "lot_multiplier": 1.0,
-        "base_lot_size": 0.01,
-        "max_position_size": 5.0,
-        "description": "Medium account - moderate sizing for loss reduction"
-      },
-      "large": {
-        "min_balance": 50000,
-        "max_balance": 100000,
-        "lot_multiplier": 1.3,
-        "base_lot_size": 0.01,
-        "max_position_size": 7.5,
-        "description": "Large account - conservative sizing for loss reduction"
+        "max_position_size": 1.0,
+        "description": "Standard account - สำหรับนักเทรดทั่วไป, risk ปานกลาง"
       },
       "premium": {
+        "min_balance": 25000,
+        "max_balance": 100000,
+        "risk_per_trade_percent": 1.2,
+        "max_triangles": 4,
+        "lot_multiplier": 1.0,
+        "base_lot_size": 0.01,
+        "max_position_size": 2.0,
+        "description": "Premium account - สำหรับนักเทรดมีประสบการณ์, risk ต่ำกว่า"
+      },
+      "vip": {
         "min_balance": 100000,
         "max_balance": 999999999,
-        "lot_multiplier": 1.5,
+        "risk_per_trade_percent": 1.0,
+        "max_triangles": 5,
+        "lot_multiplier": 1.0,
         "base_lot_size": 0.01,
-        "max_position_size": 10.0,
-        "description": "Premium account - conservative sizing for loss reduction"
+        "max_position_size": 5.0,
+        "description": "VIP account - สำหรับนักลงทุนระดับสูง, risk ต่ำสุด"
       }
     },
+    "auto_detect_tier": true,
+    "force_tier": "auto",
+    "custom_risk_percent": 1.5,
     "lot_calculation": {
       "use_simple_mode": false,
       "use_risk_based_sizing": true,
       "risk_per_trade_percent": 1.5,
-      "description": "use_risk_based_sizing=true: ใช้ risk_per_trade คำนวณ lot อัตโนมัติ (ง่ายที่สุด แนะนำ!)"
+      "description": "Risk-Based Sizing: ใช้ risk_per_trade คำนวณ lot อัตโนมัติทั้งหมด - ไม่ใช้ Stop Loss, Recovery Mode เท่านั้น"
     },
     "risk_management": {
       "risk_per_trade": 0.015,

@@ -39,6 +39,7 @@ except Exception:
     pass
 from utils.calculations import TradingCalculations
 from utils.symbol_mapper import SymbolMapper
+from utils.account_tier_manager import AccountTierManager
 
 class TriangleArbitrageDetector:
     def __init__(self, broker_api, ai_engine=None, correlation_manager=None):
@@ -144,6 +145,12 @@ class TriangleArbitrageDetector:
         
         # ใช้ lot size ปกติ 0.1 สำหรับทุกคู่เงิน
         self.standard_lot_size = 0.1
+        
+        # ⭐ เพิ่ม Account Tier Manager
+        self.account_tier_manager = AccountTierManager()
+        
+        # โหลด config สำหรับ Account Tier
+        self._load_tier_config()
         
         # ระบบป้องกันการส่ง recovery ซ้ำ
         self.recovery_in_progress = set()  # เก็บ group_id ที่กำลัง recovery
@@ -542,6 +549,40 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error syncing active groups from MT5: {e}")
     
+    def _load_tier_config(self):
+        """โหลดการตั้งค่า Account Tier จาก config"""
+        try:
+            import json
+            with open('config/adaptive_params.json', 'r') as f:
+                self.tier_config = json.load(f)
+        except Exception as e:
+            self.logger.error(f"Error loading tier config: {e}")
+            self.tier_config = {}
+    
+    def _get_config_value(self, path: str, default_value=None):
+        """ดึงค่าจาก config โดยใช้ dot notation"""
+        try:
+            keys = path.split('.')
+            value = self.tier_config
+            for key in keys:
+                if isinstance(value, dict) and key in value:
+                    value = value[key]
+                else:
+                    return default_value
+            return value
+        except Exception as e:
+            self.logger.error(f"Error getting config value {path}: {e}")
+            return default_value
+    
+    def reload_config(self):
+        """โหลด config ใหม่ (สำหรับ GUI Settings)"""
+        try:
+            self._load_tier_config()
+            self.account_tier_manager = AccountTierManager()  # รีโหลด tier manager
+            self.logger.info("✅ Account Tier config reloaded successfully")
+        except Exception as e:
+            self.logger.error(f"Error reloading tier config: {e}")
+    
     def _send_orders_for_triangle(self, triangle, triangle_name, balance):
         """ส่งออเดอร์สำหรับสามเหลี่ยมเดียว"""
         try:
@@ -561,16 +602,32 @@ class TriangleArbitrageDetector:
             self.logger.info(f"   risk_per_trade_percent={risk_per_trade_percent}")
             self.logger.info(f"   Current Balance: ${balance}")
 
-            # คำนวณ lot sizes ให้ pip value เท่ากัน + scale ตาม balance
+            # ⭐ ใช้ Account Tier Manager คำนวณ lot sizes
             triangle_symbols = list(triangle)
+            
+            # ตรวจสอบการตั้งค่า Account Tier
+            auto_detect = self._get_config_value('position_sizing.auto_detect_tier', True)
+            force_tier = self._get_config_value('position_sizing.force_tier', 'auto')
+            custom_risk = self._get_config_value('position_sizing.custom_risk_percent', 1.5)
+            
+            if auto_detect and force_tier == 'auto':
+                # ใช้ Auto-Detection
+                tier_name, tier_config = self.account_tier_manager.detect_account_tier(balance)
+                risk_percent = tier_config.get('risk_per_trade_percent', 1.5)
+                self.logger.info(f"🎯 Auto-Detected Tier: {tier_name.upper()}, Risk: {risk_percent}%")
+            else:
+                # ใช้ Custom Settings
+                risk_percent = custom_risk
+                self.logger.info(f"🎯 Custom Risk Setting: {risk_percent}%")
+            
             lot_sizes = TradingCalculations.get_uniform_triangle_lots(
                 triangle_symbols=triangle_symbols,
                 balance=balance,
-                target_pip_value=5.0,  # $5 pip value base (reduced from $10 for lower risk)
-                broker_api=self.broker,  # ส่ง broker API สำหรับดึงอัตราแลกเปลี่ยน
-                use_simple_mode=use_simple_mode,  # ใช้ค่าจาก config
-                use_risk_based_sizing=use_risk_based_sizing,  # 🔥 ส่ง risk-based flag
-                risk_per_trade_percent=risk_per_trade_percent  # 🔥 ส่ง risk percentage
+                target_pip_value=5.0,  # $5 pip value base
+                broker_api=self.broker,
+                use_simple_mode=False,
+                use_risk_based_sizing=True,
+                risk_per_trade_percent=risk_percent  # ใช้ค่าจาก Account Tier หรือ Custom
             )
             self.logger.info(f"🔍 DEBUG: Arbitrage Detector - Calculated Lot Sizes: {lot_sizes}")
             

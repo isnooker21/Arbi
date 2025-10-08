@@ -495,32 +495,40 @@ class TradingCalculations:
             return 1.0
     
     @staticmethod
-    def calculate_lot_from_balance(balance: float, pip_value: float, risk_percent: float = 1.0, max_loss_pips: float = 100) -> float:
-        """Calculate lot size based on account balance and risk management"""
+    def calculate_lot_from_balance(balance: float, pip_value: float, risk_percent: float = 1.5, max_loss_pips: float = 0) -> float:
+        """Calculate lot size based on account balance using Risk-Based Sizing (No Stop Loss - Recovery Mode)"""
         try:
-            if balance <= 0 or pip_value <= 0 or risk_percent <= 0 or max_loss_pips <= 0:
+            if balance <= 0 or pip_value <= 0 or risk_percent <= 0:
                 return 0.01  # Minimum lot size
             
-            # คำนวณจำนวนเงินที่เสี่ยงได้
-            risk_amount = balance * (risk_percent / 100)
+            # ⭐ ใช้ Risk-Based Sizing แบบเดียวกับ triangle arbitrage
+            # ไม่ใช้ Stop Loss เพื่อให้ระบบ Recovery ทำงานได้
+            risk_amount = balance * (risk_percent / 100.0)
             
-            # คำนวณ lot size ที่เหมาะสม
-            # risk_amount = lot_size * pip_value * max_loss_pips
-            # lot_size = risk_amount / (pip_value * max_loss_pips)
-            theoretical_lot = risk_amount / (pip_value * max_loss_pips)
+            # คำนวณ lot size จาก risk โดยตรง (ไม่ใช้ SL)
+            # Risk Amount = Lot Size × Pip Value per 0.01 lot × 0.01
+            # Lot Size = Risk Amount / (Pip Value per 0.01 lot) × 0.01
+            theoretical_lot = (risk_amount / pip_value) * 0.01
             
             # Debug log
-            logging.getLogger(__name__).info(f"💰 Lot calculation: Balance={balance:.2f}, Risk%={risk_percent:.1f}%, Risk Amount={risk_amount:.2f}, Pip Value={pip_value:.2f}, Max Loss Pips={max_loss_pips}, Theoretical Lot={theoretical_lot:.4f}")
+            logging.getLogger(__name__).info(f"💰 Risk-Based Lot Calculation:")
+            logging.getLogger(__name__).info(f"   Balance=${balance:.2f}, Risk={risk_percent}% (${risk_amount:.2f})")
+            logging.getLogger(__name__).info(f"   Pip Value per 0.01 lot=${pip_value:.2f}")
+            logging.getLogger(__name__).info(f"   Theoretical Lot={theoretical_lot:.4f}")
             
             # Round to valid lot size
             final_lot = TradingCalculations.round_to_valid_lot_size(theoretical_lot)
+            
+            # จำกัดขนาด lot
+            final_lot = max(0.01, min(final_lot, 1.0))
+            
             logging.getLogger(__name__).info(f"📊 Final lot size: {final_lot:.4f}")
             
             return final_lot
             
         except Exception as e:
-            logging.getLogger(__name__).error(f"Error calculating lot from balance: {e}")
-            return 0.1  # Minimum lot size
+            logging.getLogger(__name__).error(f"Error calculating risk-based lot from balance: {e}")
+            return 0.01  # Minimum lot size
     
     @staticmethod
     def round_to_valid_lot_size(calculated_lot: float, min_lot: float = 0.01, lot_step: float = 0.01) -> float:
