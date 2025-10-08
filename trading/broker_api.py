@@ -742,8 +742,10 @@ class BrokerAPI:
                 
                 position_list = []
                 for pos in positions:
+                    # Use position identifier as ticket (MT5 positions don't have tickets)
+                    position_id = pos.ticket if hasattr(pos, 'ticket') and pos.ticket else pos.identifier
                     position_list.append({
-                        'ticket': pos.ticket,
+                        'ticket': position_id,
                         'symbol': pos.symbol,
                         'type': 'BUY' if pos.type == mt5.POSITION_TYPE_BUY else 'SELL',
                         'volume': pos.volume,

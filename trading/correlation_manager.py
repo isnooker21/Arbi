@@ -2314,15 +2314,44 @@ class CorrelationManager:
             
             self.logger.info(f"🎯 Starting recovery for ticket {original_ticket}_{original_symbol}")
             
-            # ✅ CRITICAL CHECK #1: Verify this ticket is not already hedged
+            # ✅ CRITICAL CHECK #1: Skip if ticket is empty
+            if not original_ticket or original_ticket.strip() == '':
+                self.logger.warning(f"🚫 INVALID TICKET: Ticket is empty for {original_symbol} - skipping")
+                return False
+            
+            # ✅ CRITICAL CHECK #2: Verify this ticket is not already hedged
             if self.order_tracker.is_order_hedged(original_ticket, original_symbol):
                 self.logger.warning(f"🚫 DUPLICATE PREVENTION: Ticket {original_ticket}_{original_symbol} already hedged - skipping")
                 return False
             
-            # ✅ CRITICAL CHECK #2: Double-check in case of race condition
+            # ✅ CRITICAL CHECK #3: Double-check in case of race condition
             if not self.order_tracker.needs_recovery(original_ticket, original_symbol):
-                self.logger.warning(f"🚫 DUPLICATE PREVENTION: Ticket {original_ticket}_{original_symbol} doesn't need recovery - skipping")
-                return False
+                # Try to register the order if it's not in the tracker
+                self.logger.warning(f"🚫 Order {original_ticket}_{original_symbol} not in tracker - attempting to register")
+                
+                # Extract group_id from magic number
+                magic = original_position.get('magic', 234000)
+                if magic in [234001, 234002, 234003, 234004, 234005, 234006]:
+                    group_num = str(magic)[-1]
+                    group_id = f"group_triangle_{group_num}_1"
+                    
+                    # Register the order
+                    success = self.order_tracker.register_original_order(
+                        original_ticket, original_symbol, group_id
+                    )
+                    
+                    if success:
+                        self.logger.info(f"✅ Successfully registered {original_ticket}_{original_symbol} in tracker")
+                        # Check again if it needs recovery
+                        if not self.order_tracker.needs_recovery(original_ticket, original_symbol):
+                            self.logger.warning(f"🚫 DUPLICATE PREVENTION: Ticket {original_ticket}_{original_symbol} still doesn't need recovery - skipping")
+                            return False
+                    else:
+                        self.logger.error(f"❌ Failed to register {original_ticket}_{original_symbol} in tracker - skipping")
+                        return False
+                else:
+                    self.logger.warning(f"🚫 DUPLICATE PREVENTION: Ticket {original_ticket}_{original_symbol} doesn't need recovery - skipping")
+                    return False
             
             # กำหนดทิศทางที่ถูกต้อง (ใช้ทิศทางเดียวกันกับคู่เดิม)
             original_direction = original_position.get('type', 'SELL')
@@ -2874,6 +2903,7 @@ class CorrelationManager:
             symbol = position.get('symbol', '')
             profit = position.get('profit', 0)
             comment = position.get('comment', '')
+            
             
             # 🔗 Check if it's a recovery order (Chain Recovery Logic)
             if self._is_recovery_order(position):
