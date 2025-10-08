@@ -2737,6 +2737,30 @@ class CorrelationManager:
         except Exception as e:
             self.logger.error(f"❌ Error logging groups status: {e}")
     
+    def _log_recovery_chain(self, parent_ticket: str, recovery_map: Dict, depth: int):
+        """แสดง recovery chain แบบ recursive (หลายขั้น)"""
+        try:
+            if parent_ticket not in recovery_map:
+                return
+                
+            recovery_chain = recovery_map[parent_ticket]
+            for i, recovery_pos in enumerate(recovery_chain, 1):
+                rec_ticket = recovery_pos.get('ticket', '')
+                rec_symbol = recovery_pos.get('symbol', '')
+                rec_profit = recovery_pos.get('profit', 0)
+                rec_lot_size = recovery_pos.get('volume', 0)
+                
+                rec_profit_icon = "🔴" if rec_profit < 0 else "🟢"
+                indent = "         " + "  " * depth  # เพิ่ม indent ตามขั้น
+                
+                self.logger.info(f"{indent}🔧 Recovery #{depth}.{i}: {rec_symbol} | Ticket: {rec_ticket} | Lot: {rec_lot_size} | PnL: ${rec_profit:.2f}")
+                
+                # แสดง recovery ของ recovery (recursive)
+                self._log_recovery_chain(rec_ticket, recovery_map, depth + 1)
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error logging recovery chain: {e}")
+    
     def _log_detailed_group_info(self, all_positions: List[Dict]):
         """📋 แสดงรายละเอียดแต่ละ Group: คู่เงิน, ไม้ไหนแก้ไม้ไหน"""
         try:
@@ -2788,32 +2812,8 @@ class CorrelationManager:
                         
                         self.logger.info(f"      {profit_icon} {symbol} | Ticket: {ticket} | Lot: {lot_size} | PnL: ${profit:.2f} | {hedge_status}")
                         
-                        # แสดง recovery chain (ถ้ามี)
-                        if ticket in recovery_map:
-                            recovery_chain = recovery_map[ticket]
-                            for i, recovery_pos in enumerate(recovery_chain, 1):
-                                rec_ticket = recovery_pos.get('ticket', '')
-                                rec_symbol = recovery_pos.get('symbol', '')
-                                rec_profit = recovery_pos.get('profit', 0)
-                                rec_lot_size = recovery_pos.get('volume', 0)
-                                
-                                rec_profit_icon = "🔴" if rec_profit < 0 else "🟢"
-                                indent = "         " + "  " * i  # เพิ่ม indent ตามขั้น
-                                
-                                self.logger.info(f"{indent}🔧 Recovery #{i}: {rec_symbol} | Ticket: {rec_ticket} | Lot: {rec_lot_size} | PnL: ${rec_profit:.2f}")
-                                
-                                # ตรวจสอบว่ามี recovery ของ recovery อีกหรือไม่
-                                if rec_ticket in recovery_map:
-                                    for j, rec_rec_pos in enumerate(recovery_map[rec_ticket], 1):
-                                        rec_rec_ticket = rec_rec_pos.get('ticket', '')
-                                        rec_rec_symbol = rec_rec_pos.get('symbol', '')
-                                        rec_rec_profit = rec_rec_pos.get('profit', 0)
-                                        rec_rec_lot_size = rec_rec_pos.get('volume', 0)
-                                        
-                                        rec_rec_profit_icon = "🔴" if rec_rec_profit < 0 else "🟢"
-                                        rec_indent = indent + "  "  # เพิ่ม indent อีก
-                                        
-                                        self.logger.info(f"{rec_indent}🔧 Recovery #{i}.{j}: {rec_rec_symbol} | Ticket: {rec_rec_ticket} | Lot: {rec_rec_lot_size} | PnL: ${rec_rec_profit:.2f}")
+                        # แสดง recovery chain แบบ recursive (หลายขั้น)
+                        self._log_recovery_chain(ticket, recovery_map, 1)
                     
                     # แสดง recovery positions ที่ไม่ได้ link (orphaned)
                     orphaned_recoveries = []
