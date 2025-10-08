@@ -243,6 +243,7 @@ class IndividualOrderTracker:
         """
         Sync order status with actual MT5 positions.
         Remove orders that are no longer active in MT5.
+        Auto-register existing positions that aren't tracked.
         
         Returns:
             Dict: Sync operation results
@@ -251,6 +252,7 @@ class IndividualOrderTracker:
             sync_results = {
                 'orders_checked': 0,
                 'orders_removed': 0,
+                'orders_auto_registered': 0,
                 'errors': 0,
                 'sync_time': datetime.now()
             }
@@ -268,6 +270,63 @@ class IndividualOrderTracker:
                     ticket = str(pos.get('ticket', ''))
                     if ticket:
                         active_tickets.add(ticket)
+                
+                # 🆕 AUTO-REGISTER existing positions that aren't tracked
+                for pos in all_positions:
+                    ticket = str(pos.get('ticket', ''))
+                    symbol = pos.get('symbol', '')
+                    comment = pos.get('comment', '')
+                    
+                    if ticket and symbol:
+                        order_key = f"{ticket}_{symbol}"
+                        
+                        # Check if this order is already tracked
+                        if order_key not in self.order_tracking:
+                            # Determine order type from comment
+                            is_recovery = self._is_recovery_comment(comment)
+                            order_type = "RECOVERY" if is_recovery else "ORIGINAL"
+                            
+                            # Auto-register order
+                            group_id = self._extract_group_from_comment(comment, symbol)
+                            
+                            order_data = {
+                                "ticket": ticket,
+                                "symbol": symbol,
+                                "group_id": group_id,
+                                "type": order_type,
+                                "status": "NOT_HEDGED",
+                                "recovery_orders": [],
+                                "created_at": datetime.now(),
+                                "last_sync": datetime.now(),
+                                "auto_registered": True,  # Flag to indicate this was auto-registered
+                                "comment": comment  # Store original comment
+                            }
+                            
+                            # For recovery orders, try to find the original order they're hedging
+                            if is_recovery:
+                                original_order_key = self._find_original_order_for_recovery(order_data)
+                                if original_order_key:
+                                    order_data["hedging_for"] = original_order_key
+                                    # Update original order's recovery list
+                                    if original_order_key in self.order_tracking:
+                                        if order_key not in self.order_tracking[original_order_key].get("recovery_orders", []):
+                                            self.order_tracking[original_order_key].setdefault("recovery_orders", []).append(order_key)
+                                            # Mark original as hedged
+                                            self.order_tracking[original_order_key]["status"] = "HEDGED"
+                                    order_data["status"] = "HEDGED"
+                                else:
+                                    order_data["status"] = "ORPHANED"  # Recovery without original
+                            
+                            self.order_tracking[order_key] = order_data
+                            
+                            if is_recovery:
+                                self.stats['recovery_orders_registered'] += 1
+                                self.logger.info(f"🔄 Auto-registered existing RECOVERY position: {order_key} in {group_id}")
+                            else:
+                                self.stats['original_orders_registered'] += 1
+                                self.logger.info(f"🔄 Auto-registered existing ORIGINAL position: {order_key} in {group_id}")
+                            
+                            sync_results['orders_auto_registered'] += 1
                 
                 # Check each tracked order
                 orders_to_remove = []
@@ -332,9 +391,9 @@ class IndividualOrderTracker:
                 self.stats['last_sync'] = datetime.now()
                 self.stats['orders_removed'] += sync_results['orders_removed']
                 
-                if sync_results['orders_removed'] > 0:
-                    self.logger.info(f"🔄 Sync completed: {sync_results['orders_checked']} checked, {sync_results['orders_removed']} removed")
-                    # Save to file after removing closed orders
+                if sync_results['orders_removed'] > 0 or sync_results['orders_auto_registered'] > 0:
+                    self.logger.info(f"🔄 Sync completed: {sync_results['orders_checked']} checked, {sync_results['orders_removed']} removed, {sync_results['orders_auto_registered']} auto-registered")
+                    # Save to file after changes
                     self._save_to_file()
                 
             except Exception as e:
@@ -429,6 +488,158 @@ class IndividualOrderTracker:
             
             # Save to file after clearing
             self._save_to_file()
+    
+    def _extract_group_from_comment(self, comment: str, symbol: str) -> str:
+        """
+        Extract group ID from comment or generate one based on symbol.
+        
+        Args:
+            comment: MT5 position comment
+            symbol: Currency pair symbol
+            
+        Returns:
+            str: Group ID
+        """
+        try:
+            if comment:
+                # Try to extract group from comment patterns like "G1_EURUSD", "group_triangle_1_1", etc.
+                if comment.startswith('G'):
+                    # Pattern: G1_EURUSD, G2_GBPUSD, etc.
+                    parts = comment.split('_')
+                    if len(parts) >= 1:
+                        group_part = parts[0]
+                        if group_part.startswith('G') and len(group_part) > 1:
+                            group_num = group_part[1:]
+                            try:
+                                group_num = int(group_num)
+                                return f"G{group_num}"
+                            except ValueError:
+                                pass
+                
+                elif 'group_' in comment:
+                    # Pattern: group_triangle_1_1, group_triangle_2_1, etc.
+                    parts = comment.split('_')
+                    if len(parts) >= 3:
+                        triangle_type = parts[1]  # triangle_1, triangle_2, etc.
+                        group_num = parts[2]
+                        return f"G{group_num}"
+            
+            # Fallback: Generate group based on symbol
+            # Map major currency pairs to groups
+            major_pairs = {
+                'EURUSD': 'G1', 'GBPUSD': 'G1', 'EURGBP': 'G1',
+                'EURUSD': 'G2', 'USDCHF': 'G2', 'EURCHF': 'G2', 
+                'GBPUSD': 'G3', 'USDJPY': 'G3', 'GBPJPY': 'G3',
+                'AUDUSD': 'G4', 'USDCAD': 'G4', 'AUDCAD': 'G4',
+                'NZDUSD': 'G5', 'USDCHF': 'G5', 'NZDCHF': 'G5',
+                'AUDUSD': 'G6', 'NZDUSD': 'G6', 'AUDNZD': 'G6'
+            }
+            
+            # Clean symbol (remove broker suffixes)
+            clean_symbol = symbol.replace('.v', '').replace('.m', '').replace('p', '').replace('a', '')
+            return major_pairs.get(clean_symbol, 'G1')  # Default to G1
+            
+        except Exception as e:
+            self.logger.debug(f"Error extracting group from comment '{comment}': {e}")
+            return 'G1'  # Default fallback
+    
+    def _is_recovery_comment(self, comment: str) -> bool:
+        """
+        Check if comment indicates a recovery order.
+        
+        Args:
+            comment: MT5 position comment
+            
+        Returns:
+            bool: True if this is a recovery order
+        """
+        if not comment:
+            return False
+        
+        # Check for recovery patterns
+        return (comment.startswith('RECOVERY_') or 
+                comment.startswith('R') or
+                'RECOVERY' in comment.upper())
+    
+    def _find_original_order_for_recovery(self, recovery_order: Dict) -> Optional[str]:
+        """
+        Try to find the original order that this recovery order is hedging.
+        
+        Args:
+            recovery_order: Recovery order data
+            
+        Returns:
+            Optional[str]: Original order key if found, None otherwise
+        """
+        try:
+            comment = recovery_order.get('comment', '')
+            symbol = recovery_order.get('symbol', '')
+            group_id = recovery_order.get('group_id', '')
+            
+            if not comment:
+                return None
+            
+            # Parse recovery comment patterns
+            # Pattern 1: RECOVERY_G6_EURUSD_TO_GBPUSD_L1
+            # Pattern 2: RECOVERY_G6_EURUSD_L1
+            # Pattern 3: R_EURUSDp (short format)
+            
+            if comment.startswith('RECOVERY_'):
+                # Extract original symbol from comment
+                parts = comment.split('_')
+                if len(parts) >= 3:
+                    group_part = parts[1]  # G6
+                    original_symbol_part = parts[2]  # EURUSD
+                    
+                    # Clean original symbol
+                    original_symbol = original_symbol_part.replace('TO', '').replace('L1', '').replace('L2', '')
+                    
+                    # Look for original order in same group
+                    for order_key, order_info in self.order_tracking.items():
+                        if (order_info.get('group_id') == group_id and
+                            order_info.get('symbol') == original_symbol and
+                            order_info.get('type') == 'ORIGINAL'):
+                            return order_key
+            
+            elif comment.startswith('R_'):
+                # Short format: R_EURUSDp
+                original_symbol = comment[2:]  # Remove 'R_' prefix
+                
+                # Look for original order with similar symbol
+                for order_key, order_info in self.order_tracking.items():
+                    if (order_info.get('group_id') == group_id and
+                        order_info.get('type') == 'ORIGINAL'):
+                        # Compare symbols (handle broker suffixes)
+                        orig_sym = order_info.get('symbol', '')
+                        if (self._symbols_match(original_symbol, orig_sym) or
+                            self._symbols_match(orig_sym, original_symbol)):
+                            return order_key
+            
+            return None
+            
+        except Exception as e:
+            self.logger.debug(f"Error finding original order for recovery: {e}")
+            return None
+    
+    def _symbols_match(self, sym1: str, sym2: str) -> bool:
+        """
+        Check if two symbols match (ignoring broker suffixes).
+        
+        Args:
+            sym1: First symbol
+            sym2: Second symbol
+            
+        Returns:
+            bool: True if symbols match
+        """
+        if not sym1 or not sym2:
+            return False
+        
+        # Clean symbols by removing common broker suffixes
+        clean1 = sym1.replace('.v', '').replace('.m', '').replace('p', '').replace('a', '')
+        clean2 = sym2.replace('.v', '').replace('.m', '').replace('p', '').replace('a', '')
+        
+        return clean1 == clean2
     
     def _save_to_file(self):
         """Save order tracking data to file"""
