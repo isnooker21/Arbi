@@ -2807,16 +2807,13 @@ class CorrelationManager:
                     if pos.get('magic', 0) == magic:
                         # ตรวจสอบว่าเป็น original arbitrage order (ไม่ใช่ recovery)
                         comment = pos.get('comment', '')
-                        # 🆕 รองรับ comment format ทั้ง G และ R (ถ้าเป็นไม้เดิม)
-                        if comment and (comment.startswith('G') or comment.startswith('R')) and '_' in comment:
-                            # ถ้าเป็น R ให้ตรวจสอบว่าไม่ใช่ recovery order
-                            if comment.startswith('R') and len(comment.split('_')) >= 2:
-                                # ถ้าเป็น format R{ticket}_{symbol} ให้ข้าม (เป็น recovery)
-                                continue
+                        # 🆕 รองรับเฉพาะ G comments (Arbitrage Orders เท่านั้น)
+                        if comment and comment.startswith('G') and '_' in comment:
                             group_positions.append(pos)
-                        # 🆕 ถ้าไม่มี comment หรือ comment ไม่ตรง format ให้รวมด้วย (ไม้เก่า)
-                        elif not comment or (not comment.startswith('G') and not comment.startswith('R')):
+                        # 🆕 ถ้าไม่มี comment ให้รวมด้วย (ไม้เก่าที่ไม่มี comment)
+                        elif not comment:
                             group_positions.append(pos)
+                        # ❌ ข้าม R comments ทั้งหมด (Recovery Orders ไม่ใช่ Arbitrage Orders)
                 
                 # ถ้า Group มีคู่ติดลบ
                 if group_positions:
@@ -2862,6 +2859,8 @@ class CorrelationManager:
                     if success:
                         recovery_count += 1
                 else:
+                    # 🆕 Debug: แสดงว่าทำไมไม้ไม่ผ่านเงื่อนไข
+                    self.logger.info(f"❌ {group_id} | {symbol}: ${profit:.2f} | STAGE 2: Failed recovery conditions")
                     skipped_count += 1
             
             # Log สรุปเฉพาะเมื่อมีการทำงาน
@@ -2887,6 +2886,10 @@ class CorrelationManager:
                     # ตรวจสอบเงื่อนไข Chain Recovery
                     if self._meets_recovery_conditions(pos):
                         chain_candidates.append(pos)
+                    else:
+                        # 🆕 Debug: แสดงว่าทำไมไม้แก้ไม่ผ่านเงื่อนไข
+                        symbol = pos.get('symbol', '')
+                        self.logger.info(f"❌ STAGE 3 | {symbol}: ${profit:.2f} | Failed chain recovery conditions")
             
             return chain_candidates
             
@@ -3128,6 +3131,7 @@ class CorrelationManager:
             
             # Check if position is losing money
             if profit >= 0:
+                self.logger.debug(f"💰 {symbol} (Ticket: {ticket}): PROFIT ${profit:.2f} - No recovery needed")
                 return False
             
             # 💡 Percentage-based loss check
@@ -3136,6 +3140,7 @@ class CorrelationManager:
             min_loss_percent = self.recovery_thresholds.get('min_loss_percent', -0.005)
             
             if loss_percent > min_loss_percent:
+                self.logger.debug(f"❌ {symbol} (Ticket: {ticket}): Loss {loss_percent:.4f} ({loss_percent*100:.2f}%) < {min_loss_percent:.4f} (0.5%)")
                 return False
             
             # 🆕 Check price distance
@@ -3143,6 +3148,7 @@ class CorrelationManager:
             min_distance = getattr(self, 'min_price_distance_pips', 10)
             
             if price_distance_pips < min_distance:
+                self.logger.debug(f"❌ {symbol} (Ticket: {ticket}): Distance {price_distance_pips:.1f} pips < {min_distance} pips")
                 return False
             
             # 🆕 Check position age
@@ -3150,9 +3156,11 @@ class CorrelationManager:
             min_age = getattr(self, 'min_position_age_seconds', 60)
             
             if position_age < min_age:
+                self.logger.debug(f"❌ {symbol} (Ticket: {ticket}): Age {position_age:.0f}s < {min_age}s")
                 return False
             
             # ✅ All conditions met
+            self.logger.info(f"✅ {symbol} (Ticket: {ticket}): All conditions met - Loss {loss_percent:.4f}, Distance {price_distance_pips:.1f}pips, Age {position_age:.0f}s")
             return True
             
         except Exception as e:
