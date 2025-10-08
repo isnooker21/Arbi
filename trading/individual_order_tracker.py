@@ -147,7 +147,25 @@ class IndividualOrderTracker:
             self.stats['recovery_orders_registered'] += 1
             self.stats['orders_hedged'] += 1
             
-            self.logger.info(f"✅ Recovery registered: {original_key} → {recovery_key}")
+            # 📋 แสดง log การเชื่อมโยงระหว่าง original และ recovery
+            self.logger.info("")
+            self.logger.info("=" * 60)
+            self.logger.info("🔗 HEDGE TRACKING REGISTERED")
+            self.logger.info("=" * 60)
+            self.logger.info(f"📍 Original Order:")
+            self.logger.info(f"   Key: {original_key}")
+            self.logger.info(f"   Ticket: {original_ticket}")
+            self.logger.info(f"   Symbol: {original_symbol}")
+            self.logger.info(f"   Status: NOT_HEDGED → HEDGED ✅")
+            self.logger.info("")
+            self.logger.info(f"🛡️ Recovery Order:")
+            self.logger.info(f"   Key: {recovery_key}")
+            self.logger.info(f"   Ticket: {recovery_ticket}")
+            self.logger.info(f"   Symbol: {recovery_symbol}")
+            self.logger.info(f"   Hedging For: {original_key}")
+            self.logger.info("")
+            self.logger.info(f"🔗 Connection: {original_key} ← แก้โดย → {recovery_key}")
+            self.logger.info("=" * 60)
             
             # Save to file
             self._save_to_file()

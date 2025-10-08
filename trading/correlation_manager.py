@@ -2355,6 +2355,25 @@ class CorrelationManager:
                 recovery_ticket = str(order_result.get('order_id', ''))
                 
                 if recovery_ticket:
+                    # 📋 แสดง log เมื่อสร้าง recovery order สำเร็จ
+                    self.logger.info("")
+                    self.logger.info("=" * 60)
+                    self.logger.info("🛡️ RECOVERY ORDER CREATED - ไม้แก้ถูกสร้าง")
+                    self.logger.info("=" * 60)
+                    self.logger.info("📍 Original Order (ไม้ที่โดนแก้):")
+                    self.logger.info(f"   Ticket: {original_ticket}")
+                    self.logger.info(f"   Symbol: {original_symbol}")
+                    self.logger.info(f"   PnL: ${original_position.get('profit', 0):.2f}")
+                    self.logger.info("")
+                    self.logger.info("🔧 Recovery Order (ไม้แก้):")
+                    self.logger.info(f"   Ticket: {recovery_ticket}")
+                    self.logger.info(f"   Symbol: {symbol}")
+                    self.logger.info(f"   Direction: {direction}")
+                    self.logger.info(f"   Lot Size: {correlation_lot_size:.2f}")
+                    self.logger.info(f"   Correlation: {correlation:.2f}")
+                    self.logger.info("")
+                    self.logger.info(f"🔗 ความเชื่อมโยง: {original_symbol} (Ticket {original_ticket}) ← แก้โดย → {symbol} (Ticket {recovery_ticket})")
+                    
                     # ✅ CRITICAL: Register recovery immediately
                     success = self.order_tracker.register_recovery_order(
                         recovery_ticket, symbol,           # Recovery order info
@@ -2362,11 +2381,15 @@ class CorrelationManager:
                     )
                     
                     if success:
-                        self.logger.info(f"✅ RECOVERY REGISTERED: {original_ticket}_{original_symbol} → {recovery_ticket}_{symbol}")
-                        self.logger.info(f"   Original ticket {original_ticket} is now HEDGED")
+                        self.logger.info("✅ RECOVERY REGISTERED IN TRACKER")
+                        self.logger.info(f"   🎯 ไม้เดิม: {original_ticket}_{original_symbol} (สถานะ: NOT_HEDGED → HEDGED)")
+                        self.logger.info(f"   🛡️ ไม้แก้: {recovery_ticket}_{symbol} (สถานะ: NOT_HEDGED)")
+                        self.logger.info(f"   🔗 เชื่อมโยง: {original_ticket}_{original_symbol} ← แก้โดย → {recovery_ticket}_{symbol}")
                     else:
                         self.logger.error(f"❌ Failed to register recovery for {original_ticket}_{original_symbol}")
                         return False
+                    
+                    self.logger.info("=" * 60)
                 else:
                     self.logger.error("❌ No recovery ticket received from order")
                     return False
@@ -2784,22 +2807,27 @@ class CorrelationManager:
                     self.logger.info("")
                     self.logger.info(f"🔍 {group_id} DETAILS:")
                     self.logger.info(f"   📊 Total PnL: ${total_pnl:.2f}")
-                    
-                    # แสดงการแก้ไม้แบบต่อเนื่องเป็นขั้นๆ
                     self.logger.info(f"   📈 Trading Chain:")
+                    self.logger.info("")
                     
                     # สร้าง mapping ของ recovery orders
                     recovery_map = {}
                     for pos in recovery_positions:
                         comment = pos.get('comment', '')
                         if comment.startswith('R') and '_' in comment:
-                            original_ticket = comment[1:].split('_')[0] if len(comment.split('_')) > 1 else "Unknown"
-                            if original_ticket not in recovery_map:
-                                recovery_map[original_ticket] = []
-                            recovery_map[original_ticket].append(pos)
+                            # Extract original ticket from comment (R3317086_EURUSD -> 3317086)
+                            ticket_part = comment[1:].split('_')[0] if len(comment.split('_')) > 1 else ""
+                            # ค้นหา ticket ที่ลงท้ายด้วย ticket_part
+                            for orig_pos in group_positions:
+                                orig_ticket = str(orig_pos.get('ticket', ''))
+                                if orig_ticket.endswith(ticket_part):
+                                    if orig_ticket not in recovery_map:
+                                        recovery_map[orig_ticket] = []
+                                    recovery_map[orig_ticket].append(pos)
+                                    break
                     
                     # แสดงแต่ละ original position และ recovery chain
-                    for pos in group_positions:
+                    for idx, pos in enumerate(group_positions, 1):
                         ticket = str(pos.get('ticket', ''))
                         symbol = pos.get('symbol', '')
                         profit = pos.get('profit', 0)
@@ -2807,43 +2835,96 @@ class CorrelationManager:
                         
                         # แสดง original position
                         profit_icon = "🔴" if profit < 0 else "🟢"
-                        is_hedged = self.order_tracker.is_order_hedged(ticket, symbol)
-                        hedge_status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
                         
-                        self.logger.info(f"      {profit_icon} {symbol} | Ticket: {ticket} | Lot: {lot_size} | PnL: ${profit:.2f} | {hedge_status}")
+                        self.logger.info(f"   🎯 Original #{idx}: {symbol} | Ticket: {ticket} | Lot: {lot_size:.2f} | PnL: ${profit:.2f} {profit_icon}")
                         
-                        # แสดง recovery chain ใต้ไม้ที่แก้
-                        if ticket in recovery_map:
-                            recovery_chain = recovery_map[ticket]
-                            for i, recovery_pos in enumerate(recovery_chain, 1):
-                                rec_ticket = recovery_pos.get('ticket', '')
-                                rec_symbol = recovery_pos.get('symbol', '')
-                                rec_profit = recovery_pos.get('profit', 0)
-                                rec_lot_size = recovery_pos.get('volume', 0)
-                                
-                                rec_profit_icon = "🔴" if rec_profit < 0 else "🟢"
-                                indent = "         "  # indent ใต้ไม้ที่แก้
-                                
-                                self.logger.info(f"{indent}🔧 Recovery #{i}: {rec_symbol} | Ticket: {rec_ticket} | Lot: {rec_lot_size} | PnL: ${rec_profit:.2f}")
-                                
-                                # แสดง recovery ของ recovery (ขั้นที่ 2)
-                                if rec_ticket in recovery_map:
-                                    rec_rec_chain = recovery_map[rec_ticket]
-                                    for j, rec_rec_pos in enumerate(rec_rec_chain, 1):
-                                        rec_rec_ticket = rec_rec_pos.get('ticket', '')
-                                        rec_rec_symbol = rec_rec_pos.get('symbol', '')
-                                        rec_rec_profit = rec_rec_pos.get('profit', 0)
-                                        rec_rec_lot_size = rec_rec_pos.get('volume', 0)
-                                        
-                                        rec_rec_profit_icon = "🔴" if rec_rec_profit < 0 else "🟢"
-                                        rec_indent = indent + "  "  # indent เพิ่มขึ้น
-                                        
-                                        self.logger.info(f"{rec_indent}🔧 Recovery #{i}.{j}: {rec_rec_symbol} | Ticket: {rec_rec_ticket} | Lot: {rec_rec_lot_size} | PnL: ${rec_rec_profit:.2f}")
-                    
-                    self.logger.info("")
+                        # แสดงสถานะและ recovery chain
+                        if profit >= 0:
+                            self.logger.info(f"      ✅ ไม่ต้องแก้ (กำไร)")
+                        else:
+                            # ตรวจสอบว่ามี recovery หรือยัง
+                            if ticket in recovery_map:
+                                # แสดง recovery chain
+                                self._display_recovery_chain_tree(recovery_map, ticket, indent_level=1)
+                            else:
+                                # ยังไม่มี recovery - แสดงเหตุผล
+                                is_hedged = self.order_tracker.is_order_hedged(ticket, symbol)
+                                if is_hedged:
+                                    self.logger.info(f"      ✅ แก้ไม้แล้ว (HEDGED)")
+                                else:
+                                    # ตรวจสอบว่าทำไมยังไม่แก้
+                                    reason = self._get_no_recovery_reason(pos)
+                                    self.logger.info(f"      ⏳ {reason}")
+                        
+                        self.logger.info("")
             
         except Exception as e:
             self.logger.error(f"❌ Error logging detailed group info: {e}")
+    
+    def _display_recovery_chain_tree(self, recovery_map: Dict, parent_ticket: str, indent_level: int = 1):
+        """แสดง recovery chain แบบ tree structure"""
+        try:
+            if parent_ticket not in recovery_map:
+                return
+            
+            recovery_chain = recovery_map[parent_ticket]
+            for recovery_pos in recovery_chain:
+                rec_ticket = str(recovery_pos.get('ticket', ''))
+                rec_symbol = recovery_pos.get('symbol', '')
+                rec_profit = recovery_pos.get('profit', 0)
+                rec_lot_size = recovery_pos.get('volume', 0)
+                
+                rec_profit_icon = "🔴" if rec_profit < 0 else "🟢"
+                
+                # สร้าง indent
+                indent = "      " + ("   " * indent_level)
+                arrow = "↳"
+                
+                # กำหนด label ตามระดับ
+                if indent_level == 1:
+                    label = "🛡️ Recovery"
+                else:
+                    label = "🛡️ Chain Recovery"
+                
+                self.logger.info(f"{indent}{arrow} {label}: {rec_symbol} | Ticket: {rec_ticket} | Lot: {rec_lot_size:.2f} | PnL: ${rec_profit:.2f} {rec_profit_icon}")
+                
+                # แสดง recovery ของ recovery (recursive)
+                if rec_ticket in recovery_map:
+                    self._display_recovery_chain_tree(recovery_map, rec_ticket, indent_level + 1)
+        
+        except Exception as e:
+            self.logger.debug(f"Error displaying recovery chain: {e}")
+    
+    def _get_no_recovery_reason(self, position: Dict) -> str:
+        """หาเหตุผลว่าทำไมยังไม่แก้ไม้"""
+        try:
+            symbol = position.get('symbol', '')
+            profit = position.get('profit', 0)
+            entry_price = position.get('entry_price', 0)
+            
+            # ตรวจสอบ distance
+            current_price = self.broker.get_current_price(symbol)
+            if current_price and entry_price:
+                price_distance = abs(current_price - entry_price)
+                pip_value = 0.0001 if 'JPY' not in symbol else 0.01
+                distance_pips = price_distance / pip_value
+                
+                if distance_pips < self.min_price_distance_pips:
+                    return f"รอเงื่อนไข (distance {distance_pips:.1f} < {self.min_price_distance_pips} pips)"
+            
+            # ตรวจสอบ loss threshold
+            balance = self.broker.get_account_balance()
+            min_loss = balance * abs(self.recovery_thresholds.get('min_loss_percent', 0.005))
+            if abs(profit) < min_loss:
+                return f"รอเงื่อนไข (loss ${abs(profit):.2f} < ${min_loss:.2f})"
+            
+            # ตรวจสอบ position age
+            # (ถ้ามีการเก็บ opened_at time สามารถเช็คได้)
+            
+            return "รอเงื่อนไข"
+            
+        except Exception as e:
+            return "รอเงื่อนไข"
     
     def _find_losing_arbitrage_groups(self) -> Dict[str, List[Dict]]:
         """🎯 STAGE 1: หา Arbitrage Groups ที่มีคู่ติดลบ"""
@@ -3236,6 +3317,9 @@ class CorrelationManager:
             ticket = position.get('ticket', '') or position.get('order_id', '')
             symbol = position.get('symbol', '')
             profit = position.get('profit', 0)
+            lot_size = position.get('volume', 0)
+            direction = position.get('type', 'UNKNOWN')
+            entry_price = position.get('entry_price', 0)
             
             # ✅ CRITICAL: Final check before starting recovery
             if self.order_tracker.is_order_hedged(ticket, symbol):
@@ -3244,11 +3328,27 @@ class CorrelationManager:
             if not self.order_tracker.needs_recovery(ticket, symbol):
                 return
             
+            # 📋 แสดง log เมื่อเริ่มแก้ไม้
+            self.logger.info("=" * 60)
+            self.logger.info("🔧 RECOVERY START - แก้ไม้ขาดทุน")
+            self.logger.info("=" * 60)
+            self.logger.info("📍 Original Order (ไม้ที่ต้องแก้):")
+            self.logger.info(f"   Ticket: {ticket}")
+            self.logger.info(f"   Symbol: {symbol}")
+            self.logger.info(f"   Direction: {direction}")
+            self.logger.info(f"   Lot Size: {lot_size:.2f}")
+            self.logger.info(f"   Entry Price: {entry_price:.5f}")
+            self.logger.info(f"   Current PnL: ${profit:.2f}")
+            self.logger.info("")
+            self.logger.info("🎯 กำลังหาคู่เงินที่เหมาะสมเพื่อแก้ไม้นี้...")
+            
             # Find correlation pairs
             correlation_candidates = self._find_correlation_pairs_for_symbol(symbol)
             
             if correlation_candidates:
                 best_correlation = correlation_candidates[0]
+                self.logger.info(f"✅ พบคู่เงินที่เหมาะสม: {best_correlation.get('symbol', 'N/A')} (Correlation: {best_correlation.get('correlation', 0):.2f})")
+                self.logger.info("=" * 60)
                 recovery_symbol = best_correlation.get('symbol', 'UNKNOWN')
                 correlation = best_correlation.get('correlation', 0.0)
                 
