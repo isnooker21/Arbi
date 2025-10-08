@@ -2310,13 +2310,16 @@ class CorrelationManager:
             symbol = correlation_candidate['symbol']
             correlation = correlation_candidate['correlation']
             original_symbol = original_position.get('symbol', '')
-            original_ticket = str(original_position.get('ticket', ''))
+            # Try different ticket fields - position data might use 'order_id' instead of 'ticket'
+            original_ticket = str(original_position.get('ticket', '')) or str(original_position.get('order_id', ''))
             
             # Debug: Show ticket information
             self.logger.info(f"🔍 DEBUG: Original position data:")
             self.logger.info(f"   Ticket: '{original_ticket}' (type: {type(original_ticket)})")
             self.logger.info(f"   Symbol: {original_symbol}")
             self.logger.info(f"   Position keys: {list(original_position.keys())}")
+            self.logger.info(f"   Raw ticket: {repr(original_position.get('ticket', 'NOT_FOUND'))}")
+            self.logger.info(f"   Raw order_id: {repr(original_position.get('order_id', 'NOT_FOUND'))}")
             
             self.logger.info(f"🎯 Starting recovery for ticket {original_ticket}_{original_symbol}")
             
@@ -2905,7 +2908,8 @@ class CorrelationManager:
     def _meets_recovery_conditions(self, position: Dict) -> bool:
         """Check if position meets recovery conditions with detailed logging"""
         try:
-            ticket = str(position.get('ticket', ''))
+            # Try different ticket fields
+            ticket = str(position.get('ticket', '')) or str(position.get('order_id', ''))
             symbol = position.get('symbol', '')
             profit = position.get('profit', 0)
             comment = position.get('comment', '')
@@ -3005,7 +3009,8 @@ class CorrelationManager:
     def _start_individual_recovery(self, position: Dict):
         """Start recovery for individual position with comprehensive logging"""
         try:
-            ticket = position.get('ticket', '')
+            # Try different ticket fields
+            ticket = position.get('ticket', '') or position.get('order_id', '')
             symbol = position.get('symbol', '')
             profit = position.get('profit', 0)
             
