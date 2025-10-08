@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from tkinter import messagebox
 from typing import Optional
 
-import requests
+# import requests  # Disabled for VPS without internet access
 
 # Set UTF-8 encoding for Windows
 if sys.platform == "win32":
@@ -410,62 +410,29 @@ class TradingSystem:
         return f"{base}{tz or ''}"
     
     def report_status(self):
-        """Report the current status to the API"""
+        """Report the current status to the API (Disabled for VPS)"""
+        self.logger.info("📊 Status reporting disabled for VPS mode")
+        return True
         
-        if self.broker_api.account_info:
-            account = self.broker_api.account_info
-            status_response = requests.post(
-                f"{self.api_base_url}/customer-clients/status",
-                json={
-                    "tradingAccountId": str(account.login),
-                    "name": account.name,
-                    "brokerName": account.company,
-                    "currentBalance": str(account.balance),
-                    "currentProfit": str(account.profit),
-                    "currency": account.currency,
-                    "botName": "Arbi Adaptive Trader",
-                    "botVersion": "0.0.1"
-                },
-                timeout=10
-            )                  
-        else:
-            raise Exception("Cannot report status - no account info")
-        
-        if status_response.status_code == 200:
-            response_data = status_response.json()
-            
-            # Check if trading is inactive
-            if response_data.get("processedStatus") == "inactive":
-                message = response_data.get("message", "Trading is inactive")
-                raise Exception(f"Trading is inactive. {message}")
-            
-            # Store next report time for scheduling
-            next_report_time = response_data.get("nextReportTime")
-            if next_report_time:
-                # Fix microseconds to 6 digits
-                if '.' in next_report_time and '+' in next_report_time:
-                    parts = next_report_time.split('.')
-                    microseconds = parts[1].split('+')[0]
-                    timezone_part = '+' + parts[1].split('+')[1]
-                    
-                    # Truncate microseconds to 6 digits
-                    if len(microseconds) > 6:
-                        microseconds = microseconds[:6]
-                    
-                    next_report_time = f"{parts[0]}.{microseconds}{timezone_part}"
-                
-                try:
-                    # Use normalize_isoformat to fix the format first
-                    safe_time = self.normalize_isoformat(next_report_time)
-                    self.next_report_time = datetime.fromisoformat(safe_time)
-                except ValueError as e:
-                    # Fallback for malformed ISO format
-                    self.logger.warning(f"Invalid ISO format: {next_report_time}, using current time")
-                    self.next_report_time = datetime.now()
-                print(f"Next report scheduled for: {self.next_report_time}")
-                
-        else:
-            raise Exception(f"Failed to check status: {status_response.status_code}")
+        # Original API reporting code (disabled for VPS)
+        # if self.broker_api.account_info:
+        #     account = self.broker_api.account_info
+        #     status_response = requests.post(
+        #         f"{self.api_base_url}/customer-clients/status",
+        #         json={
+        #             "tradingAccountId": str(account.login),
+        #             "name": account.name,
+        #             "brokerName": account.company,
+        #             "currentBalance": str(account.balance),
+        #             "currentProfit": str(account.profit),
+        #             "currency": account.currency,
+        #             "botName": "Arbi Adaptive Trader",
+        #             "botVersion": "0.0.1"
+        #         },
+        #         timeout=10
+        #     )                  
+        # else:
+        #     raise Exception("Cannot report status - no account info")
 
     def stop(self):
         """Stop the trading system"""

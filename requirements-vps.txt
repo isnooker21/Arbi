@@ -1,0 +1,16 @@
+# VPS-Compatible Requirements
+# Built-in modules removed (tkinter, sqlite3, logging, threading, json, xml, asyncio)
+
+MetaTrader5>=5.0.0
+requests>=2.25.0
+pandas>=1.3.0
+numpy>=1.21.0
+scikit-learn>=1.0.0
+matplotlib>=3.4.0
+TA-Lib>=0.4.25
+websockets>=10.0
+schedule>=1.1.0
+PyQt5>=5.15.0
+pip install -r requirements-vps.txt
+# Note: tkinter, sqlite3, logging, threading, json, xml, asyncio are built-in Python modules
+# They don't need to be installed via pip
