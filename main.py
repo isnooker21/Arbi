@@ -219,9 +219,12 @@ class TradingSystem:
             self.database_manager = DatabaseManager()
             self.logger.info("Database manager initialized")
             
-            # Initialize broker API
-            self.broker_api = BrokerAPI()
-            self.logger.info("Broker API initialized")
+            # Initialize broker API (only if not already initialized by auto_setup)
+            if not self.broker_api:
+                self.broker_api = BrokerAPI()
+                self.logger.info("Broker API initialized")
+            else:
+                self.logger.info("Broker API already initialized (using existing connection)")
             
             # Initialize risk manager (enhanced)
             self.risk_manager = RiskManager()
