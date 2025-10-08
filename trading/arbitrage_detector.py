@@ -1012,8 +1012,6 @@ class TriangleArbitrageDetector:
                     
                     if self._should_start_recovery_from_mt5(triangle_magic, triangle_type):
                         # เริ่ม correlation recovery ตามเงื่อนไขที่กำหนด
-                        self.logger.info(f"🔄 Group {group_id} losing - Total PnL: {total_group_pnl:.2f} USD ({profit_percentage:.2f}%)")
-                        self.logger.info(f"🔄 Starting correlation recovery - Never cut loss")
                         self._start_correlation_recovery(group_id, group_data, total_group_pnl)
             
             # ปิดกลุ่มที่ครบเงื่อนไข
@@ -1086,7 +1084,6 @@ class TriangleArbitrageDetector:
                 return False
             
             # ผ่านเงื่อนไขทั้งหมด - แก้ไม้ทันที
-            self.logger.info(f"✅ Group {triangle_type} meets recovery conditions - Distance: {max_price_distance:.1f} pips")
             return True
             
         except Exception as e:
@@ -1343,9 +1340,6 @@ class TriangleArbitrageDetector:
                 return
             
             # 🆕 ใช้ Smart Recovery Flow แทนการส่งข้อมูลแบบเก่า
-            self.logger.info(f"🔄 Starting Smart Recovery for Group {group_id}")
-            self.logger.info(f"   Total PnL: ${total_pnl:.2f}")
-            
             # ตั้งค่าว่ากำลัง recovery
             self.recovery_in_progress.add(group_id)
             

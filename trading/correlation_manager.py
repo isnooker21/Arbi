@@ -2671,9 +2671,118 @@ class CorrelationManager:
                                    f"{pnl_icon} ${data['pnl']:>8.2f}")
                 
                 self.logger.info("=" * 80)
+                
+                # 📋 แสดงรายละเอียดแต่ละ Group
+                self._log_detailed_group_info(all_positions)
             
         except Exception as e:
             self.logger.error(f"❌ Error logging groups status: {e}")
+    
+    def _log_detailed_group_info(self, all_positions: List[Dict]):
+        """📋 แสดงรายละเอียดแต่ละ Group: คู่เงิน, ไม้ไหนแก้ไม้ไหน"""
+        try:
+            for magic in [234001, 234002, 234003, 234004, 234005, 234006]:
+                group_positions = []
+                recovery_positions = []
+                
+                # แยก original และ recovery positions
+                for pos in all_positions:
+                    if pos.get('magic', 0) == magic:
+                        comment = pos.get('comment', '')
+                        if comment and comment.startswith('G') and '_' in comment:
+                            group_positions.append(pos)
+                        elif self._is_recovery_comment(comment):
+                            recovery_positions.append(pos)
+                
+                if group_positions:
+                    group_id = self._get_group_id_from_magic(magic)
+                    total_pnl = sum(pos.get('profit', 0) for pos in group_positions)
+                    
+                    self.logger.info("")
+                    self.logger.info(f"🔍 {group_id} DETAILS:")
+                    self.logger.info(f"   📊 Total PnL: ${total_pnl:.2f}")
+                    
+                    # แสดงการแก้ไม้แบบต่อเนื่องเป็นขั้นๆ
+                    self.logger.info(f"   📈 Trading Chain:")
+                    
+                    # สร้าง mapping ของ recovery orders
+                    recovery_map = {}
+                    for pos in recovery_positions:
+                        comment = pos.get('comment', '')
+                        if comment.startswith('R') and '_' in comment:
+                            original_ticket = comment[1:].split('_')[0] if len(comment.split('_')) > 1 else "Unknown"
+                            if original_ticket not in recovery_map:
+                                recovery_map[original_ticket] = []
+                            recovery_map[original_ticket].append(pos)
+                    
+                    # แสดงแต่ละ original position และ recovery chain
+                    for pos in group_positions:
+                        ticket = str(pos.get('ticket', ''))
+                        symbol = pos.get('symbol', '')
+                        profit = pos.get('profit', 0)
+                        lot_size = pos.get('volume', 0)
+                        
+                        # แสดง original position
+                        profit_icon = "🔴" if profit < 0 else "🟢"
+                        is_hedged = self.order_tracker.is_order_hedged(ticket, symbol)
+                        hedge_status = "✅ HEDGED" if is_hedged else "❌ NOT HEDGED"
+                        
+                        self.logger.info(f"      {profit_icon} {symbol} | Ticket: {ticket} | Lot: {lot_size} | PnL: ${profit:.2f} | {hedge_status}")
+                        
+                        # แสดง recovery chain (ถ้ามี)
+                        if ticket in recovery_map:
+                            recovery_chain = recovery_map[ticket]
+                            for i, recovery_pos in enumerate(recovery_chain, 1):
+                                rec_ticket = recovery_pos.get('ticket', '')
+                                rec_symbol = recovery_pos.get('symbol', '')
+                                rec_profit = recovery_pos.get('profit', 0)
+                                rec_lot_size = recovery_pos.get('volume', 0)
+                                
+                                rec_profit_icon = "🔴" if rec_profit < 0 else "🟢"
+                                indent = "         " + "  " * i  # เพิ่ม indent ตามขั้น
+                                
+                                self.logger.info(f"{indent}🔧 Recovery #{i}: {rec_symbol} | Ticket: {rec_ticket} | Lot: {rec_lot_size} | PnL: ${rec_profit:.2f}")
+                                
+                                # ตรวจสอบว่ามี recovery ของ recovery อีกหรือไม่
+                                if rec_ticket in recovery_map:
+                                    for j, rec_rec_pos in enumerate(recovery_map[rec_ticket], 1):
+                                        rec_rec_ticket = rec_rec_pos.get('ticket', '')
+                                        rec_rec_symbol = rec_rec_pos.get('symbol', '')
+                                        rec_rec_profit = rec_rec_pos.get('profit', 0)
+                                        rec_rec_lot_size = rec_rec_pos.get('volume', 0)
+                                        
+                                        rec_rec_profit_icon = "🔴" if rec_rec_profit < 0 else "🟢"
+                                        rec_indent = indent + "  "  # เพิ่ม indent อีก
+                                        
+                                        self.logger.info(f"{rec_indent}🔧 Recovery #{i}.{j}: {rec_rec_symbol} | Ticket: {rec_rec_ticket} | Lot: {rec_rec_lot_size} | PnL: ${rec_rec_profit:.2f}")
+                    
+                    # แสดง recovery positions ที่ไม่ได้ link (orphaned)
+                    orphaned_recoveries = []
+                    for pos in recovery_positions:
+                        comment = pos.get('comment', '')
+                        if comment.startswith('R') and '_' in comment:
+                            original_ticket = comment[1:].split('_')[0] if len(comment.split('_')) > 1 else "Unknown"
+                            if original_ticket not in [str(p.get('ticket', '')) for p in group_positions]:
+                                orphaned_recoveries.append(pos)
+                        else:
+                            orphaned_recoveries.append(pos)
+                    
+                    if orphaned_recoveries:
+                        self.logger.info(f"   ⚠️ Orphaned Recovery Positions:")
+                        for pos in orphaned_recoveries:
+                            ticket = pos.get('ticket', '')
+                            symbol = pos.get('symbol', '')
+                            profit = pos.get('profit', 0)
+                            lot_size = pos.get('volume', 0)
+                            comment = pos.get('comment', '')
+                            
+                            profit_icon = "🔴" if profit < 0 else "🟢"
+                            self.logger.info(f"      {profit_icon} {symbol} | Ticket: {ticket} | Lot: {lot_size} | PnL: ${profit:.2f} | Comment: {comment}")
+                    
+                    self.logger.info("")
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error logging detailed group info: {e}")
     
     def _find_losing_arbitrage_groups(self) -> Dict[str, List[Dict]]:
         """🎯 STAGE 1: หา Arbitrage Groups ที่มีคู่ติดลบ"""
