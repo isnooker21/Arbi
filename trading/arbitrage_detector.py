@@ -39,7 +39,7 @@ except Exception:
     pass
 from utils.calculations import TradingCalculations
 from utils.symbol_mapper import SymbolMapper
-from utils.account_tier_manager import AccountTierManager
+# Removed AccountTierManager - using GUI Risk per Trade only
 
 class TriangleArbitrageDetector:
     def __init__(self, broker_api, ai_engine=None, correlation_manager=None):
@@ -147,7 +147,7 @@ class TriangleArbitrageDetector:
         self.standard_lot_size = 0.1
         
         # ⭐ เพิ่ม Account Tier Manager
-        self.account_tier_manager = AccountTierManager()
+        # Removed AccountTierManager - using GUI Risk per Trade only
         
         # โหลด config สำหรับ Account Tier
         self._load_tier_config()
@@ -589,7 +589,7 @@ class TriangleArbitrageDetector:
         """โหลด config ใหม่ (สำหรับ GUI Settings)"""
         try:
             self._load_tier_config()
-            self.account_tier_manager = AccountTierManager()  # รีโหลด tier manager
+            # Removed AccountTierManager - using GUI Risk per Trade only  # รีโหลด tier manager
             
             # 🔄 Cache lot calculation config เพื่อไม่ต้องโหลดทุกครั้ง
             from utils.config_helper import load_config
@@ -623,23 +623,12 @@ class TriangleArbitrageDetector:
             self.logger.info(f"   risk_per_trade_percent={risk_per_trade_percent}")
             self.logger.info(f"   Current Balance: ${balance}")
 
-            # ⭐ ใช้ Account Tier Manager คำนวณ lot sizes
+            # ⭐ ใช้ Risk per Trade จาก GUI เท่านั้น (ไม่ใช้ Account Tier Manager)
             triangle_symbols = list(triangle)
             
-            # ตรวจสอบการตั้งค่า Account Tier
-            auto_detect = self._get_config_value('position_sizing.auto_detect_tier', True)
-            force_tier = self._get_config_value('position_sizing.force_tier', 'auto')
-            custom_risk = self._get_config_value('position_sizing.custom_risk_percent', 1.5)
-            
-            if auto_detect and force_tier == 'auto':
-                # ใช้ Auto-Detection
-                tier_name, tier_config = self.account_tier_manager.detect_account_tier(balance)
-                risk_percent = tier_config.get('risk_per_trade_percent', 1.5)
-                self.logger.info(f"🎯 Auto-Detected Tier: {tier_name.upper()}, Risk: {risk_percent}%")
-            else:
-                # ใช้ Custom Settings
-                risk_percent = custom_risk
-                self.logger.info(f"🎯 Custom Risk Setting: {risk_percent}%")
+            # 🎯 ใช้ค่าจาก GUI เป็นหลัก
+            risk_percent = risk_per_trade_percent  # ใช้ค่าจาก GUI โดยตรง
+            self.logger.info(f"🎯 Using GUI Risk per Trade: {risk_percent}% (NO Account Tier)")
             
             lot_sizes = TradingCalculations.get_uniform_triangle_lots(
                 triangle_symbols=triangle_symbols,
@@ -648,7 +637,7 @@ class TriangleArbitrageDetector:
                 broker_api=self.broker,
                 use_simple_mode=False,
                 use_risk_based_sizing=True,
-                risk_per_trade_percent=risk_percent  # ใช้ค่าจาก Account Tier หรือ Custom
+                risk_per_trade_percent=risk_percent  # ใช้ค่าจาก GUI
             )
             self.logger.info(f"🔍 DEBUG: Arbitrage Detector - Calculated Lot Sizes: {lot_sizes}")
             
