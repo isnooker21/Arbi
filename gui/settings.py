@@ -393,8 +393,8 @@ class SettingsWindow:
             else:
                 current_value = 0.0
         
-        if param_type == "bool":
-            # Boolean checkbox with custom style
+        if param_type == "bool" and 'risk_per_trade_percent' not in param_path:
+            # Boolean checkbox with custom style (ยกเว้น Risk per Trade)
             var = tk.BooleanVar(value=current_value)
             cb = tk.Checkbutton(
                 input_frame,
@@ -459,8 +459,8 @@ class SettingsWindow:
                 )
                 entry.pack(side='left', padx=5, pady=2, ipady=3)
         
-        elif param_type == "int" or param_type == "float":
-            # Number entry with custom style
+        elif param_type == "int" or param_type == "float" or 'risk_per_trade_percent' in param_path:
+            # Number entry with custom style (บังคับให้ Risk per Trade ใช้ String variable)
             var = tk.StringVar(value=str(current_value))
             
             entry = tk.Entry(
