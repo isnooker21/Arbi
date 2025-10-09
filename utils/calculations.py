@@ -495,7 +495,7 @@ class TradingCalculations:
             return 1.0
     
     @staticmethod
-    def calculate_lot_from_balance(balance: float, pip_value: float, risk_percent: float = 1.5, max_loss_pips: float = 100) -> float:
+    def calculate_lot_from_balance(balance: float, pip_value: float, risk_percent: float = 1.0, max_loss_pips: float = 100) -> float:
         """
         Calculate lot size based on account balance using Proper Risk Management
         
@@ -581,7 +581,7 @@ class TradingCalculations:
             return min_lot
     
     @staticmethod
-    def get_uniform_triangle_lots(triangle_symbols: List[str], balance: float, target_pip_value: float = 10.0, broker_api=None, use_simple_mode: bool = False, use_risk_based_sizing: bool = False, risk_per_trade_percent: float = 1.5) -> Dict[str, float]:
+    def get_uniform_triangle_lots(triangle_symbols: List[str], balance: float, target_pip_value: float = 10.0, broker_api=None, use_simple_mode: bool = False, use_risk_based_sizing: bool = False, risk_per_trade_percent: float = 1.0) -> Dict[str, float]:
         """คำนวณ lot sizes ให้ pip value เท่ากัน + scale ตาม balance (ใช้ค่าจาก config)"""
         try:
             if not triangle_symbols or len(triangle_symbols) != 3:

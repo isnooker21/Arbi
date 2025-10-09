@@ -297,7 +297,7 @@ class CorrelationManager:
             
             # ⭐ โหลด risk_per_trade_percent สำหรับการคำนวณ lot อัตโนมัติ
             self.use_risk_based_sizing = lot_calc.get('use_risk_based_sizing', True)
-            self.risk_per_trade_percent = lot_calc.get('risk_per_trade_percent', 1.5)
+            self.risk_per_trade_percent = lot_calc.get('risk_per_trade_percent', 1.0)
             
             # 🔍 Debug log สำหรับการตรวจสอบ
             self.logger.info(f"🔍 CorrelationManager Config Loaded:")
@@ -429,7 +429,7 @@ class CorrelationManager:
         """ตั้งค่า fallback เมื่อไม่สามารถโหลด config ได้ (% based)"""
         # ⭐ ตั้งค่า risk-based sizing (fallback)
         self.use_risk_based_sizing = True
-        self.risk_per_trade_percent = 1.5
+        self.risk_per_trade_percent = 1.0
         
         self.recovery_thresholds = {
             'min_correlation': 0.6,      # ความสัมพันธ์ขั้นต่ำ 60%

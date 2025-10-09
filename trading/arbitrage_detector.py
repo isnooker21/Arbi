@@ -615,7 +615,7 @@ class TriangleArbitrageDetector:
             self.lot_calc_config = lot_calc_config
             use_simple_mode = lot_calc_config.get('use_simple_mode', False)
             use_risk_based_sizing = lot_calc_config.get('use_risk_based_sizing', True)
-            risk_per_trade_percent = lot_calc_config.get('risk_per_trade_percent', 1.5)
+            risk_per_trade_percent = lot_calc_config.get('risk_per_trade_percent', 1.0)
 
             self.logger.info(f"🔍 DEBUG: Arbitrage Detector - Config for Lot Calc (REAL-TIME):")
             self.logger.info(f"   use_simple_mode={use_simple_mode}")
