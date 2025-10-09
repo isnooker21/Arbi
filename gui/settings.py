@@ -40,12 +40,25 @@ class SettingsWindow:
     def load_settings(self):
         """Load adaptive_params.json"""
         try:
-            self.settings = load_config('adaptive_params.json')
+            # บังคับให้โหลดจาก path เดียวกับที่ save
+            import os
+            config_file_path = os.path.join('config', 'adaptive_params.json')
+            
+            if os.path.exists(config_file_path):
+                with open(config_file_path, 'r', encoding='utf-8') as f:
+                    self.settings = json.load(f)
+                    print(f"✅ Loaded config from: {config_file_path}")
+                    print(f"🔍 Risk per Trade: {self.settings.get('position_sizing', {}).get('lot_calculation', {}).get('risk_per_trade_percent')}")
+            else:
+                # Fallback to config helper
+                self.settings = load_config('adaptive_params.json')
+                print(f"⚠️ Fallback loaded from config helper")
             
             # Store original settings for comparison
             self.original_settings = json.loads(json.dumps(self.settings))
             
         except Exception as e:
+            print(f"❌ Error loading config: {e}")
             messagebox.showerror("Error", f"ไม่สามารถโหลดไฟล์ได้: {str(e)}")
             self.settings = {}
             self.original_settings = {}
@@ -545,8 +558,11 @@ class SettingsWindow:
         """Save all settings to adaptive_params.json"""
         try:
             # Update settings from UI
+            print(f"🔍 Updating settings from {len(self.parameter_vars)} parameters")
+            
             for param_path, var in self.parameter_vars.items():
                 value = var.get()
+                print(f"🔍 {param_path}: {value} (type: {type(value)})")
                 
                 # Convert value based on type
                 if isinstance(value, bool):
@@ -559,22 +575,38 @@ class SettingsWindow:
                     elif value.replace('.', '', 1).replace('-', '', 1).isdigit():
                         value = float(value)
                 
+                # ตรวจสอบว่าเป็น risk_per_trade_percent หรือไม่
+                if 'risk_per_trade_percent' in param_path:
+                    print(f"🎯 Risk per Trade value: {value}")
+                
                 self.set_nested_value(self.settings, param_path, value)
             
             # Save to file - บังคับให้ save ไปที่ path เดียวกับ load
             import os
             config_file_path = os.path.join('config', 'adaptive_params.json')
             
+            print(f"🔍 Attempting to save to: {config_file_path}")
+            print(f"🔍 File exists: {os.path.exists(config_file_path)}")
+            print(f"🔍 Current working directory: {os.getcwd()}")
+            print(f"🔍 Absolute path: {os.path.abspath(config_file_path)}")
+            
             # ตรวจสอบว่าไฟล์มีอยู่หรือไม่
             if not os.path.exists(config_file_path):
                 raise Exception(f"ไม่พบไฟล์ config: {config_file_path}")
             
+            # ตรวจสอบสิทธิ์เขียนไฟล์
+            if not os.access(config_file_path, os.W_OK):
+                raise Exception(f"ไม่มีสิทธิ์เขียนไฟล์: {config_file_path}")
+            
             # บันทึกไฟล์โดยตรง
             import json
-            with open(config_file_path, 'w', encoding='utf-8') as f:
-                json.dump(self.settings, f, indent=2, ensure_ascii=False)
-            
-            print(f"✅ Config saved directly to: {config_file_path}")
+            try:
+                with open(config_file_path, 'w', encoding='utf-8') as f:
+                    json.dump(self.settings, f, indent=2, ensure_ascii=False)
+                print(f"✅ Config saved successfully to: {config_file_path}")
+            except Exception as e:
+                print(f"❌ Error writing file: {e}")
+                raise Exception(f"ไม่สามารถเขียนไฟล์ได้: {e}")
             
             # ตรวจสอบว่าไฟล์ถูกบันทึกจริงหรือไม่
             import time
