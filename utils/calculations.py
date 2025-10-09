@@ -533,8 +533,8 @@ class TradingCalculations:
             # Round to valid lot size
             final_lot = TradingCalculations.round_to_valid_lot_size(calculated_lot)
             
-            # จำกัดขนาด lot (min 0.01, max 5.0)
-            final_lot = max(0.01, min(final_lot, 5.0))
+            # จำกัดขนาด lot (min 0.01 เท่านั้น ไม่จำกัด max)
+            final_lot = max(0.01, final_lot)
             
             # Debug log
             logging.getLogger(__name__).info(f"💰 Proper Risk Management Lot Calculation:")
@@ -568,11 +568,11 @@ class TradingCalculations:
                 rounded_lot = min_lot
                 logging.getLogger(__name__).info(f"📊 Lot size adjusted to minimum: {calculated_lot:.4f} → {rounded_lot:.2f}")
             
-            # Ensure maximum lot size (safety limit)
-            max_lot = 5.0
-            if rounded_lot > max_lot:
-                rounded_lot = max_lot
-                logging.getLogger(__name__).warning(f"📊 Lot size capped at maximum: {rounded_lot:.2f}")
+            # ไม่จำกัด maximum lot size (ให้คำนวณตาม risk จริงๆ)
+            # max_lot = 5.0
+            # if rounded_lot > max_lot:
+            #     rounded_lot = max_lot
+            #     logging.getLogger(__name__).warning(f"📊 Lot size capped at maximum: {rounded_lot:.2f}")
             
             return rounded_lot
             
@@ -623,8 +623,8 @@ class TradingCalculations:
                         # Round to valid lot size
                         lot_size = TradingCalculations.round_to_valid_lot_size(lot_size)
                         
-                        # จำกัดขนาด lot
-                        lot_size = max(0.01, min(lot_size, 5.0))
+                        # จำกัดขนาด lot (min 0.01 เท่านั้น ไม่จำกัด max)
+                        lot_size = max(0.01, lot_size)
                         
                     else:
                         lot_size = 0.01  # Minimum fallback
@@ -648,7 +648,7 @@ class TradingCalculations:
                     pip_value_for_risk = pip_value_per_1lot * max_loss_pips
                     lot_size = risk_amount / pip_value_for_risk
                     lot_size = TradingCalculations.round_to_valid_lot_size(lot_size)
-                    lot_size = max(0.01, min(lot_size, 5.0))
+                    lot_size = max(0.01, lot_size)
                 else:
                     lot_size = 0.01
                 
