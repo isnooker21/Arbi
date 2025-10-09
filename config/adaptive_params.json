@@ -1,77 +1,75 @@
 {
   "market_regimes": {
     "volatile": {
-      "arbitrage_threshold": 0.002,
+      "arbitrage_threshold": 0.0025,
       "recovery_aggressiveness": 0.6,
       "max_triangles": 3,
       "execution_speed_ms": 150,
-      "description": "High volatility market - conservative approach"
+      "description": "High volatility market - conservative approach (⭐ optimized for $10K)"
     },
     "trending": {
-      "arbitrage_threshold": 0.0015,
+      "arbitrage_threshold": 0.002,
       "recovery_aggressiveness": 0.8,
-      "max_triangles": 5,
+      "max_triangles": 3,
       "execution_speed_ms": 100,
-      "description": "Strong trend market - aggressive approach"
+      "description": "Strong trend market - conservative approach (⭐ optimized for $10K)"
     },
     "ranging": {
-      "arbitrage_threshold": 0.0008,
-      "recovery_aggressiveness": 0.7,
-      "max_triangles": 7,
-      "execution_speed_ms": 80,
-      "description": "Range-bound market - balanced approach"
-    },
-    "normal": {
       "arbitrage_threshold": 0.001,
       "recovery_aggressiveness": 0.7,
-      "max_triangles": 5,
+      "max_triangles": 3,
+      "execution_speed_ms": 80,
+      "description": "Range-bound market - balanced approach (⭐ optimized for $10K)"
+    },
+    "normal": {
+      "arbitrage_threshold": 0.0012,
+      "recovery_aggressiveness": 0.7,
+      "max_triangles": 3,
       "execution_speed_ms": 100,
-      "description": "Normal market conditions - standard approach"
+      "description": "Normal market conditions - standard approach (⭐ optimized for $10K)"
     }
   },
   "position_sizing": {
     "lot_calculation": {
       "use_simple_mode": false,
       "use_risk_based_sizing": true,
-      "description": "Risk-Based Sizing: ใช้ risk_per_trade คำนวณ lot อัตโนมัติทั้งหมด - Risk Management แบบถูกต้อง"
+      "risk_per_trade_percent": 0.5,
+      "max_loss_pips": 100.0,
+      "description": "⭐ Optimized for $10K: Risk 0.5% per trade, Max Drawdown ~14%, CAGR ~15%/year"
     },
     "risk_management": {
-      "max_portfolio_risk": 8.0,
-      "max_concurrent_groups": 4.0,
+      "max_portfolio_risk": 0.05,
+      "max_concurrent_groups": 3.0,
       "correlation_limit": 0.8,
-      "description": "Risk management parameters - no cut loss, recovery only, optimized for small accounts"
+      "description": "⭐ Optimized for $10K: Max 5% portfolio risk, Max 3 groups, conservative approach"
     }
   },
   "recovery_params": {
     "correlation_thresholds": {
-      "min_correlation": 0.6,
+      "min_correlation": 0.65,
       "max_correlation": 0.95,
       "optimal_correlation": 0.8,
-      "description": "Correlation thresholds for pair selection"
+      "description": "⭐ Optimized: Min correlation 0.65 for better pair quality"
     },
     "loss_thresholds": {
-      "min_loss_percent": -0.005,
-      "min_price_distance_pips": 10.0,
+      "min_loss_percent": -1.0,
+      "min_price_distance_pips": 15.0,
       "recovery_target": 0.0,
       "use_percentage_based": true,
-      "description": "0.5% of balance AND 10 pips distance triggers recovery"
+      "description": "⭐ Optimized: 1% of balance AND 15 pips distance (prevent premature recovery)"
     },
     "timing": {
       "max_recovery_time_hours": 24,
       "recovery_check_interval_seconds": 10,
-      "cooldown_between_checks": 10.0,
-      "min_position_age_seconds": 60.0,
+      "cooldown_between_checks": 15.0,
+      "min_position_age_seconds": 90.0,
       "rebalancing_frequency_hours": 6,
-      "description": "Wait 60s and 10 pips before recovery"
+      "description": "⭐ Optimized: Wait 90s and 15 pips before recovery (more conservative)"
     },
     "hedge_ratios": {
       "min_ratio": 0.7,
       "max_ratio": 2.0,
       "default_ratio": 1.0
-    },
-    "dynamic_hedge": {
-      "enabled": true,
-      "recovery_target_ratio": 0.8
     },
     "trend_analysis": {
       "enabled": true,
@@ -89,10 +87,10 @@
     "chain_recovery": {
       "enabled": true,
       "mode": "conditional",
-      "max_chain_depth": 5.0,
-      "min_loss_percent_for_chain": -0.01,
+      "max_chain_depth": 3.0,
+      "min_loss_percent_for_chain": -1.0,
       "only_when_trend_uncertain": true,
-      "description": "Conditional chain recovery: enabled only when trend confidence < 40% or as safety net"
+      "description": "⭐ Optimized: Max 3 levels chain (reduced from 5) for lower risk"
     },
     "multi_armed_bandit": {
       "enabled": true,
@@ -130,13 +128,13 @@
   },
   "arbitrage_params": {
     "detection": {
-      "min_threshold": 0.0001,
+      "min_threshold": 0.00015,
       "max_threshold": 0.005,
       "spread_tolerance": 0.5,
       "execution_timeout_ms": 1000
     },
     "triangles": {
-      "max_active_triangles": 4.0,
+      "max_active_triangles": 3.0,
       "triangle_hold_time_minutes": 120.0,
       "correlation_check_interval": 60.0
     },
@@ -146,9 +144,9 @@
       "min_profit_base": 10.0,
       "min_profit_base_balance": 10000.0,
       "trailing_stop_enabled": true,
-      "trailing_stop_distance": 10.0,
+      "trailing_stop_distance": 15.0,
       "lock_profit_percentage": 0.5,
-      "description": "Min profit $10 @ $10K balance, scales with balance. Trailing stop $10 from peak. Lock 50% of peak."
+      "description": "⭐ Optimized for $10K: Min profit $10, Trailing stop $15, Max 3 triangles"
     },
     "execution": {
       "max_slippage": 0.0005,

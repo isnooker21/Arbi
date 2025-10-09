@@ -228,15 +228,7 @@ class SettingsWindow:
              "int", 50, 200, "เช่น 100 = คำนวณความเสี่ยงจาก 100 pips movement")
         ])
         
-        # 7. Recovery Lot Sizing (ขนาดไม้แก้)
-        self.create_section(right_column, "🔧 Recovery Lot Sizing (ขนาดไม้แก้)", [
-            ("Lot สูงสุด (Recovery)", "recovery_params.dynamic_hedge.max_hedge_lot", 
-             "float", 0.1, 10.0, "เช่น 3.0 = recovery สูงสุด 3.0 lot"),
-            ("Lot ต่ำสุด (Recovery)", "recovery_params.dynamic_hedge.min_hedge_lot", 
-             "float", 0.01, 1.0, "เช่น 0.1 = recovery ต่ำสุด 0.1 lot")
-        ])
-        
-        # 8. Arbitrage Settings
+        # 7. Arbitrage Settings
         self.create_section(right_column, "⚡ Arbitrage Settings", [
             ("Threshold ขั้นต่ำ", "arbitrage_params.detection.min_threshold", 
              "float", 0.00001, 0.01, "เช่น 0.0001 = ต้องมีส่วนต่าง >= 0.01%"),

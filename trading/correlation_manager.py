@@ -325,7 +325,7 @@ class CorrelationManager:
             chain_recovery = recovery_params.get('chain_recovery', {})
             self.chain_recovery_enabled = chain_recovery.get('enabled', True)
             self.max_chain_depth = chain_recovery.get('max_chain_depth', 3)
-            self.min_loss_percent_for_chain = chain_recovery.get('min_loss_percent_for_chain', -0.004)  # % based
+            self.min_loss_percent_for_chain = chain_recovery.get('min_loss_percent_for_chain', -1.0)  # 1% of balance
             
             # โหลด price distance และ position age
             self.min_price_distance_pips = loss_thresholds.get('min_price_distance_pips', 10)
@@ -354,7 +354,7 @@ class CorrelationManager:
             self.chain_recovery_enabled = chain_settings.get('enabled', True)
             self.chain_recovery_mode = chain_settings.get('mode', 'conditional')
             self.max_chain_depth = chain_settings.get('max_chain_depth', 2)
-            self.min_loss_percent_for_chain = chain_settings.get('min_loss_percent_for_chain', -0.006)
+            self.min_loss_percent_for_chain = chain_settings.get('min_loss_percent_for_chain', -1.0)
             self.chain_only_when_trend_uncertain = chain_settings.get('only_when_trend_uncertain', True)
             
             # โหลด risk management parameters
@@ -362,10 +362,7 @@ class CorrelationManager:
             self.portfolio_balance_threshold = risk_mgmt.get('max_portfolio_risk', 0.05)
             self.max_concurrent_groups = risk_mgmt.get('max_concurrent_groups', 4)
             
-            # โหลด dynamic hedge parameters
-            dynamic_hedge = recovery_params.get('dynamic_hedge', {})
-            self.min_hedge_lot = dynamic_hedge.get('min_hedge_lot', 0.1)
-            self.max_hedge_lot = dynamic_hedge.get('max_hedge_lot', 3.0)
+            # ⭐ ใช้ risk-based calculation แทน fixed min/max hedge lot
             
             self.logger.info("=" * 60)
             self.logger.info("✅ RECOVERY CONFIG LOADED (% BASED)")
@@ -386,7 +383,7 @@ class CorrelationManager:
             self.logger.info(f"🔗 Chain Recovery: {'ENABLED' if self.chain_recovery_enabled else 'DISABLED'}")
             if self.chain_recovery_enabled:
                 self.logger.info(f"   Max Depth: {self.max_chain_depth} levels")
-                self.logger.info(f"   Min Loss for Chain: {abs(self.min_loss_percent_for_chain):.3%} of balance")
+                self.logger.info(f"   Min Loss for Chain: {abs(self.min_loss_percent_for_chain):.0%} of balance")
                 for bal in [5000, 10000, 50000]:
                     amount = bal * self.min_loss_percent_for_chain
                     self.logger.info(f"   - Balance ${bal:,}: >= ${abs(amount):.2f}")
@@ -402,7 +399,7 @@ class CorrelationManager:
             self.logger.info(f"📦 Hedge Ratio: {self.recovery_thresholds['hedge_ratio_range'][0]} - {self.recovery_thresholds['hedge_ratio_range'][1]}")
             self.logger.info(f"🎯 Max Symbol Usage: {self.max_symbol_usage} times")
             self.logger.info(f"📏 Base Lot Size: {self.recovery_thresholds['base_lot_size']}")
-            self.logger.info(f"🔧 Recovery Lot Limits: {self.min_hedge_lot} - {self.max_hedge_lot} lot")
+            self.logger.info(f"🔧 Recovery Lot: ใช้ Risk-Based Calculation (ตาม risk_per_trade_percent)")
             self.logger.info(f"⚙️ System Limits: Max Portfolio Risk {self.portfolio_balance_threshold:.1%}, Max Groups {self.max_concurrent_groups}")
             self.logger.info(f"⭐ Risk-Based Sizing: {'ENABLED' if self.use_risk_based_sizing else 'DISABLED'}")
             if self.use_risk_based_sizing:
@@ -445,7 +442,7 @@ class CorrelationManager:
         # Chain recovery settings (% based)
         self.chain_recovery_enabled = True  # เปิด chain recovery
         self.max_chain_depth = 3  # แก้ได้ลึกสุด 3 ระดับ
-        self.min_loss_percent_for_chain = -0.004  # Recovery ต้องขาดทุน >= 0.4% ของ balance
+        self.min_loss_percent_for_chain = -1.0  # Recovery ต้องขาดทุน >= 1% ของ balance
         
         # Price distance และ position age
         self.min_price_distance_pips = 10  # ต้องห่าง >= 10 pips
@@ -1401,8 +1398,8 @@ class CorrelationManager:
                 # Round to valid lot size
                 hedge_lot = TradingCalculations.round_to_valid_lot_size(hedge_lot)
                 
-                # จำกัดขนาด lot ตาม config (โหลดจาก adaptive_params.json)
-                hedge_lot = max(self.min_hedge_lot, min(hedge_lot, self.max_hedge_lot))
+                # ⭐ ใช้ risk-based calculation เท่านั้น ไม่มีการจำกัด fixed min/max
+                # hedge_lot คำนวณจาก risk_per_trade_percent แล้ว
                 
                 self.logger.info(f"💰 Risk-Based Calculation:")
                 self.logger.info(f"   Balance: ${balance:.2f}")
@@ -1520,11 +1517,16 @@ class CorrelationManager:
                 self.logger.debug(f"🔍 {symbol}: Invalid lot size ({lot_size})")
                 return False
             
-            # เงื่อนไข 1: Risk 5% ต่อ lot
-            risk_per_lot = abs(position_pnl) / lot_size
+            # เงื่อนไข 1: Risk 1% ของ balance
+            balance = self.broker.get_account_balance()
+            if not balance or balance <= 0:
+                self.logger.debug(f"🔍 {symbol}: Cannot get account balance")
+                return False
             
-            if risk_per_lot < 0.015:  # risk น้อยกว่า 1.5%
-                self.logger.debug(f"⏳ {symbol} risk too low ({risk_per_lot:.2%}) - Waiting for 1.5%")
+            loss_percent_of_balance = abs(position_pnl) / balance
+            
+            if loss_percent_of_balance < 0.01:  # loss น้อยกว่า 1% ของ balance
+                self.logger.debug(f"⏳ {symbol} loss too low ({loss_percent_of_balance:.1%} of balance) - Waiting for 1%")
                 return False
             
             # เงื่อนไข 2: ระยะห่าง 10 pips
@@ -1554,7 +1556,7 @@ class CorrelationManager:
                 return False
             
             # ผ่านเงื่อนไขทั้งหมด - แก้ไม้ทันที
-            self.logger.info(f"✅ {symbol} meets recovery conditions - Risk: {risk_per_lot:.2%}, Distance: {price_distance:.1f} pips")
+            self.logger.info(f"✅ {symbol} meets recovery conditions - Loss: {loss_percent_of_balance:.2%} of balance, Distance: {price_distance:.1f} pips")
             return True
             
         except Exception as e:
@@ -3139,7 +3141,7 @@ class CorrelationManager:
                     self.logger.error("❌ Cannot get account balance from MT5 - skipping chain recovery check")
                     return False
                 loss_percent = profit / balance
-                min_chain_percent = self.recovery_thresholds.get('min_loss_percent_for_chain', -0.004)
+                min_chain_percent = self.recovery_thresholds.get('min_loss_percent_for_chain', -1.0)
                 
                 if loss_percent > min_chain_percent:
                     self.logger.debug(f"❌ {symbol} (Ticket: {ticket}): Chain loss {loss_percent:.4f} ({loss_percent*100:.2f}%) > {min_chain_percent:.4f}")
