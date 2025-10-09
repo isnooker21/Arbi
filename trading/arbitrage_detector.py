@@ -441,17 +441,30 @@ class TriangleArbitrageDetector:
                     # ส่งออเดอร์สำหรับสามเหลี่ยมนี้
                     self.logger.info(f"🚀 Sending new orders for {triangle_name}: {triangle}")
                     
-                    # คำนวณ lot_sizes ก่อน (ใช้ค่าจาก GUI)
+                    # ⭐ คำนวณ lot แบบใหม่ - ง่ายและชัดเจน
                     triangle_symbols = list(triangle)
-                    lot_sizes = TradingCalculations.get_uniform_triangle_lots(
-                        triangle_symbols=triangle_symbols,
-                        balance=balance,
-                        target_pip_value=10.0,
-                        broker_api=self.broker,
-                        use_simple_mode=False,
-                        use_risk_based_sizing=True,
-                        risk_per_trade_percent=risk_per_trade_percent  # ⭐ ใช้ค่าจาก GUI config
-                    )
+                    
+                    # สูตร: Risk Amount = Balance × (Risk% ÷ 100)
+                    risk_amount = balance * (risk_per_trade_percent / 100.0)
+                    max_loss_pips = 100.0
+                    
+                    self.logger.info(f"💰 Calculating lots: Balance=${balance:,.2f}, Risk={risk_per_trade_percent}%, Risk Amount=${risk_amount:.2f}")
+                    
+                    # คำนวณ lot สำหรับแต่ละคู่
+                    lot_sizes = {}
+                    for symbol in triangle_symbols:
+                        # คำนวณ pip value สำหรับ 1 lot
+                        pip_value = TradingCalculations.calculate_pip_value(symbol, 1.0, self.broker)
+                        if pip_value <= 0:
+                            self.logger.error(f"❌ Invalid pip value for {symbol}")
+                            return
+                        
+                        # สูตร: Lot = Risk Amount ÷ (Pip Value × Max Loss Pips)
+                        lot_size = risk_amount / (pip_value * max_loss_pips)
+                        lot_size = max(0.01, round(lot_size, 2))  # ปัดเป็น 0.01
+                        
+                        lot_sizes[symbol] = lot_size
+                        self.logger.info(f"   {symbol}: pip_value=${pip_value:.2f}, lot={lot_size:.2f}")
                     
                     self._send_orders_for_triangle(triangle, triangle_name, balance, lot_sizes)
                 else:
@@ -518,17 +531,30 @@ class TriangleArbitrageDetector:
                 # ส่งออเดอร์สำหรับสามเหลี่ยมนี้
                 self.logger.info(f"🚀 Sending orders for {triangle_name}: {triangle}")
                 
-                # คำนวณ lot_sizes ก่อน (ใช้ค่าจาก GUI)
+                # ⭐ คำนวณ lot แบบใหม่ - ง่ายและชัดเจน
                 triangle_symbols = list(triangle)
-                lot_sizes = TradingCalculations.get_uniform_triangle_lots(
-                    triangle_symbols=triangle_symbols,
-                    balance=balance,
-                    target_pip_value=10.0,
-                    broker_api=self.broker,
-                    use_simple_mode=False,
-                    use_risk_based_sizing=True,
-                    risk_per_trade_percent=risk_per_trade_percent  # ⭐ ใช้ค่าจาก GUI config
-                )
+                
+                # สูตร: Risk Amount = Balance × (Risk% ÷ 100)
+                risk_amount = balance * (risk_per_trade_percent / 100.0)
+                max_loss_pips = 100.0
+                
+                self.logger.info(f"💰 Calculating lots: Balance=${balance:,.2f}, Risk={risk_per_trade_percent}%, Risk Amount=${risk_amount:.2f}")
+                
+                # คำนวณ lot สำหรับแต่ละคู่
+                lot_sizes = {}
+                for symbol in triangle_symbols:
+                    # คำนวณ pip value สำหรับ 1 lot
+                    pip_value = TradingCalculations.calculate_pip_value(symbol, 1.0, self.broker)
+                    if pip_value <= 0:
+                        self.logger.error(f"❌ Invalid pip value for {symbol}")
+                        continue
+                    
+                    # สูตร: Lot = Risk Amount ÷ (Pip Value × Max Loss Pips)
+                    lot_size = risk_amount / (pip_value * max_loss_pips)
+                    lot_size = max(0.01, round(lot_size, 2))  # ปัดเป็น 0.01
+                    
+                    lot_sizes[symbol] = lot_size
+                    self.logger.info(f"   {symbol}: pip_value=${pip_value:.2f}, lot={lot_size:.2f}")
                 
                 self._send_orders_for_triangle(triangle, triangle_name, balance, lot_sizes)
                 
@@ -674,24 +700,12 @@ class TriangleArbitrageDetector:
                 return
             risk_per_trade_percent = float(risk_per_trade_percent)
 
-            # ใช้ lot_sizes ที่ส่งมา หรือคำนวณใหม่ถ้าไม่มี
+            # ⭐ ใช้ lot_sizes ที่ส่งมาเท่านั้น - ไม่คำนวณใหม่!
             if lot_sizes is None:
-                # ⭐ ใช้ Risk per Trade จาก GUI เท่านั้น
-                triangle_symbols = list(triangle)
-                risk_percent = risk_per_trade_percent
-                
-                lot_sizes = TradingCalculations.get_uniform_triangle_lots(
-                    triangle_symbols=triangle_symbols,
-                    balance=balance,
-                    target_pip_value=10.0,  # $10 pip value base (EURUSD standard)
-                    broker_api=self.broker,
-                    use_simple_mode=False,
-                    use_risk_based_sizing=True,
-                    risk_per_trade_percent=risk_percent  # ใช้ค่าจาก GUI
-                )
-                self.logger.info(f"📊 {triangle_name} lot sizes: {lot_sizes}")
-            else:
-                self.logger.info(f"📊 {triangle_name} using provided lot sizes: {lot_sizes}")
+                self.logger.error(f"❌ No lot_sizes provided for {triangle_name} - cannot proceed")
+                return
+            
+            self.logger.info(f"📊 {triangle_name} using provided lot sizes: {lot_sizes}")
             
             # สร้างกลุ่มใหม่สำหรับสามเหลี่ยมนี้
             self.group_counters[triangle_name] += 1

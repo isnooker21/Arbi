@@ -583,11 +583,14 @@ class TradingCalculations:
                 # คำนวณ lot size จาก risk โดยตรง (ใช้ Risk ทั้งหมด ไม่แบ่ง 3 คู่)
                 # Risk Amount = Balance × Risk%
                 # Lot = Risk Amount / (Max Loss Pips × Pip Value)
+                
+                # ⭐ บันทึก log เพียงครั้งเดียว
+                logging.getLogger(__name__).info(f"💰 Lot Calc: Balance=${balance:,.2f}, Risk={risk_per_trade_percent}%")
+                
                 risk_amount = balance * (risk_per_trade_percent / 100.0)
                 
                 # ใช้ Max Loss Pips = 100 (จาก GUI) แทน Stop Loss
                 max_loss_pips = 100.0  # ใช้ค่าจาก GUI
-                
                 
                 lot_sizes = {}
                 
