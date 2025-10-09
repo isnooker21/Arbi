@@ -249,8 +249,9 @@ class RiskManager:
                 validation_result['errors'].append("Daily loss limit exceeded")
                 return validation_result
             
-            # Validate position size
-            max_volume = self.calculate_position_size(symbol, account_balance, 2.0)  # 2% risk
+            # Validate position size - ใช้ฟังก์ชันหลัก
+            from utils.calculations import TradingCalculations
+            max_volume = TradingCalculations.calculate_lot_from_balance(account_balance, 10.0, 2.0, 100)
             if volume > max_volume:
                 validation_result['warnings'].append(f"Volume {volume} exceeds recommended {max_volume}")
                 validation_result['adjusted_volume'] = max_volume
@@ -317,36 +318,7 @@ class RiskManager:
             self.logger.error(f"Error checking position limits for {symbol}: {e}")
             return False, f"Error checking position limits: {str(e)}"
     
-    def calculate_position_size(self, symbol: str, risk_percent: float, 
-                              stop_loss_pips: float, account_balance: float) -> float:
-        """คำนวณขนาดตำแหน่งแบบ Dynamic"""
-        try:
-            # คำนวณความผันผวน
-            volatility = self.get_symbol_volatility(symbol)
-            volatility_adjustment = min(1.0, 1.0 / (volatility * 100))
-            
-            # คำนวณขนาดตำแหน่งพื้นฐาน
-            risk_amount = account_balance * (risk_percent / 100)
-            pip_value = self.get_pip_value(symbol)
-            base_position_size = risk_amount / (stop_loss_pips * pip_value)
-            
-            # ปรับตามความผันผวน
-            adjusted_size = base_position_size * volatility_adjustment
-            
-            # ใช้ขีดจำกัดตำแหน่ง
-            max_allowed = (account_balance * self.max_exposure_per_pair) / self.get_contract_value(symbol)
-            final_size = min(adjusted_size, max_allowed)
-            
-            # จำกัดขนาดขั้นต่ำและสูงสุด
-            min_size = 0.01
-            max_size = 10.0
-            final_size = max(min_size, min(final_size, max_size))
-            
-            return round(final_size, 2)
-            
-        except Exception as e:
-            self.logger.error(f"Error calculating position size for {symbol}: {e}")
-            return 0.01
+    # ฟังก์ชันนี้ถูกลบออกแล้ว - ใช้ calculate_lot_from_balance แทน
     
     def update_exposure(self, symbol: str, volume: float, action: str = "add"):
         """อัปเดตการเปิดเผยความเสี่ยง"""
