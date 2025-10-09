@@ -477,16 +477,18 @@ class TriangleArbitrageDetector:
                 direction = 'BUY' if i == 0 else 'SELL'
                 lot_size = lot_sizes.get(symbol, 0.01)
                 
-                order_data = {
-                    'symbol': symbol,
-                    'direction': direction,
-                    'volume': lot_size,
-                    'magic': triangle_magic,
-                    'comment': f"{triangle_name}_{symbol}"
-                }
+                # สร้าง comment ตามหมายเลขสามเหลี่ยม
+                triangle_number = triangle_name.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
+                comment = f"G{triangle_number}_{symbol}"
                 
                 # ส่งออเดอร์
-                result = self.broker.send_order(order_data)
+                result = self.broker.place_order(
+                    symbol=symbol,
+                    order_type=direction,
+                    volume=lot_size,
+                    comment=comment,
+                    magic=triangle_magic
+                )
                 if result:
                     self.logger.info(f"✅ {triangle_name} {symbol} {direction} {lot_size} lots - SUCCESS")
                 else:
