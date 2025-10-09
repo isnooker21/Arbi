@@ -32,7 +32,7 @@ try:
 except Exception:
     pass
 
-from utils.account_tier_manager import AccountTierManager
+# Removed AccountTierManager - using GUI Risk per Trade only
 from utils.calculations import TradingCalculations
 from trading.individual_order_tracker import IndividualOrderTracker
 

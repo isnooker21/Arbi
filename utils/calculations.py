@@ -602,22 +602,19 @@ class TradingCalculations:
             
             # ===== โหมดที่ 1: Risk-Based Sizing (ง่ายที่สุด - แนะนำ!) =====
             if use_risk_based:
-                # คำนวณ lot size จาก risk โดยตรง
+                # คำนวณ lot size จาก risk โดยตรง (ใช้ Risk ทั้งหมด ไม่แบ่ง 3 คู่)
                 # Risk Amount = Balance × Risk%
-                # แบ่งเป็น 3 คู่ (triangle) = Risk per Pair
-                # Lot = Risk per Pair / (Stop Loss × Pip Value)
+                # Lot = Risk Amount / (Max Loss Pips × Pip Value)
                 risk_amount = balance * (risk_per_trade_percent / 100.0)
-                risk_per_pair = risk_amount / 3.0  # แบ่ง 3 คู่
                 
-                # ไม่ใช้ stop loss เพื่อให้ระบบ Recovery ทำงานได้
-                # ระบบจะใช้ Recovery Strategy แทน SL
-                stop_loss_pips = 0.0  # ปิด SL
+                # ใช้ Max Loss Pips = 100 (จาก GUI) แทน Stop Loss
+                max_loss_pips = 100.0  # ใช้ค่าจาก GUI
                 
-                logging.getLogger(__name__).info(f"🔍 DEBUG: RISK-BASED MODE CALCULATION (NO SL):")
+                logging.getLogger(__name__).info(f"🔍 DEBUG: RISK-BASED MODE CALCULATION (GUI Risk):")
                 logging.getLogger(__name__).info(f"   Balance=${balance:.2f}")
                 logging.getLogger(__name__).info(f"   Risk={risk_per_trade_percent}% (${risk_amount:.2f})")
-                logging.getLogger(__name__).info(f"   Risk per Pair: ${risk_per_pair:.2f}")
-                logging.getLogger(__name__).info(f"   Stop Loss: DISABLED (Recovery Mode)")
+                logging.getLogger(__name__).info(f"   Max Loss Pips: {max_loss_pips}")
+                logging.getLogger(__name__).info(f"   Using FULL Risk Amount (NOT divided by 3)")
                 
                 lot_sizes = {}
                 
@@ -631,8 +628,8 @@ class TradingCalculations:
                         # คำนวณ pip value สำหรับ max_loss_pips
                         pip_value_for_risk = pip_value_per_1lot * max_loss_pips
                         
-                        # คำนวณ lot size
-                        lot_size = risk_per_pair / pip_value_for_risk
+                        # คำนวณ lot size (ใช้ Risk ทั้งหมด ไม่แบ่ง 3 คู่)
+                        lot_size = risk_amount / pip_value_for_risk
                         
                         # Round to valid lot size
                         lot_size = TradingCalculations.round_to_valid_lot_size(lot_size)
@@ -640,8 +637,8 @@ class TradingCalculations:
                         # จำกัดขนาด lot
                         lot_size = max(0.01, min(lot_size, 5.0))
                         
-                        logging.getLogger(__name__).info(f"🔍 {symbol}: Risk=${risk_per_pair:.2f}, Pip Value=${pip_value_per_1lot:.2f}, Max Loss={max_loss_pips} pips, Lot={lot_size:.4f}")
-                        logging.getLogger(__name__).info(f"   ✅ If move {max_loss_pips} pips → Loss = ${lot_size * pip_value_per_1lot * max_loss_pips:.2f}")
+                        logging.getLogger(__name__).info(f"🔍 {symbol}: Risk=${risk_amount:.2f}, Pip Value=${pip_value_per_1lot:.2f}, Max Loss={max_loss_pips} pips, Lot={lot_size:.4f}")
+                        logging.getLogger(__name__).info(f"   ✅ If move {max_loss_pips} pips → Loss = ${lot_size * pip_value_per_1lot * max_loss_pips:.2f} ({risk_per_trade_percent}% of balance)")
                     else:
                         lot_size = 0.01  # Minimum fallback
                         logging.getLogger(__name__).warning(f"⚠️ {symbol}: Cannot calculate pip value, using minimum lot")
@@ -697,8 +694,13 @@ class TradingCalculations:
     @staticmethod
     def get_triangle_lot_sizes(triangle_symbols: List[str], balance: float, risk_percent: float = 1.0, broker_api=None) -> Dict[str, float]:
         """Calculate lot sizes for triangle arbitrage based on balance (legacy method)"""
-        # ใช้ uniform method แทน
-        return TradingCalculations.get_uniform_triangle_lots(triangle_symbols, balance, 10.0, broker_api)
+        # ใช้ uniform method แทน (ส่ง risk_percent ไปด้วย)
+        return TradingCalculations.get_uniform_triangle_lots(
+            triangle_symbols, balance, 10.0, broker_api, 
+            use_simple_mode=False, 
+            use_risk_based_sizing=True, 
+            risk_per_trade_percent=risk_percent
+        )
     
     @staticmethod
     def calculate_drawdown(equity_curve: List[float]) -> Tuple[float, float, float]:
