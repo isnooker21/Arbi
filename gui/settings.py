@@ -84,6 +84,19 @@ class SettingsWindow:
         
         tk.Button(
             btn_frame,
+            text="🔄 Refresh",
+            command=self.refresh_gui_values,
+            bg='#2196F3',
+            fg='white',
+            font=('Arial', 11, 'bold'),
+            padx=20,
+            pady=8,
+            relief='flat',
+            cursor='hand2'
+        ).pack(side='left', padx=5)
+        
+        tk.Button(
+            btn_frame,
             text="🔄 Reset",
             command=self.reset_settings,
             bg='#FF9800',
@@ -604,10 +617,32 @@ class SettingsWindow:
                     f"บันทึกการตั้งค่าเรียบร้อยแล้ว!\n\n⚠️ กรุณา Restart ระบบเพื่อใช้งานค่าใหม่\n\nRisk per Trade: {saved_risk}%"
                 )
             
-            self.settings_window.destroy()
+            # 🔄 Refresh GUI ให้แสดงค่าใหม่
+            self.refresh_gui_values()
+            
+            # ไม่ปิดหน้าต่าง ให้ผู้ใช้เห็นการเปลี่ยนแปลง
+            # self.settings_window.destroy()
             
         except Exception as e:
             messagebox.showerror("❌ Error", f"ไม่สามารถบันทึกได้: {str(e)}")
+    
+    def refresh_gui_values(self):
+        """Refresh GUI values after saving config"""
+        try:
+            # โหลดค่าใหม่จากไฟล์
+            self.load_settings()
+            
+            # อัปเดตค่าทั้งหมดใน GUI
+            for param_path, var in self.parameter_vars.items():
+                current_value = self.get_nested_value(self.settings, param_path)
+                if current_value is not None:
+                    var.set(str(current_value))
+                    print(f"🔄 Refreshed {param_path}: {current_value}")
+            
+            print("✅ GUI values refreshed successfully")
+            
+        except Exception as e:
+            print(f"❌ Error refreshing GUI: {e}")
     
     def reset_settings(self):
         """Reset settings to original values"""
