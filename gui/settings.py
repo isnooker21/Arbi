@@ -220,17 +220,7 @@ class SettingsWindow:
         
         # === RIGHT COLUMN ===
         
-        # 6. Account Tier Management 🏆 ใหม่!
-        self.create_section(right_column, "🏆 Account Tier Management", [
-            ("Auto-Detect Tier", "position_sizing.auto_detect_tier", 
-             "bool", "เปิด = ตรวจจับระดับบัญชีอัตโนมัติตามยอดเงิน"),
-            ("Force Tier", "position_sizing.force_tier", 
-             "string", "starter/standard/premium/vip หรือ auto"),
-            ("Custom Risk (%)", "position_sizing.custom_risk_percent", 
-             "float", 0.5, 5.0, "ถ้าไม่ใช้ auto-detect ใช้ค่านี้")
-        ])
-        
-        # 7. Lot Sizing (Risk-Based) ⭐ แนะนำ
+        # 6. Lot Sizing (Risk-Based) ⭐ แนะนำ
         self.create_section(right_column, "💰 Lot Sizing (Risk-Based) ⭐ แนะนำ", [
             ("Risk per Trade (%)", "position_sizing.lot_calculation.risk_per_trade_percent", 
              "float", 0.1, 5.0, "เช่น 1.0 = เสี่ยง 1% ของ balance ถ้าเคลื่อน 100 pips"),
@@ -238,7 +228,7 @@ class SettingsWindow:
              "int", 50, 200, "เช่น 100 = คำนวณความเสี่ยงจาก 100 pips movement")
         ])
         
-        # 8. Recovery Lot Sizing (ขนาดไม้แก้)
+        # 7. Recovery Lot Sizing (ขนาดไม้แก้)
         self.create_section(right_column, "🔧 Recovery Lot Sizing (ขนาดไม้แก้)", [
             ("Lot สูงสุด (Recovery)", "recovery_params.dynamic_hedge.max_hedge_lot", 
              "float", 0.1, 10.0, "เช่น 3.0 = recovery สูงสุด 3.0 lot"),
@@ -246,7 +236,7 @@ class SettingsWindow:
              "float", 0.01, 1.0, "เช่น 0.1 = recovery ต่ำสุด 0.1 lot")
         ])
         
-        # 9. Arbitrage Settings
+        # 8. Arbitrage Settings
         self.create_section(right_column, "⚡ Arbitrage Settings", [
             ("Threshold ขั้นต่ำ", "arbitrage_params.detection.min_threshold", 
              "float", 0.00001, 0.01, "เช่น 0.0001 = ต้องมีส่วนต่าง >= 0.01%"),
@@ -256,7 +246,7 @@ class SettingsWindow:
              "float", 0.1, 2.0, "เช่น 0.5 = ยอมรับ spread 0.5 pips")
         ])
         
-        # 10. Multi-Armed Bandit
+        # 9. Multi-Armed Bandit
         self.create_section(right_column, "🤖 Multi-Armed Bandit (ML)", [
             ("เปิดใช้งาน ML", "recovery_params.multi_armed_bandit.enabled", 
              "bool", "เปิด = ระบบเรียนรู้เลือก pair อัตโนมัติ"),
@@ -266,7 +256,7 @@ class SettingsWindow:
              "float", 0.0, 1.0, "เช่น 0.1 = เรียนรู้ช้าๆ แต่มั่นคง")
         ])
         
-        # 11. Hedge Ratios (อัตราส่วนการแก้ไม้)
+        # 10. Hedge Ratios (อัตราส่วนการแก้ไม้)
         self.create_section(right_column, "⚖️ Hedge Ratios (อัตราส่วนการแก้ไม้)", [
             ("อัตราส่วนต่ำสุด", "recovery_params.hedge_ratios.min_ratio", 
              "float", 0.1, 2.0, "เช่น 0.7 = hedge lot ไม่ต่ำกว่า 70% ของไม้เดิม"),
