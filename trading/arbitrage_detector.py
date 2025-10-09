@@ -425,7 +425,20 @@ class TriangleArbitrageDetector:
                     
                     # ส่งออเดอร์สำหรับสามเหลี่ยมนี้
                     self.logger.info(f"🚀 Sending new orders for {triangle_name}: {triangle}")
-                    self._send_orders_for_triangle(triangle, triangle_name, balance)
+                    
+                    # คำนวณ lot_sizes ก่อน
+                    triangle_symbols = list(triangle)
+                    lot_sizes = TradingCalculations.get_uniform_triangle_lots(
+                        triangle_symbols=triangle_symbols,
+                        balance=balance,
+                        target_pip_value=10.0,
+                        broker_api=self.broker,
+                        use_simple_mode=False,
+                        use_risk_based_sizing=True,
+                        risk_per_trade_percent=1.0  # ใช้ค่าจาก GUI
+                    )
+                    
+                    self._send_orders_for_triangle(triangle, triangle_name, balance, lot_sizes)
                 else:
                     self.logger.warning(f"⚠️ Invalid triangle index for {triangle_name}")
                 
@@ -477,7 +490,20 @@ class TriangleArbitrageDetector:
                 
                 # ส่งออเดอร์สำหรับสามเหลี่ยมนี้
                 self.logger.info(f"🚀 Sending orders for {triangle_name}: {triangle}")
-                self._send_orders_for_triangle(triangle, triangle_name, balance)
+                
+                # คำนวณ lot_sizes ก่อน
+                triangle_symbols = list(triangle)
+                lot_sizes = TradingCalculations.get_uniform_triangle_lots(
+                    triangle_symbols=triangle_symbols,
+                    balance=balance,
+                    target_pip_value=10.0,
+                    broker_api=self.broker,
+                    use_simple_mode=False,
+                    use_risk_based_sizing=True,
+                    risk_per_trade_percent=1.0  # ใช้ค่าจาก GUI
+                )
+                
+                self._send_orders_for_triangle(triangle, triangle_name, balance, lot_sizes)
                 
         except Exception as e:
             self.logger.error(f"Error in _send_simple_orders: {e}")
@@ -601,7 +627,7 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error reloading tier config: {e}")
     
-    def _send_orders_for_triangle(self, triangle, triangle_name, balance):
+    def _send_orders_for_triangle(self, triangle, triangle_name, balance, lot_sizes=None):
         """ส่งออเดอร์สำหรับสามเหลี่ยมเดียว"""
         try:
             self.logger.info(f"🔍 Processing {triangle_name}: {triangle}")
@@ -617,20 +643,24 @@ class TriangleArbitrageDetector:
             use_risk_based_sizing = lot_calc_config.get('use_risk_based_sizing', True)
             risk_per_trade_percent = lot_calc_config.get('risk_per_trade_percent', 1.0)
 
-            # ⭐ ใช้ Risk per Trade จาก GUI เท่านั้น
-            triangle_symbols = list(triangle)
-            risk_percent = risk_per_trade_percent
-            
-            lot_sizes = TradingCalculations.get_uniform_triangle_lots(
-                triangle_symbols=triangle_symbols,
-                balance=balance,
-                target_pip_value=10.0,  # $10 pip value base (EURUSD standard)
-                broker_api=self.broker,
-                use_simple_mode=False,
-                use_risk_based_sizing=True,
-                risk_per_trade_percent=risk_percent  # ใช้ค่าจาก GUI
-            )
-            self.logger.info(f"📊 {triangle_name} lot sizes: {lot_sizes}")
+            # ใช้ lot_sizes ที่ส่งมา หรือคำนวณใหม่ถ้าไม่มี
+            if lot_sizes is None:
+                # ⭐ ใช้ Risk per Trade จาก GUI เท่านั้น
+                triangle_symbols = list(triangle)
+                risk_percent = risk_per_trade_percent
+                
+                lot_sizes = TradingCalculations.get_uniform_triangle_lots(
+                    triangle_symbols=triangle_symbols,
+                    balance=balance,
+                    target_pip_value=10.0,  # $10 pip value base (EURUSD standard)
+                    broker_api=self.broker,
+                    use_simple_mode=False,
+                    use_risk_based_sizing=True,
+                    risk_per_trade_percent=risk_percent  # ใช้ค่าจาก GUI
+                )
+                self.logger.info(f"📊 {triangle_name} lot sizes: {lot_sizes}")
+            else:
+                self.logger.info(f"📊 {triangle_name} using provided lot sizes: {lot_sizes}")
             
             # สร้างกลุ่มใหม่สำหรับสามเหลี่ยมนี้
             self.group_counters[triangle_name] += 1
@@ -830,7 +860,7 @@ class TriangleArbitrageDetector:
         self.logger.debug("🔍 _create_arbitrage_group called (legacy method - not used)")
         return False
     
-    def _send_arbitrage_order(self, symbol: str, direction: str, group_id: str, triangle_name: str = None) -> bool:
+    def _send_arbitrage_order(self, symbol: str, direction: str, group_id: str, triangle_name: str = None, lot_sizes: dict = None) -> bool:
         """ส่งออเดอร์ arbitrage"""
         try:            
             # สร้าง comment ที่แสดงกลุ่มและลำดับ
@@ -844,10 +874,17 @@ class TriangleArbitrageDetector:
             # เริ่มส่งออเดอร์พร้อมกัน
             start_time = datetime.now()
             
+            # ใช้ lot_size ที่คำนวณจาก Risk-Based Mode
+            if lot_sizes:
+                lot_size = lot_sizes.get(symbol, 0.01)
+            else:
+                # Fallback: ใช้ค่า default
+                lot_size = 0.01
+            
             result = self.broker.place_order(
                 symbol=symbol,
                 order_type=direction,
-                volume=self.position_size,
+                volume=lot_size,
                 comment=comment
             )
             
@@ -855,7 +892,7 @@ class TriangleArbitrageDetector:
             execution_time = (end_time - start_time).total_seconds() * 1000  # milliseconds
             
             if result and result.get('retcode') == 10009:
-                self.logger.debug(f"✅ Order sent: {symbol} {direction} {self.position_size} lot (took {execution_time:.1f}ms)")
+                self.logger.debug(f"✅ Order sent: {symbol} {direction} {lot_size} lot (took {execution_time:.1f}ms)")
                 
                 # Track ไม้ arbitrage ใน individual order tracker
                 if hasattr(self, 'correlation_manager') and self.correlation_manager:
