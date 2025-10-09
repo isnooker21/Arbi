@@ -207,7 +207,9 @@ class SettingsWindow:
         # 7. Lot Sizing (Risk-Based) ⭐ แนะนำ
         self.create_section(right_column, "💰 Lot Sizing (Risk-Based) ⭐ แนะนำ", [
             ("Risk per Trade (%)", "position_sizing.lot_calculation.risk_per_trade_percent", 
-             "float", 0.5, 5.0, "เช่น 1.5 = เสี่ยง 1.5% ของ balance ต่อไม้")
+             "float", 0.1, 5.0, "เช่น 1.0 = เสี่ยง 1% ของ balance ถ้าเคลื่อน 100 pips"),
+            ("Max Loss Pips", "position_sizing.lot_calculation.max_loss_pips", 
+             "int", 50, 200, "เช่น 100 = คำนวณความเสี่ยงจาก 100 pips movement")
         ])
         
         # 8. Recovery Lot Sizing (ขนาดไม้แก้)
@@ -355,7 +357,14 @@ class SettingsWindow:
         # Get current value
         current_value = self.get_nested_value(self.settings, param_path)
         if current_value is None:
-            current_value = 0.0 if param_type == "float" else 0 if param_type == "int" else False
+            if param_type == "float":
+                current_value = 0.0
+            elif param_type == "int":
+                current_value = 0
+            elif param_type == "bool":
+                current_value = False
+            else:
+                current_value = 0.0
         
         if param_type == "bool":
             # Boolean checkbox with custom style

@@ -1509,7 +1509,7 @@ class CorrelationManager:
                     balance=balance,
                     pip_value=pip_value,
                     risk_percent=self.risk_per_trade_percent,
-                    max_loss_pips=0  # ไม่ใช้ SL - Recovery Mode
+                    max_loss_pips=100  # ใช้ 100 pips เป็นความเสี่ยง
                 )
                 
                 # ปรับตาม correlation

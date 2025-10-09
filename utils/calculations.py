@@ -495,36 +495,40 @@ class TradingCalculations:
             return 1.0
     
     @staticmethod
-    def calculate_lot_from_balance(balance: float, pip_value: float, risk_percent: float = 1.5, max_loss_pips: float = 0) -> float:
+    def calculate_lot_from_balance(balance: float, pip_value: float, risk_percent: float = 1.5, max_loss_pips: float = 100) -> float:
         """
-        Calculate lot size based on account balance using Simple Risk-Based Sizing
+        Calculate lot size based on account balance using Proper Risk Management
         
         Args:
             balance: Account balance in USD
             pip_value: Pip value per 1.0 lot (e.g., $10 for EURUSD)
-            risk_percent: Risk percentage (e.g., 1.5 means 1.5%, NOT 0.015%)
+            risk_percent: Risk percentage (e.g., 1.0 means 1% risk if move 100 pips)
+            max_loss_pips: Maximum pips to move before hitting risk limit (default 100 pips)
             
         Returns:
             float: Calculated lot size
         """
         try:
-            if balance <= 0 or risk_percent <= 0 or pip_value <= 0:
+            if balance <= 0 or risk_percent <= 0 or pip_value <= 0 or max_loss_pips <= 0:
                 return 0.01  # Minimum lot size
             
-            # 🎯 สูตรง่ายๆ อิงจาก Balance และ Pip Value
+            # 🎯 สูตร Risk Management ที่ถูกต้อง
             # Risk Amount = Balance × (Risk% ÷ 100)
-            # Lot Size = Risk Amount ÷ Pip Value
+            # Lot Size = Risk Amount ÷ (Pip Value × Max Loss Pips)
             
             # ตัวอย่าง:
-            # Balance = $10,000, Risk = 1% (ใส่ 1.0), Pip Value = $10
+            # Balance = $10,000, Risk = 1%, Max Loss = 100 pips, Pip Value = $10
             # Risk Amount = $10,000 × (1 ÷ 100) = $100
-            # Lot Size = $100 ÷ $10 = 10.0 lot
+            # Lot Size = $100 ÷ ($10 × 100) = $100 ÷ $1,000 = 0.1 lot
             
-            # คำนวณ Risk Amount
+            # คำนวณ Risk Amount (ยอดเงินที่ยอมเสี่ยงได้)
             risk_amount = balance * (risk_percent / 100.0)
             
+            # คำนวณ Pip Value สำหรับ max_loss_pips
+            pip_value_for_risk = pip_value * max_loss_pips
+            
             # คำนวณ Lot Size
-            calculated_lot = risk_amount / pip_value
+            calculated_lot = risk_amount / pip_value_for_risk
             
             # Round to valid lot size
             final_lot = TradingCalculations.round_to_valid_lot_size(calculated_lot)
@@ -533,17 +537,20 @@ class TradingCalculations:
             final_lot = max(0.01, min(final_lot, 5.0))
             
             # Debug log
-            logging.getLogger(__name__).info(f"💰 Simple Balance-Based Lot Calculation:")
+            logging.getLogger(__name__).info(f"💰 Proper Risk Management Lot Calculation:")
             logging.getLogger(__name__).info(f"   Balance=${balance:.2f}")
             logging.getLogger(__name__).info(f"   Risk={risk_percent}% => Risk Amount=${risk_amount:.2f}")
+            logging.getLogger(__name__).info(f"   Max Loss Pips={max_loss_pips}")
             logging.getLogger(__name__).info(f"   Pip Value=${pip_value:.2f}/lot")
+            logging.getLogger(__name__).info(f"   Risk Pip Value=${pip_value_for_risk:.2f} ({max_loss_pips} pips)")
             logging.getLogger(__name__).info(f"   Calculated Lot={calculated_lot:.4f}")
             logging.getLogger(__name__).info(f"   Final Lot={final_lot:.4f}")
+            logging.getLogger(__name__).info(f"   ✅ If move {max_loss_pips} pips → Loss = ${final_lot * pip_value * max_loss_pips:.2f} ({risk_percent}% of balance)")
             
             return final_lot
             
         except Exception as e:
-            logging.getLogger(__name__).error(f"Error calculating simple lot from balance: {e}")
+            logging.getLogger(__name__).error(f"Error calculating proper risk lot from balance: {e}")
             return 0.01  # Minimum lot size
     
     @staticmethod
@@ -615,14 +622,17 @@ class TradingCalculations:
                 lot_sizes = {}
                 
                 for symbol in triangle_symbols:
-                    # 🎯 สูตรง่ายๆ: Lot Size = Risk Amount ÷ Pip Value
-                    # คำนวณ pip value สำหรับ 1.0 lot
+                    # 🎯 สูตร Risk Management ที่ถูกต้อง
+                    # Lot Size = Risk Amount ÷ (Pip Value × Max Loss Pips)
                     pip_value_per_1lot = TradingCalculations.calculate_pip_value(symbol, 1.0, broker_api)
+                    max_loss_pips = 100  # Default 100 pips risk
                     
                     if pip_value_per_1lot > 0:
-                        # คำนวณ lot size โดยตรง
-                        # Lot Size = Risk per Pair ÷ Pip Value (1.0 lot)
-                        lot_size = risk_per_pair / pip_value_per_1lot
+                        # คำนวณ pip value สำหรับ max_loss_pips
+                        pip_value_for_risk = pip_value_per_1lot * max_loss_pips
+                        
+                        # คำนวณ lot size
+                        lot_size = risk_per_pair / pip_value_for_risk
                         
                         # Round to valid lot size
                         lot_size = TradingCalculations.round_to_valid_lot_size(lot_size)
@@ -630,7 +640,8 @@ class TradingCalculations:
                         # จำกัดขนาด lot
                         lot_size = max(0.01, min(lot_size, 5.0))
                         
-                        logging.getLogger(__name__).info(f"🔍 {symbol}: Risk=${risk_per_pair:.2f}, Pip Value=${pip_value_per_1lot:.2f}, Lot={lot_size:.4f}")
+                        logging.getLogger(__name__).info(f"🔍 {symbol}: Risk=${risk_per_pair:.2f}, Pip Value=${pip_value_per_1lot:.2f}, Max Loss={max_loss_pips} pips, Lot={lot_size:.4f}")
+                        logging.getLogger(__name__).info(f"   ✅ If move {max_loss_pips} pips → Loss = ${lot_size * pip_value_per_1lot * max_loss_pips:.2f}")
                     else:
                         lot_size = 0.01  # Minimum fallback
                         logging.getLogger(__name__).warning(f"⚠️ {symbol}: Cannot calculate pip value, using minimum lot")

@@ -131,9 +131,9 @@ class AccountTierManager:
             tier_config = self.get_tier_config(tier_name)
             risk_percent = tier_config.get('risk_per_trade_percent', 1.5)
             
-            # 🎯 สูตรง่ายๆ อิงจาก Balance และ Pip Value
+            # 🎯 สูตร Risk Management ที่ถูกต้อง
             # Risk Amount = Balance × (Risk% ÷ 100)
-            # Lot Size = Risk Amount ÷ Pip Value
+            # Lot Size = Risk Amount ÷ (Pip Value × Max Loss Pips)
             
             # คำนวณ Risk Amount
             risk_amount = balance * (risk_percent / 100.0)
@@ -143,8 +143,10 @@ class AccountTierManager:
                 risk_amount = risk_amount / 3.0
             
             # คำนวณ Lot Size
+            max_loss_pips = 100  # Default 100 pips risk
             if pip_value > 0:
-                lot_size = risk_amount / pip_value
+                pip_value_for_risk = pip_value * max_loss_pips
+                lot_size = risk_amount / pip_value_for_risk
             else:
                 lot_size = 0.01
             
