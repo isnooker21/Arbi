@@ -382,6 +382,7 @@ class SettingsWindow:
         
         # Get current value
         current_value = self.get_nested_value(self.settings, param_path)
+        
         if current_value is None:
             if param_type == "float":
                 current_value = 0.0
@@ -461,6 +462,7 @@ class SettingsWindow:
         elif param_type == "int" or param_type == "float":
             # Number entry with custom style
             var = tk.StringVar(value=str(current_value))
+            
             entry = tk.Entry(
                 input_frame,
                 textvariable=var,
@@ -668,8 +670,12 @@ class SettingsWindow:
             for param_path, var in self.parameter_vars.items():
                 current_value = self.get_nested_value(self.settings, param_path)
                 if current_value is not None:
+                    # บังคับให้อัปเดต GUI variable
                     var.set(str(current_value))
-                    print(f"🔄 Refreshed {param_path}: {current_value}")
+                    
+                    # เฉพาะ Risk per Trade ให้แสดง log
+                    if 'risk_per_trade_percent' in param_path:
+                        print(f"🎯 Refreshed Risk per Trade: {current_value}")
             
             print("✅ GUI values refreshed successfully")
             

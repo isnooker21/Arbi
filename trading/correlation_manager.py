@@ -299,6 +299,11 @@ class CorrelationManager:
             self.use_risk_based_sizing = lot_calc.get('use_risk_based_sizing', True)
             self.risk_per_trade_percent = lot_calc.get('risk_per_trade_percent', 1.5)
             
+            # 🔍 Debug log สำหรับการตรวจสอบ
+            self.logger.info(f"🔍 CorrelationManager Config Loaded:")
+            self.logger.info(f"   risk_per_trade_percent: {self.risk_per_trade_percent}%")
+            self.logger.info(f"   use_risk_based_sizing: {self.use_risk_based_sizing}")
+            
             # ตั้งค่า recovery thresholds จาก config (% based)
             self.recovery_thresholds = {
                 'min_correlation': correlation_thresholds.get('min_correlation', 0.6),
