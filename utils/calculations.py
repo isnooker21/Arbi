@@ -564,7 +564,7 @@ class TradingCalculations:
             return min_lot
     
     @staticmethod
-    def get_uniform_triangle_lots(triangle_symbols: List[str], balance: float, target_pip_value: float = 10.0, broker_api=None, use_simple_mode: bool = False, use_risk_based_sizing: bool = False, risk_per_trade_percent: float = 1.0) -> Dict[str, float]:
+    def get_uniform_triangle_lots(triangle_symbols: List[str], balance: float, target_pip_value: float = 10.0, broker_api=None, use_simple_mode: bool = False, use_risk_based_sizing: bool = False, risk_per_trade_percent: float = None) -> Dict[str, float]:
         """คำนวณ lot sizes ให้ pip value เท่ากัน + scale ตาม balance (ใช้ค่าจาก config)"""
         try:
             if not triangle_symbols or len(triangle_symbols) != 3:
@@ -573,9 +573,13 @@ class TradingCalculations:
             if balance <= 0:
                 return {}
             
+            # ⭐ ตรวจสอบว่ามี risk_per_trade_percent หรือไม่
+            if risk_per_trade_percent is None:
+                logging.getLogger(__name__).error("❌ risk_per_trade_percent is required - must be set in GUI Settings")
+                return {}
+            
             # ใช้ค่าที่ส่งมาแทนการโหลดจาก config (เพื่อความแน่นอน)
             use_risk_based = use_risk_based_sizing  # ใช้ค่าที่ส่งมา
-            # risk_per_trade_percent ใช้ค่าที่ส่งมาแล้ว
             
             # ===== โหมดที่ 1: Risk-Based Sizing (ง่ายที่สุด - แนะนำ!) =====
             if use_risk_based:

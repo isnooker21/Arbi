@@ -717,7 +717,11 @@ class MainWindow:
                 group_id = self._get_group_from_magic(magic)
                 
                 # Calculate additional data
-                risk_percent = correlation_manager._calculate_risk_per_lot(pos)
+                balance = correlation_manager.broker.get_account_balance()
+                if balance:
+                    loss_percent_of_balance = abs(pnl) / balance
+                else:
+                    loss_percent_of_balance = 0
                 price_distance = correlation_manager._calculate_price_distance(pos)
                 is_hedged = correlation_manager._is_position_hedged(pos, group_id)
                 
@@ -725,7 +729,7 @@ class MainWindow:
                     'symbol': symbol,
                     'order_id': order_id,
                     'pnl': pnl,
-                    'risk_percent': risk_percent,
+                    'loss_percent_of_balance': loss_percent_of_balance,
                     'price_distance': price_distance,
                     'is_hedged': is_hedged
                 }

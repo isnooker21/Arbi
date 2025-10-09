@@ -416,7 +416,11 @@ class TriangleArbitrageDetector:
             from utils.config_helper import load_config
             config = load_config('adaptive_params.json')
             lot_calc_config = config.get('position_sizing', {}).get('lot_calculation', {})
-            risk_per_trade_percent = float(lot_calc_config.get('risk_per_trade_percent', 1.0))
+            risk_per_trade_percent = lot_calc_config.get('risk_per_trade_percent')
+            if risk_per_trade_percent is None:
+                self.logger.error("❌ risk_per_trade_percent not found in config - must be set in GUI Settings")
+                return
+            risk_per_trade_percent = float(risk_per_trade_percent)
             
             self.logger.info(f"💰 [Closed Triangles] Using Risk per Trade: {risk_per_trade_percent}% from GUI config")
             
@@ -466,7 +470,11 @@ class TriangleArbitrageDetector:
             from utils.config_helper import load_config
             config = load_config('adaptive_params.json')
             lot_calc_config = config.get('position_sizing', {}).get('lot_calculation', {})
-            risk_per_trade_percent = float(lot_calc_config.get('risk_per_trade_percent', 1.0))
+            risk_per_trade_percent = lot_calc_config.get('risk_per_trade_percent')
+            if risk_per_trade_percent is None:
+                self.logger.error("❌ risk_per_trade_percent not found in config - must be set in GUI Settings")
+                return
+            risk_per_trade_percent = float(risk_per_trade_percent)
             
             self.logger.info(f"💰 [Simple Orders] Using Risk per Trade: {risk_per_trade_percent}% from GUI config")
             
@@ -657,7 +665,11 @@ class TriangleArbitrageDetector:
             self.lot_calc_config = lot_calc_config
             use_simple_mode = lot_calc_config.get('use_simple_mode', False)
             use_risk_based_sizing = lot_calc_config.get('use_risk_based_sizing', True)
-            risk_per_trade_percent = lot_calc_config.get('risk_per_trade_percent', 1.0)
+            risk_per_trade_percent = lot_calc_config.get('risk_per_trade_percent')
+            if risk_per_trade_percent is None:
+                self.logger.error("❌ risk_per_trade_percent not found in config - must be set in GUI Settings")
+                return
+            risk_per_trade_percent = float(risk_per_trade_percent)
 
             # ใช้ lot_sizes ที่ส่งมา หรือคำนวณใหม่ถ้าไม่มี
             if lot_sizes is None:

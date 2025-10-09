@@ -297,7 +297,9 @@ class CorrelationManager:
             
             # ⭐ โหลด risk_per_trade_percent สำหรับการคำนวณ lot อัตโนมัติ
             self.use_risk_based_sizing = lot_calc.get('use_risk_based_sizing', True)
-            self.risk_per_trade_percent = lot_calc.get('risk_per_trade_percent', 1.0)
+            self.risk_per_trade_percent = lot_calc.get('risk_per_trade_percent')
+            if self.risk_per_trade_percent is None:
+                raise ValueError("❌ risk_per_trade_percent not found in config - must be set in GUI Settings")
             
             
             # ตั้งค่า recovery thresholds จาก config (% based)
@@ -419,9 +421,8 @@ class CorrelationManager:
     
     def _set_fallback_config(self):
         """ตั้งค่า fallback เมื่อไม่สามารถโหลด config ได้ (% based)"""
-        # ⭐ ตั้งค่า risk-based sizing (fallback)
-        self.use_risk_based_sizing = True
-        self.risk_per_trade_percent = 1.0
+        # ⭐ ไม่มี fallback - ต้องมี config
+        raise ValueError("❌ Cannot initialize without config - GUI Settings required")
         
         self.recovery_thresholds = {
             'min_correlation': 0.6,      # ความสัมพันธ์ขั้นต่ำ 60%
@@ -659,7 +660,11 @@ class CorrelationManager:
                     continue
                 
                 # ตรวจสอบเงื่อนไขการแก้ไม้
-                risk_per_lot = self._calculate_risk_per_lot(pos)
+                # คำนวณ loss percent ของ balance
+                balance = self.broker.get_account_balance()
+                if not balance:
+                    continue
+                loss_percent_of_balance = abs(pnl) / balance
                 price_distance = self._calculate_price_distance(pos)
                 
                 # ผ่านเงื่อนไข Distance ≥ 10 pips
@@ -669,7 +674,7 @@ class CorrelationManager:
                         'symbol': symbol,
                         'order_id': order_id,
                         'pnl': pnl,
-                        'risk_per_lot': risk_per_lot,
+                        'loss_percent_of_balance': loss_percent_of_balance,
                         'price_distance': price_distance,
                         'score': abs(pnl) * (price_distance / 10)  # คะแนนรวม (เอา Risk ออก)
                     })
@@ -1284,12 +1289,17 @@ class CorrelationManager:
                 return
             
             # ตรวจสอบเงื่อนไขการแก้ไม้
-            risk_per_lot = self._calculate_risk_per_lot(losing_pair)
+            # คำนวณ loss percent ของ balance
+            balance = self.broker.get_account_balance()
+            if not balance:
+                self.logger.error("❌ Cannot get account balance from MT5 - skipping hedge check")
+                return
+            loss_percent_of_balance = abs(pnl) / balance
             price_distance = self._calculate_price_distance(losing_pair)
             
             self.logger.debug(f"🔍 Checking hedging conditions for {symbol} (Order: {order_id}):")
             self.logger.info(f"   PnL: ${pnl:.2f} (LOSS)")
-            self.logger.info(f"   Risk: {risk_per_lot:.2%} (info only)")
+            self.logger.info(f"   Loss: {loss_percent_of_balance:.2%} of balance")
             self.logger.info(f"   Distance: {price_distance:.1f} pips (need ≥10) {'✅' if price_distance >= 10 else '❌'}")
             
             # แสดงข้อมูลการคำนวณให้ชัดเจน
