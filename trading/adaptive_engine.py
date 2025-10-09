@@ -246,18 +246,20 @@ class AdaptiveEngine:
             # Get account balance real-time
             balance = self.broker.get_account_balance()
             if not balance:
-                self.logger.warning("Cannot get account balance - using default position sizing")
+                self.logger.error("❌ Cannot get account balance from MT5 - skipping position sizing update")
                 return
             
             # Get account equity for more accurate sizing
             equity = self.broker.get_account_equity()
             if not equity:
-                equity = balance
+                self.logger.error("❌ Cannot get account equity from MT5 - skipping position sizing update")
+                return
             
             # Get free margin
             free_margin = self.broker.get_free_margin()
             if not free_margin:
-                free_margin = balance * 0.9  # Assume 90% of balance is available
+                self.logger.error("❌ Cannot get free margin from MT5 - skipping position sizing update")
+                return
             
             # self.logger.info(f"💰 Account Status - Balance: {balance:.2f}, Equity: {equity:.2f}, Free Margin: {free_margin:.2f}")  # DISABLED - too verbose
             

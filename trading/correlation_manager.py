@@ -1489,7 +1489,7 @@ class CorrelationManager:
             # ดึง balance จาก broker
             balance = self.broker.get_account_balance()
             if not balance or balance <= 0:
-                self.logger.warning("Cannot get account balance - using fallback lot size")
+                self.logger.error("❌ Cannot get account balance from MT5 - skipping hedge calculation")
                 return max(0.01, min(original_lot, 0.5))
             
             # ⭐ ใช้ Risk-Based Sizing (แนะนำ!)
@@ -3251,7 +3251,10 @@ class CorrelationManager:
                     self.logger.debug(f"❌ {symbol} (Ticket: {ticket}): Chain depth {chain_depth} >= {max_chain_depth}")
                     return False
                 
-                balance = self.broker.get_account_balance() or 10000
+                balance = self.broker.get_account_balance()
+                if not balance:
+                    self.logger.error("❌ Cannot get account balance from MT5 - skipping chain recovery check")
+                    return False
                 loss_percent = profit / balance
                 min_chain_percent = self.recovery_thresholds.get('min_loss_percent_for_chain', -0.004)
                 
@@ -3276,7 +3279,10 @@ class CorrelationManager:
                 return False
             
             # 💡 Percentage-based loss check (ใช้ค่าจาก config)
-            balance = self.broker.get_account_balance() or 10000
+            balance = self.broker.get_account_balance()
+            if not balance:
+                self.logger.error("❌ Cannot get account balance from MT5 - skipping recovery check")
+                return False
             loss_percent = profit / balance
             min_loss_percent = self.recovery_thresholds.get('min_loss_percent', -0.005)
             

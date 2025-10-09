@@ -406,11 +406,11 @@ class TriangleArbitrageDetector:
     def _send_orders_for_closed_triangles(self, closed_triangles: List[str]):
         """ส่งออเดอร์ใหม่สำหรับ triangles ที่ปิดแล้ว"""
         try:
-            # ดึง balance จาก broker
+            # ดึง balance จาก broker - บังคับให้ได้จาก MT5 เท่านั้น
             balance = self.broker.get_account_balance()
             if not balance:
-                self.logger.error("❌ Cannot get account balance - using default lot size")
-                balance = 10000  # Fallback balance
+                self.logger.error("❌ Cannot get account balance from MT5 - skipping order")
+                return
             
             # ⭐ โหลดค่า risk_per_trade_percent จาก config ทุกครั้ง
             from utils.config_helper import load_config
@@ -456,11 +456,11 @@ class TriangleArbitrageDetector:
     def _send_simple_orders(self):
         """ส่งออเดอร์ง่ายๆ สำหรับทุกสามเหลี่ยม arbitrage - ใช้ balance-based lot sizing"""
         try:
-            # ดึง balance จาก broker
+            # ดึง balance จาก broker - บังคับให้ได้จาก MT5 เท่านั้น
             balance = self.broker.get_account_balance()
             if not balance:
-                self.logger.error("❌ Cannot get account balance - using default lot size")
-                balance = 10000  # Fallback balance
+                self.logger.error("❌ Cannot get account balance from MT5 - skipping order")
+                return
             
             # ⭐ โหลดค่า risk_per_trade_percent จาก config ทุกครั้ง
             from utils.config_helper import load_config

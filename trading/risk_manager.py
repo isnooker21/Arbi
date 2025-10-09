@@ -453,11 +453,11 @@ class RiskManager:
                 if balance is not None:
                     return balance
             
-            # Fallback to stored balance
-            return getattr(self, 'account_balance', 10000.0)
+            # ไม่มี fallback - ต้องได้จาก broker เท่านั้น
+            return None
         except Exception as e:
             self.logger.error(f"Error getting account balance: {e}")
-            return getattr(self, 'account_balance', 10000.0)
+            return None
     
     def update_account_balance(self, balance: float):
         """อัปเดตยอดเงินในบัญชี"""
