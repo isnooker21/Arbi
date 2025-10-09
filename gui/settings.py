@@ -383,6 +383,15 @@ class SettingsWindow:
         # Get current value
         current_value = self.get_nested_value(self.settings, param_path)
         
+        # 🔧 แก้ไขพิเศษสำหรับ Risk per Trade
+        if 'risk_per_trade_percent' in param_path:
+            # บังคับให้เป็น float และแสดงเป็น string
+            if current_value is None:
+                current_value = 1.0
+            else:
+                current_value = float(current_value)
+            param_type = "float"  # บังคับให้เป็น float
+        
         if current_value is None:
             if param_type == "float":
                 current_value = 0.0
@@ -393,7 +402,7 @@ class SettingsWindow:
             else:
                 current_value = 0.0
         
-        if param_type == "bool" and 'risk_per_trade_percent' not in param_path:
+        if param_type == "bool":
             # Boolean checkbox with custom style (ยกเว้น Risk per Trade)
             var = tk.BooleanVar(value=current_value)
             cb = tk.Checkbutton(
@@ -459,7 +468,7 @@ class SettingsWindow:
                 )
                 entry.pack(side='left', padx=5, pady=2, ipady=3)
         
-        elif param_type == "int" or param_type == "float" or 'risk_per_trade_percent' in param_path:
+        elif param_type == "int" or param_type == "float":
             # Number entry with custom style (บังคับให้ Risk per Trade ใช้ String variable)
             var = tk.StringVar(value=str(current_value))
             
@@ -654,8 +663,8 @@ class SettingsWindow:
             # 🔄 Refresh GUI ให้แสดงค่าใหม่
             self.refresh_gui_values()
             
-            # ไม่ปิดหน้าต่าง ให้ผู้ใช้เห็นการเปลี่ยนแปลง
-            # self.settings_window.destroy()
+            # ปิดหน้าต่างหลังบันทึกสำเร็จ
+            self.settings_window.destroy()
             
         except Exception as e:
             messagebox.showerror("❌ Error", f"ไม่สามารถบันทึกได้: {str(e)}")
