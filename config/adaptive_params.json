@@ -82,7 +82,7 @@
     "lot_calculation": {
       "use_simple_mode": false,
       "use_risk_based_sizing": true,
-      "risk_per_trade_percent": 1.5,
+      "risk_per_trade_percent": 0.1,
       "description": "Risk-Based Sizing: ใช้ risk_per_trade คำนวณ lot อัตโนมัติทั้งหมด - ไม่ใช้ Stop Loss, Recovery Mode เท่านั้น"
     },
     "risk_management": {
