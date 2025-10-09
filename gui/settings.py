@@ -548,9 +548,31 @@ class SettingsWindow:
                 
                 self.set_nested_value(self.settings, param_path, value)
             
-            # Save to file
-            if not save_config('adaptive_params.json', self.settings):
-                raise Exception("ไม่สามารถบันทึกไฟล์ config ได้")
+            # Save to file - บังคับให้ save ไปที่ path เดียวกับ load
+            import os
+            config_file_path = os.path.join('config', 'adaptive_params.json')
+            
+            # ตรวจสอบว่าไฟล์มีอยู่หรือไม่
+            if not os.path.exists(config_file_path):
+                raise Exception(f"ไม่พบไฟล์ config: {config_file_path}")
+            
+            # บันทึกไฟล์โดยตรง
+            import json
+            with open(config_file_path, 'w', encoding='utf-8') as f:
+                json.dump(self.settings, f, indent=2, ensure_ascii=False)
+            
+            print(f"✅ Config saved directly to: {config_file_path}")
+            
+            # ตรวจสอบว่าไฟล์ถูกบันทึกจริงหรือไม่
+            import time
+            time.sleep(0.1)  # รอสักครู่
+            
+            if os.path.exists(config_file_path):
+                # อ่านไฟล์ที่บันทึกแล้วเพื่อตรวจสอบ
+                with open(config_file_path, 'r', encoding='utf-8') as f:
+                    saved_config = json.load(f)
+                    saved_risk = saved_config.get('position_sizing', {}).get('lot_calculation', {}).get('risk_per_trade_percent')
+                    print(f"🔍 Saved risk value: {saved_risk}")
             
             # 🆕 Auto Reload Config (ไม่ต้อง Restart!)
             reload_success = False
@@ -559,24 +581,27 @@ class SettingsWindow:
                     # Reload correlation_manager config
                     if hasattr(self.trading_system, 'correlation_manager') and self.trading_system.correlation_manager:
                         self.trading_system.correlation_manager.reload_config()
+                        print("✅ Correlation Manager config reloaded")
                     
                     # Reload arbitrage_detector config
                     if hasattr(self.trading_system, 'arbitrage_detector') and self.trading_system.arbitrage_detector:
                         self.trading_system.arbitrage_detector.reload_config()
+                        print("✅ Arbitrage Detector config reloaded")
                     
                     reload_success = True
                 except Exception as e:
+                    print(f"❌ Reload error: {e}")
                     messagebox.showwarning("⚠️ Warning", f"บันทึกสำเร็จ แต่ reload ไม่ได้: {str(e)}\n\nกรุณา Restart ระบบ")
             
             if reload_success:
                 messagebox.showinfo(
                     "✅ สำเร็จ", 
-                    "บันทึกและโหลดค่าใหม่เรียบร้อยแล้ว!\n\n✅ ค่าใหม่ทำงานทันที ไม่ต้อง Restart!"
+                    f"บันทึกและโหลดค่าใหม่เรียบร้อยแล้ว!\n\n✅ ค่าใหม่ทำงานทันที ไม่ต้อง Restart!\n\nRisk per Trade: {saved_risk}%"
                 )
             else:
                 messagebox.showinfo(
                     "✅ สำเร็จ", 
-                    "บันทึกการตั้งค่าเรียบร้อยแล้ว!\n\n⚠️ กรุณา Restart ระบบเพื่อใช้งานค่าใหม่"
+                    f"บันทึกการตั้งค่าเรียบร้อยแล้ว!\n\n⚠️ กรุณา Restart ระบบเพื่อใช้งานค่าใหม่\n\nRisk per Trade: {saved_risk}%"
                 )
             
             self.settings_window.destroy()
