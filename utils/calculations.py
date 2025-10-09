@@ -364,24 +364,7 @@ class TradingCalculations:
         except Exception:
             return {}
     
-    @staticmethod
-    def calculate_position_size(account_balance: float, risk_percent: float, 
-                              stop_loss_pips: float, pip_value: float) -> float:
-        """Calculate position size based on risk management"""
-        try:
-            if account_balance <= 0 or risk_percent <= 0 or stop_loss_pips <= 0 or pip_value <= 0:
-                return 0.0
-            
-            # Calculate risk amount
-            risk_amount = account_balance * (risk_percent / 100)
-            
-            # Calculate position size
-            position_size = risk_amount / (stop_loss_pips * pip_value)
-            
-            return position_size
-            
-        except Exception:
-            return 0.0
+    # ฟังก์ชันนี้ถูกลบออกแล้ว - ใช้ calculate_lot_from_balance แทน
     
     @staticmethod
     def calculate_pip_value(symbol: str, lot_size: float = 0.01, broker_api=None, account_currency: str = "USD") -> float:
@@ -660,16 +643,7 @@ class TradingCalculations:
             logging.getLogger(__name__).error(f"Error calculating uniform triangle lots: {e}")
             return {}
     
-    @staticmethod
-    def get_triangle_lot_sizes(triangle_symbols: List[str], balance: float, risk_percent: float = 1.0, broker_api=None) -> Dict[str, float]:
-        """Calculate lot sizes for triangle arbitrage based on balance (legacy method)"""
-        # ใช้ uniform method แทน (ส่ง risk_percent ไปด้วย)
-        return TradingCalculations.get_uniform_triangle_lots(
-            triangle_symbols, balance, 10.0, broker_api, 
-            use_simple_mode=False, 
-            use_risk_based_sizing=True, 
-            risk_per_trade_percent=risk_percent
-        )
+    # ฟังก์ชันนี้ถูกลบออกแล้ว - ใช้ get_uniform_triangle_lots แทน
     
     @staticmethod
     def calculate_drawdown(equity_curve: List[float]) -> Tuple[float, float, float]:
