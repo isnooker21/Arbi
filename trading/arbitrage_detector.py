@@ -617,30 +617,19 @@ class TriangleArbitrageDetector:
             use_risk_based_sizing = lot_calc_config.get('use_risk_based_sizing', True)
             risk_per_trade_percent = lot_calc_config.get('risk_per_trade_percent', 1.0)
 
-            self.logger.info(f"🔍 DEBUG: Arbitrage Detector - Config for Lot Calc (REAL-TIME):")
-            self.logger.info(f"   use_simple_mode={use_simple_mode}")
-            self.logger.info(f"   use_risk_based_sizing={use_risk_based_sizing}")
-            self.logger.info(f"   risk_per_trade_percent={risk_per_trade_percent}")
-            self.logger.info(f"   Current Balance: ${balance}")
-
-            # ⭐ ใช้ Risk per Trade จาก GUI เท่านั้น (ไม่ใช้ Account Tier Manager)
+            # ⭐ ใช้ Risk per Trade จาก GUI เท่านั้น
             triangle_symbols = list(triangle)
-            
-            # 🎯 ใช้ค่าจาก GUI เป็นหลัก
-            risk_percent = risk_per_trade_percent  # ใช้ค่าจาก GUI โดยตรง
-            self.logger.info(f"🎯 Using GUI Risk per Trade: {risk_percent}% (NO Account Tier)")
+            risk_percent = risk_per_trade_percent
             
             lot_sizes = TradingCalculations.get_uniform_triangle_lots(
                 triangle_symbols=triangle_symbols,
                 balance=balance,
-                target_pip_value=5.0,  # $5 pip value base
+                target_pip_value=10.0,  # $10 pip value base (EURUSD standard)
                 broker_api=self.broker,
                 use_simple_mode=False,
                 use_risk_based_sizing=True,
                 risk_per_trade_percent=risk_percent  # ใช้ค่าจาก GUI
             )
-            self.logger.info(f"🔍 DEBUG: Arbitrage Detector - Calculated Lot Sizes: {lot_sizes}")
-            
             self.logger.info(f"📊 {triangle_name} lot sizes: {lot_sizes}")
             
             # สร้างกลุ่มใหม่สำหรับสามเหลี่ยมนี้

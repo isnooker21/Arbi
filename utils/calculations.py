@@ -594,12 +594,6 @@ class TradingCalculations:
             use_risk_based = use_risk_based_sizing  # ใช้ค่าที่ส่งมา
             # risk_per_trade_percent ใช้ค่าที่ส่งมาแล้ว
             
-            logging.getLogger(__name__).info(f"🔍 DEBUG: Calculations - Inside get_uniform_triangle_lots")
-            logging.getLogger(__name__).info(f"   use_simple_mode={use_simple_mode}")
-            logging.getLogger(__name__).info(f"   use_risk_based={use_risk_based}")
-            logging.getLogger(__name__).info(f"   risk_per_trade_percent={risk_per_trade_percent}")
-            logging.getLogger(__name__).info(f"   balance=${balance}")
-            
             # ===== โหมดที่ 1: Risk-Based Sizing (ง่ายที่สุด - แนะนำ!) =====
             if use_risk_based:
                 # คำนวณ lot size จาก risk โดยตรง (ใช้ Risk ทั้งหมด ไม่แบ่ง 3 คู่)
@@ -610,11 +604,6 @@ class TradingCalculations:
                 # ใช้ Max Loss Pips = 100 (จาก GUI) แทน Stop Loss
                 max_loss_pips = 100.0  # ใช้ค่าจาก GUI
                 
-                logging.getLogger(__name__).info(f"🔍 DEBUG: RISK-BASED MODE CALCULATION (GUI Risk):")
-                logging.getLogger(__name__).info(f"   Balance=${balance:.2f}")
-                logging.getLogger(__name__).info(f"   Risk={risk_per_trade_percent}% (${risk_amount:.2f})")
-                logging.getLogger(__name__).info(f"   Max Loss Pips: {max_loss_pips}")
-                logging.getLogger(__name__).info(f"   Using FULL Risk Amount (NOT divided by 3)")
                 
                 lot_sizes = {}
                 
@@ -637,8 +626,6 @@ class TradingCalculations:
                         # จำกัดขนาด lot
                         lot_size = max(0.01, min(lot_size, 5.0))
                         
-                        logging.getLogger(__name__).info(f"🔍 {symbol}: Risk=${risk_amount:.2f}, Pip Value=${pip_value_per_1lot:.2f}, Max Loss={max_loss_pips} pips, Lot={lot_size:.4f}")
-                        logging.getLogger(__name__).info(f"   ✅ If move {max_loss_pips} pips → Loss = ${lot_size * pip_value_per_1lot * max_loss_pips:.2f} ({risk_per_trade_percent}% of balance)")
                     else:
                         lot_size = 0.01  # Minimum fallback
                         logging.getLogger(__name__).warning(f"⚠️ {symbol}: Cannot calculate pip value, using minimum lot")
@@ -647,41 +634,23 @@ class TradingCalculations:
                 
                 return lot_sizes
             
-            # ===== โหมดที่ 2 & 3: Simple หรือ Tier-based =====
-            # ใช้ค่า fallback เนื่องจากไม่ได้ส่ง config มา
-            base_lot_size = 0.01
-            lot_multiplier = 1.0
-            
-            # คำนวณ balance multiplier (base $10K = 1.0x)
-            base_balance = 10000.0
-            balance_multiplier = balance / base_balance
-            
-            # คำนวณ target pip value ตาม balance
-            scaled_pip_value = target_pip_value * balance_multiplier
-            
-            logging.getLogger(__name__).info(f"💰 Uniform lot calculation: Balance=${balance:.2f}, Multiplier={balance_multiplier:.2f}x, Target Pip Value=${scaled_pip_value:.2f}")
+            # ===== ใช้ Risk-Based Mode เท่านั้น =====
+            # คำนวณ lot size จาก risk โดยตรง
+            risk_amount = balance * (risk_per_trade_percent / 100.0)
+            max_loss_pips = 100.0
             
             lot_sizes = {}
             
             for symbol in triangle_symbols:
-                # คำนวณ pip value ต่อ 0.01 lot
-                pip_value_per_001 = TradingCalculations.calculate_pip_value(symbol, 0.01, broker_api)
+                pip_value_per_1lot = TradingCalculations.calculate_pip_value(symbol, 1.0, broker_api)
                 
-                # คำนวณ lot size ที่ให้ pip value ตาม target
-                if pip_value_per_001 > 0:
-                    lot_size = (scaled_pip_value / pip_value_per_001) * 0.01
+                if pip_value_per_1lot > 0:
+                    pip_value_for_risk = pip_value_per_1lot * max_loss_pips
+                    lot_size = risk_amount / pip_value_for_risk
+                    lot_size = TradingCalculations.round_to_valid_lot_size(lot_size)
+                    lot_size = max(0.01, min(lot_size, 5.0))
                 else:
-                    lot_size = base_lot_size  # Fallback
-                
-                # Round to valid lot size (0.01 step)
-                lot_size = TradingCalculations.round_to_valid_lot_size(lot_size)
-                
-                # ใช้ lot ขั้นต่ำจาก config
-                if lot_size < base_lot_size:
-                    lot_size = base_lot_size
-                    logging.getLogger(__name__).info(f"📊 {symbol}: Lot size adjusted to minimum: {lot_size:.2f}")
-                else:
-                    logging.getLogger(__name__).info(f"📊 {symbol}: Using calculated lot size: {lot_size:.4f}")
+                    lot_size = 0.01
                 
                 lot_sizes[symbol] = lot_size
             

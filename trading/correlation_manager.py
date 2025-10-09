@@ -299,11 +299,6 @@ class CorrelationManager:
             self.use_risk_based_sizing = lot_calc.get('use_risk_based_sizing', True)
             self.risk_per_trade_percent = lot_calc.get('risk_per_trade_percent', 1.0)
             
-            # 🔍 Debug log สำหรับการตรวจสอบ
-            self.logger.info(f"🔍 CorrelationManager Config Loaded:")
-            self.logger.info(f"   risk_per_trade_percent: {self.risk_per_trade_percent}%")
-            self.logger.info(f"   use_risk_based_sizing: {self.use_risk_based_sizing}")
-            self.logger.info(f"   max_loss_pips: {lot_calc.get('max_loss_pips', 100)}")
             
             # ตั้งค่า recovery thresholds จาก config (% based)
             self.recovery_thresholds = {
@@ -1499,7 +1494,6 @@ class CorrelationManager:
             
             # ⭐ ใช้ Risk-Based Sizing (แนะนำ!)
             if self.use_risk_based_sizing and hedge_symbol:
-                self.logger.info(f"⭐ Using Risk-Based Lot Calculation (risk_per_trade={self.risk_per_trade_percent}%)")
                 
                 # คำนวณ lot จาก balance และ risk percent
                 # ใช้ TradingCalculations.calculate_lot_from_balance()
@@ -1529,8 +1523,6 @@ class CorrelationManager:
                 
                 self.logger.info(f"💰 Risk-Based Calculation:")
                 self.logger.info(f"   Balance: ${balance:.2f}")
-                self.logger.info(f"   Risk Per Trade: {self.risk_per_trade_percent}%")
-                self.logger.info(f"   Risk Amount: ${balance * (self.risk_per_trade_percent / 100):.2f}")
                 self.logger.info(f"   Correlation Adj: {abs(correlation):.3f}")
                 self.logger.info(f"   Final Hedge Lot: {hedge_lot:.4f}")
                 
