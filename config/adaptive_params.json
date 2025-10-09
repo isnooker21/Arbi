@@ -39,12 +39,12 @@
       "use_simple_mode": false,
       "use_risk_based_sizing": true,
       "risk_per_trade_percent": 1.0,
-      "max_loss_pips": 100,
+      "max_loss_pips": 100.0,
       "description": "Risk-Based Sizing: ใช้ risk_per_trade คำนวณ lot อัตโนมัติทั้งหมด - Risk Management แบบถูกต้อง"
     },
     "risk_management": {
       "max_portfolio_risk": 8.0,
-      "max_concurrent_groups": 4,
+      "max_concurrent_groups": 4.0,
       "correlation_limit": 0.8,
       "description": "Risk management parameters - no cut loss, recovery only, optimized for small accounts"
     }
@@ -58,7 +58,7 @@
     },
     "loss_thresholds": {
       "min_loss_percent": -0.005,
-      "min_price_distance_pips": 10,
+      "min_price_distance_pips": 10.0,
       "recovery_target": 0.0,
       "use_percentage_based": true,
       "description": "0.5% of balance AND 10 pips distance triggers recovery"
@@ -66,8 +66,8 @@
     "timing": {
       "max_recovery_time_hours": 24,
       "recovery_check_interval_seconds": 10,
-      "cooldown_between_checks": 10,
-      "min_position_age_seconds": 60,
+      "cooldown_between_checks": 10.0,
+      "min_position_age_seconds": 60.0,
       "rebalancing_frequency_hours": 6,
       "description": "Wait 60s and 10 pips before recovery"
     },
@@ -84,21 +84,21 @@
     },
     "trend_analysis": {
       "enabled": true,
-      "periods": 50,
+      "periods": 50.0,
       "confidence_threshold": 0.4,
       "use_for_direction": true,
       "enable_chain_on_low_confidence": true,
       "description": "Trend analysis for smart direction selection. Enable chain if confidence < 40%"
     },
     "diversification": {
-      "max_usage_per_symbol": 3,
+      "max_usage_per_symbol": 3.0,
       "enforce_limit": true,
       "description": "Max 3 times per symbol"
     },
     "chain_recovery": {
       "enabled": true,
       "mode": "conditional",
-      "max_chain_depth": 5,
+      "max_chain_depth": 5.0,
       "min_loss_percent_for_chain": -0.01,
       "only_when_trend_uncertain": true,
       "description": "Conditional chain recovery: enabled only when trend confidence < 40% or as safety net"
@@ -121,7 +121,7 @@
       "enabled": true,
       "register_on_startup": true,
       "register_on_new_orders": true,
-      "sync_interval_seconds": 30,
+      "sync_interval_seconds": 30.0,
       "description": "Auto register orders for tracking"
     },
     "smart_recovery_flow": {
@@ -145,9 +145,9 @@
       "execution_timeout_ms": 1000
     },
     "triangles": {
-      "max_active_triangles": 4,
-      "triangle_hold_time_minutes": 120,
-      "correlation_check_interval": 60
+      "max_active_triangles": 4.0,
+      "triangle_hold_time_minutes": 120.0,
+      "correlation_check_interval": 60.0
     },
     "closing": {
       "enable_net_pnl_check": true,

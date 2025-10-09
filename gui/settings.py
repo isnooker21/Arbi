@@ -571,9 +571,11 @@ class SettingsWindow:
                 elif isinstance(value, str):
                     if value.lower() in ['true', 'false', '1', '0']:
                         value = value.lower() in ['true', '1']
-                    elif '.' not in value and value.lstrip('-').isdigit():
-                        value = int(value)
                     elif value.replace('.', '', 1).replace('-', '', 1).isdigit():
+                        # แปลงเป็น float เสมอสำหรับตัวเลข
+                        value = float(value)
+                    elif '.' not in value and value.lstrip('-').isdigit():
+                        # ถ้าเป็น integer ให้แปลงเป็น float
                         value = float(value)
                 
                 # ตรวจสอบว่าเป็น risk_per_trade_percent หรือไม่
