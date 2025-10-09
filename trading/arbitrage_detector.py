@@ -143,8 +143,7 @@ class TriangleArbitrageDetector:
             'triangle_6': 234006   # AUDUSD(SELL), NZDUSD(SELL), AUDNZD ✅
         }
         
-        # ใช้ lot size ปกติ 0.1 สำหรับทุกคู่เงิน
-        self.standard_lot_size = 0.1
+        # ⭐ ไม่ใช้ standard_lot_size แล้ว - ใช้ risk-based calculation เท่านั้น
         
         # ⭐ เพิ่ม Account Tier Manager
         # Removed AccountTierManager - using GUI Risk per Trade only
@@ -571,7 +570,7 @@ class TriangleArbitrageDetector:
                     mt5_groups[group_id]['positions'].append({
                         'symbol': symbol,
                         'order_id': pos.get('ticket'),
-                        'lot_size': pos.get('volume', 0.1),
+                        'lot_size': pos.get('volume'),
                         'entry_price': pos.get('price', 0.0),
                         'direction': pos.get('type', 'BUY'),
                         'comment': comment,
@@ -723,7 +722,7 @@ class TriangleArbitrageDetector:
                     'direction': direction,
                     'group_id': group_id,
                     'index': i,
-                    'lot_size': lot_sizes.get(symbol, 0.01)
+                    'lot_size': lot_sizes.get(symbol)
                 })
             
             # ส่งออเดอร์พร้อมกันด้วย threading
@@ -744,7 +743,10 @@ class TriangleArbitrageDetector:
                     comment = f"G{triangle_number}_{order_data['symbol']}"
                     
                     # ใช้ lot size ที่คำนวณแล้ว
-                    lot_size = order_data.get('lot_size', 0.01)
+                    lot_size = order_data.get('lot_size')
+                    if lot_size is None:
+                        self.logger.error(f"❌ No lot_size in order_data - skipping {order_data['symbol']}")
+                        return None
                     
                     # ใช้ magic number สำหรับสามเหลี่ยมนี้
                     magic_number = self.triangle_magic_numbers.get(triangle_name, 234000)
@@ -836,7 +838,10 @@ class TriangleArbitrageDetector:
                         entry_price = 0.0
                     
                     # ใช้ lot_size ที่คำนวณแล้ว
-                    lot_size = lot_sizes.get(result['symbol'], 0.01)
+                    lot_size = lot_sizes.get(result['symbol'])
+                    if lot_size is None:
+                        self.logger.error(f"❌ No lot_size for {result['symbol']} - skipping")
+                        continue
                     
                     group_data['positions'].append({
                         'symbol': result['symbol'],
@@ -904,10 +909,13 @@ class TriangleArbitrageDetector:
             
             # ใช้ lot_size ที่คำนวณจาก Risk-Based Mode
             if lot_sizes:
-                lot_size = lot_sizes.get(symbol, 0.01)
+                lot_size = lot_sizes.get(symbol)
+                if lot_size is None:
+                    self.logger.error(f"❌ No lot_size for {symbol} - skipping arbitrage order")
+                    return False
             else:
-                # Fallback: ใช้ค่า default
-                lot_size = 0.01
+                self.logger.error(f"❌ No lot_sizes provided - skipping arbitrage order for {symbol}")
+                return False
             
             result = self.broker.place_order(
                 symbol=symbol,
@@ -1102,7 +1110,7 @@ class TriangleArbitrageDetector:
                 return False
             
             # คำนวณ risk per lot
-            total_lot_size = sum(pos.get('volume', 0.1) for pos in group_positions)
+            total_lot_size = sum(pos.get('volume', 0) for pos in group_positions)
             if total_lot_size <= 0:
                 return False
                 
@@ -1156,7 +1164,7 @@ class TriangleArbitrageDetector:
                     losing_pairs.append({
                         'symbol': pos.get('symbol', ''),
                         'order_id': pos.get('ticket', ''),
-                        'lot_size': pos.get('volume', 0.1),
+                        'lot_size': pos.get('volume'),
                         'entry_price': pos.get('price', 0),
                         'pnl': pos.get('profit', 0),
                         'comment': pos.get('comment', ''),
