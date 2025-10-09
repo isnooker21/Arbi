@@ -412,6 +412,14 @@ class TriangleArbitrageDetector:
                 self.logger.error("❌ Cannot get account balance - using default lot size")
                 balance = 10000  # Fallback balance
             
+            # ⭐ โหลดค่า risk_per_trade_percent จาก config ทุกครั้ง
+            from utils.config_helper import load_config
+            config = load_config('adaptive_params.json')
+            lot_calc_config = config.get('position_sizing', {}).get('lot_calculation', {})
+            risk_per_trade_percent = float(lot_calc_config.get('risk_per_trade_percent', 1.0))
+            
+            self.logger.info(f"💰 [Closed Triangles] Using Risk per Trade: {risk_per_trade_percent}% from GUI config")
+            
             for triangle_name in closed_triangles:
                 # ตรวจสอบว่าสามเหลี่ยมนี้ถูก pause หรือไม่
                 if self.is_arbitrage_paused.get(triangle_name, False):
@@ -426,7 +434,7 @@ class TriangleArbitrageDetector:
                     # ส่งออเดอร์สำหรับสามเหลี่ยมนี้
                     self.logger.info(f"🚀 Sending new orders for {triangle_name}: {triangle}")
                     
-                    # คำนวณ lot_sizes ก่อน
+                    # คำนวณ lot_sizes ก่อน (ใช้ค่าจาก GUI)
                     triangle_symbols = list(triangle)
                     lot_sizes = TradingCalculations.get_uniform_triangle_lots(
                         triangle_symbols=triangle_symbols,
@@ -435,7 +443,7 @@ class TriangleArbitrageDetector:
                         broker_api=self.broker,
                         use_simple_mode=False,
                         use_risk_based_sizing=True,
-                        risk_per_trade_percent=1.0  # ใช้ค่าจาก GUI
+                        risk_per_trade_percent=risk_per_trade_percent  # ⭐ ใช้ค่าจาก GUI config
                     )
                     
                     self._send_orders_for_triangle(triangle, triangle_name, balance, lot_sizes)
@@ -453,6 +461,14 @@ class TriangleArbitrageDetector:
             if not balance:
                 self.logger.error("❌ Cannot get account balance - using default lot size")
                 balance = 10000  # Fallback balance
+            
+            # ⭐ โหลดค่า risk_per_trade_percent จาก config ทุกครั้ง
+            from utils.config_helper import load_config
+            config = load_config('adaptive_params.json')
+            lot_calc_config = config.get('position_sizing', {}).get('lot_calculation', {})
+            risk_per_trade_percent = float(lot_calc_config.get('risk_per_trade_percent', 1.0))
+            
+            self.logger.info(f"💰 [Simple Orders] Using Risk per Trade: {risk_per_trade_percent}% from GUI config")
             
             # ตรวจสอบไม้จาก MT5 ก่อน
             all_positions = self.broker.get_all_positions()
@@ -491,7 +507,7 @@ class TriangleArbitrageDetector:
                 # ส่งออเดอร์สำหรับสามเหลี่ยมนี้
                 self.logger.info(f"🚀 Sending orders for {triangle_name}: {triangle}")
                 
-                # คำนวณ lot_sizes ก่อน
+                # คำนวณ lot_sizes ก่อน (ใช้ค่าจาก GUI)
                 triangle_symbols = list(triangle)
                 lot_sizes = TradingCalculations.get_uniform_triangle_lots(
                     triangle_symbols=triangle_symbols,
@@ -500,7 +516,7 @@ class TriangleArbitrageDetector:
                     broker_api=self.broker,
                     use_simple_mode=False,
                     use_risk_based_sizing=True,
-                    risk_per_trade_percent=1.0  # ใช้ค่าจาก GUI
+                    risk_per_trade_percent=risk_per_trade_percent  # ⭐ ใช้ค่าจาก GUI config
                 )
                 
                 self._send_orders_for_triangle(triangle, triangle_name, balance, lot_sizes)
