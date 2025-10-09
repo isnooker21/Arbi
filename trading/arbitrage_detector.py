@@ -333,9 +333,13 @@ class TriangleArbitrageDetector:
                             # Individual order tracker handles cleanup automatically via sync
                             self.logger.info(f"🔄 Reset hedge tracker for {group_id}:{symbol}")
                     
-                    del self.active_groups[group_id]
-                    self._save_active_groups()
-                    self._reset_group_data_after_close(group_id)
+                    # ตรวจสอบว่า group_id มีอยู่จริงก่อนลบ
+                    if group_id in self.active_groups:
+                        del self.active_groups[group_id]
+                        self._save_active_groups()
+                        self._reset_group_data_after_close(group_id)
+                    else:
+                        self.logger.warning(f"⚠️ Group {group_id} not found in active_groups - already removed")
                 
                 # ตรวจสอบ triangles ที่ปิดแล้วและส่งไม้ใหม่
                 closed_triangles = []
