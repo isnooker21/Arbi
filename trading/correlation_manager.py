@@ -1396,8 +1396,7 @@ class CorrelationManager:
                 max_loss_pips=100.0
             )
             
-            # ปรับตาม correlation
-            hedge_lot = hedge_lot * abs(correlation)
+            # ⭐ ไม่ปรับตาม correlation - ใช้ lot size ที่คำนวณจาก risk เท่านั้น
             
             # Round to valid lot size
             hedge_lot = TradingCalculations.round_to_valid_lot_size(hedge_lot)
@@ -1538,7 +1537,7 @@ class CorrelationManager:
                 if key in self.recovery_thresholds:
                     self.recovery_thresholds[key] = value
                     self.logger.info(f"Updated recovery_thresholds[{key}] to {value}")
-                elif key in ['account_balance', 'account_equity', 'free_margin', 'target_pip_value', 'balance_multiplier']:
+                elif key in ['account_balance', 'account_equity', 'free_margin']:
                     # เก็บข้อมูลบัญชีไว้ใน attribute แยก
                     setattr(self, key, value)
                     self.logger.debug(f"Updated {key} to {value}")

@@ -79,34 +79,25 @@ class AdaptiveEngine:
             'max_position_size': 10.0,
             'risk_per_trade': 0.02,  # 2% risk per trade
             'max_portfolio_risk': 0.1,  # 10% max portfolio risk
-            'account_tiers': {
-                'small': {'min_balance': 5000, 'max_balance': 10000, 'lot_multiplier': 1.0},
-                'medium': {'min_balance': 10000, 'max_balance': 50000, 'lot_multiplier': 1.5},
-                'large': {'min_balance': 50000, 'max_balance': 100000, 'lot_multiplier': 2.0},
-                'premium': {'min_balance': 100000, 'max_balance': float('inf'), 'lot_multiplier': 3.0}
-            }
+            # ⭐ ลบ account_tiers ที่มี lot_multiplier - ไม่ใช้ในการคำนวณ lot
         }
         
-        # Market regime parameters
+        # Market regime parameters - ลบ position_size_multiplier
         self.regime_parameters = {
             'volatile': {
                 'arbitrage_threshold': 0.002,
-                'position_size_multiplier': 0.8,
                 'recovery_aggressiveness': 0.6
             },
             'trending': {
                 'arbitrage_threshold': 0.0015,
-                'position_size_multiplier': 1.2,
                 'recovery_aggressiveness': 0.8
             },
             'ranging': {
                 'arbitrage_threshold': 0.0008,
-                'position_size_multiplier': 1.0,
                 'recovery_aggressiveness': 0.7
             },
             'normal': {
                 'arbitrage_threshold': 0.001,
-                'position_size_multiplier': 1.0,
                 'recovery_aggressiveness': 0.7
             }
         }
@@ -263,34 +254,8 @@ class AdaptiveEngine:
             
             # self.logger.info(f"💰 Account Status - Balance: {balance:.2f}, Equity: {equity:.2f}, Free Margin: {free_margin:.2f}")  # DISABLED - too verbose
             
-            # Calculate balance multiplier for uniform pip value (reduced for lower risk)
-            base_balance = 10000.0
-            balance_multiplier = balance / base_balance
-            target_pip_value = 5.0 * balance_multiplier  # Reduced from 10.0 to 5.0
-            
-            # self.logger.info(f"📊 Uniform pip value: Base=${10.0:.2f}, Multiplier={balance_multiplier:.2f}x, Target=${target_pip_value:.2f}")  # DISABLED - too verbose
-            
-            # Update arbitrage detector with balance information
-            if hasattr(self.arbitrage_detector, 'update_adaptive_parameters'):
-                self.arbitrage_detector.update_adaptive_parameters({
-                    'account_balance': balance,
-                    'account_equity': equity,
-                    'free_margin': free_margin,
-                    'target_pip_value': target_pip_value,
-                    'balance_multiplier': balance_multiplier
-                })
-            
-            # Update correlation manager with balance information
-            if hasattr(self.correlation_manager, 'update_recovery_parameters'):
-                self.correlation_manager.update_recovery_parameters({
-                    'account_balance': balance,
-                    'account_equity': equity,
-                    'free_margin': free_margin,
-                    'target_pip_value': target_pip_value,
-                    'balance_multiplier': balance_multiplier
-                })
-            
-            # self.logger.info(f"📊 Position sizing updated: Balance=${balance:.2f}, Target Pip Value=${target_pip_value:.2f}")  # DISABLED - too verbose
+            # ⭐ ไม่ส่งผลต่อการคำนวณ lot - ใช้แค่ risk_per_trade_percent จาก config เท่านั้น
+            # ลบ balance_multiplier และ target_pip_value ที่อาจส่งผลต่อ lot size
             
         except Exception as e:
             self.logger.error(f"Error updating position sizing: {e}")

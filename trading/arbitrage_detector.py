@@ -1340,8 +1340,8 @@ class TriangleArbitrageDetector:
             if not balance or balance <= 0:
                 balance = 10000.0  # Fallback
             
-            balance_multiplier = balance / self.min_profit_base_balance
-            min_profit_threshold = self.min_profit_base * balance_multiplier
+            # ⭐ ใช้ min_profit_base ตรงๆ ไม่คูณด้วย balance_multiplier
+            min_profit_threshold = self.min_profit_base
             
             self.logger.debug(f"💰 {group_id}: Balance=${balance:.2f}, Min Profit=${min_profit_threshold:.2f} (Base $10 @ $10K)")
             
@@ -2646,8 +2646,8 @@ class TriangleArbitrageDetector:
             if not balance or balance <= 0:
                 balance = 10000.0
             
-            balance_multiplier = balance / self.min_profit_base_balance
-            min_profit_target = self.min_profit_base * balance_multiplier
+            # ⭐ ใช้ min_profit_base ตรงๆ ไม่คูณด้วย balance_multiplier
+            min_profit_target = self.min_profit_base
             
             # Get Trailing Stop Status
             trailing_active = False
