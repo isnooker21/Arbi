@@ -416,35 +416,32 @@ class TradingCalculations:
             return pip_value
             
         except Exception as e:
-            logging.getLogger(__name__).error(f"Error calculating pip value for {symbol}: {e}")
-            # Fallback: ใช้ค่า default
-            return 100000 * lot_size * 0.0001
+            logging.getLogger(__name__).error(f"❌ Error calculating pip value for {symbol}: {e}")
+            # ⚠️ ใช้ fallback สำหรับ major pairs เท่านั้น
+            # สำหรับ USD pairs: 1 lot = $10/pip
+            if 'USD' in symbol.upper():
+                pip_value_1lot = 10.0
+                return pip_value_1lot * lot_size
+            else:
+                # Cross pairs: ประมาณ $13/pip for 1 lot
+                pip_value_1lot = 13.0
+                return pip_value_1lot * lot_size
     
     
     @staticmethod
     def get_exchange_rate(symbol: str, broker_api) -> float:
-        """ดึงอัตราแลกเปลี่ยนจาก broker หรือใช้ fallback"""
+        """ดึงอัตราแลกเปลี่ยนจาก broker - บังคับให้ใช้จาก MT5 เท่านั้น"""
         try:
             if broker_api and hasattr(broker_api, 'get_current_price'):
-                try:
-                    price_data = broker_api.get_current_price(symbol)
-                    if price_data and isinstance(price_data, (int, float)) and price_data > 0:
-                        return float(price_data)
-                except:
-                    pass
-            
-            # Fallback rates (approximate)
-            fallback_rates = {
-                'EURUSD': 1.10,
-                'GBPUSD': 1.27, 
-                'AUDUSD': 0.67,
-                'NZDUSD': 0.62,
-                'USDJPY': 149.50,
-                'USDCAD': 1.35,
-                'USDCHF': 0.92
-            }
-            
-            return fallback_rates.get(symbol, 1.0)
+                price_data = broker_api.get_current_price(symbol)
+                if price_data and isinstance(price_data, (int, float)) and price_data > 0:
+                    return float(price_data)
+                else:
+                    logging.getLogger(__name__).error(f"❌ Cannot get price for {symbol} from MT5")
+                    return 0.0  # ส่งกลับ 0 เพื่อให้เห็นว่ามีปัญหา
+            else:
+                logging.getLogger(__name__).error(f"❌ No broker_api available for {symbol}")
+                return 0.0
             
         except Exception as e:
             logging.getLogger(__name__).error(f"Error getting exchange rate for {symbol}: {e}")
