@@ -606,19 +606,18 @@ class TriangleArbitrageDetector:
         try:
             self.logger.info(f"🔍 Processing {triangle_name}: {triangle}")
             
-            # ใช้ cached config (โหลดจาก reload_config)
-            if not hasattr(self, 'lot_calc_config'):
-                # Fallback: โหลด config ครั้งแรก
-                from utils.config_helper import load_config
-                config = load_config('adaptive_params.json')
-                self.lot_calc_config = config.get('position_sizing', {}).get('lot_calculation', {})
+            # โหลด config ใหม่ทุกครั้งเพื่อให้ได้ค่าล่าสุด
+            from utils.config_helper import load_config
+            config = load_config('adaptive_params.json')
+            lot_calc_config = config.get('position_sizing', {}).get('lot_calculation', {})
             
-            lot_calc_config = self.lot_calc_config
+            # อัปเดต cached config
+            self.lot_calc_config = lot_calc_config
             use_simple_mode = lot_calc_config.get('use_simple_mode', False)
             use_risk_based_sizing = lot_calc_config.get('use_risk_based_sizing', True)
             risk_per_trade_percent = lot_calc_config.get('risk_per_trade_percent', 1.5)
 
-            self.logger.info(f"🔍 DEBUG: Arbitrage Detector - Config for Lot Calc (CACHED):")
+            self.logger.info(f"🔍 DEBUG: Arbitrage Detector - Config for Lot Calc (REAL-TIME):")
             self.logger.info(f"   use_simple_mode={use_simple_mode}")
             self.logger.info(f"   use_risk_based_sizing={use_risk_based_sizing}")
             self.logger.info(f"   risk_per_trade_percent={risk_per_trade_percent}")

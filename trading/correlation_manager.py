@@ -303,6 +303,7 @@ class CorrelationManager:
             self.logger.info(f"🔍 CorrelationManager Config Loaded:")
             self.logger.info(f"   risk_per_trade_percent: {self.risk_per_trade_percent}%")
             self.logger.info(f"   use_risk_based_sizing: {self.use_risk_based_sizing}")
+            self.logger.info(f"   max_loss_pips: {lot_calc.get('max_loss_pips', 100)}")
             
             # ตั้งค่า recovery thresholds จาก config (% based)
             self.recovery_thresholds = {
