@@ -407,157 +407,106 @@ class TriangleArbitrageDetector:
         self.logger.info("🛑 Simple trading system stopped")
     
     def _send_orders_for_closed_triangles(self, closed_triangles: List[str]):
-        """ส่งออเดอร์ใหม่สำหรับ triangles ที่ปิดแล้ว"""
+        """⭐ ฟังก์ชันใหม่ - ใช้แค่สูตรใหม่เท่านั้น"""
+        for triangle_name in closed_triangles:
+            if self.is_arbitrage_paused.get(triangle_name, False):
+                continue
+            triangle_index = int(triangle_name.split('_')[-1]) - 1
+            if triangle_index < len(self.triangle_combinations):
+                triangle = self.triangle_combinations[triangle_index]
+                self._execute_new_triangle_orders(triangle, triangle_name)
+    
+    def _execute_new_triangle_orders(self, triangle, triangle_name):
+        """⭐ Method ใหม่ - ใช้แค่สูตรใหม่เท่านั้น"""
         try:
-            # ดึง balance จาก broker - บังคับให้ได้จาก MT5 เท่านั้น
+            # ดึง balance จาก MT5
             balance = self.broker.get_account_balance()
             if not balance:
-                self.logger.error("❌ Cannot get account balance from MT5 - skipping order")
+                self.logger.error("❌ Cannot get balance from MT5")
                 return
             
-            # ⭐ โหลดค่า risk_per_trade_percent จาก config ทุกครั้ง
+            # โหลด risk_per_trade_percent จาก config
             from utils.config_helper import load_config
             config = load_config('adaptive_params.json')
-            lot_calc_config = config.get('position_sizing', {}).get('lot_calculation', {})
-            risk_per_trade_percent = lot_calc_config.get('risk_per_trade_percent')
-            if risk_per_trade_percent is None:
-                self.logger.error("❌ risk_per_trade_percent not found in config - must be set in GUI Settings")
+            risk_per_trade_percent = config.get('position_sizing', {}).get('lot_calculation', {}).get('risk_per_trade_percent')
+            if not risk_per_trade_percent:
+                self.logger.error("❌ risk_per_trade_percent not found in config")
                 return
+            
             risk_per_trade_percent = float(risk_per_trade_percent)
+            max_loss_pips = 100.0
             
-            self.logger.info(f"💰 [Closed Triangles] Using Risk per Trade: {risk_per_trade_percent}% from GUI config")
+            # สูตร: Risk Amount = Balance × (Risk% ÷ 100)
+            risk_amount = balance * (risk_per_trade_percent / 100.0)
             
-            for triangle_name in closed_triangles:
-                # ตรวจสอบว่าสามเหลี่ยมนี้ถูก pause หรือไม่
-                if self.is_arbitrage_paused.get(triangle_name, False):
-                    self.logger.info(f"⏸️ {triangle_name} is paused - skipping")
-                    continue
+            self.logger.info(f"💰 {triangle_name}: Balance=${balance:,.2f}, Risk={risk_per_trade_percent}%, Risk Amount=${risk_amount:.2f}")
+            
+            # คำนวณ lot สำหรับแต่ละคู่
+            triangle_symbols = list(triangle)
+            lot_sizes = {}
+            
+            for symbol in triangle_symbols:
+                pip_value = TradingCalculations.calculate_pip_value(symbol, 1.0, self.broker)
+                if pip_value <= 0:
+                    self.logger.error(f"❌ Invalid pip value for {symbol}")
+                    return
                 
-                # หา triangle combination
-                triangle_index = int(triangle_name.split('_')[-1]) - 1
-                if triangle_index < len(self.triangle_combinations):
-                    triangle = self.triangle_combinations[triangle_index]
-                    
-                    # ส่งออเดอร์สำหรับสามเหลี่ยมนี้
-                    self.logger.info(f"🚀 Sending new orders for {triangle_name}: {triangle}")
-                    
-                    # ⭐ คำนวณ lot แบบใหม่ - ง่ายและชัดเจน
-                    triangle_symbols = list(triangle)
-                    
-                    # สูตร: Risk Amount = Balance × (Risk% ÷ 100)
-                    risk_amount = balance * (risk_per_trade_percent / 100.0)
-                    max_loss_pips = 100.0
-                    
-                    self.logger.info(f"💰 Calculating lots: Balance=${balance:,.2f}, Risk={risk_per_trade_percent}%, Risk Amount=${risk_amount:.2f}")
-                    
-                    # คำนวณ lot สำหรับแต่ละคู่
-                    lot_sizes = {}
-                    for symbol in triangle_symbols:
-                        # คำนวณ pip value สำหรับ 1 lot
-                        pip_value = TradingCalculations.calculate_pip_value(symbol, 1.0, self.broker)
-                        if pip_value <= 0:
-                            self.logger.error(f"❌ Invalid pip value for {symbol}")
-                            return
-                        
-                        # สูตร: Lot = Risk Amount ÷ (Pip Value × Max Loss Pips)
-                        lot_size = risk_amount / (pip_value * max_loss_pips)
-                        lot_size = max(0.01, round(lot_size, 2))  # ปัดเป็น 0.01
-                        
-                        lot_sizes[symbol] = lot_size
-                        self.logger.info(f"   {symbol}: pip_value=${pip_value:.2f}, lot={lot_size:.2f}")
-                    
-                    self._send_orders_for_triangle(triangle, triangle_name, balance, lot_sizes)
-                else:
-                    self.logger.warning(f"⚠️ Invalid triangle index for {triangle_name}")
+                # สูตร: Lot = Risk Amount ÷ (Pip Value × Max Loss Pips)
+                lot_size = risk_amount / (pip_value * max_loss_pips)
+                lot_size = max(0.01, round(lot_size, 2))
                 
+                lot_sizes[symbol] = lot_size
+                self.logger.info(f"   {symbol}: pip_value=${pip_value:.2f}, lot={lot_size:.2f}")
+            
+            # ส่งออเดอร์
+            self._send_new_triangle_orders(triangle, triangle_name, lot_sizes)
+            
         except Exception as e:
-            self.logger.error(f"Error in _send_orders_for_closed_triangles: {e}")
+            self.logger.error(f"Error in _execute_new_triangle_orders: {e}")
+    
+    def _send_new_triangle_orders(self, triangle, triangle_name, lot_sizes):
+        """⭐ ส่งออเดอร์ใหม่ - ใช้แค่ lot_sizes ที่คำนวณแล้ว"""
+        try:
+            triangle_symbols = list(triangle)
+            triangle_magic = self.triangle_magic_numbers.get(triangle_name, 234000)
+            
+            self.logger.info(f"🚀 Sending orders for {triangle_name}: {triangle_symbols}")
+            
+            # ส่งออเดอร์สำหรับแต่ละคู่
+            for i, symbol in enumerate(triangle_symbols):
+                direction = 'BUY' if i == 0 else 'SELL'
+                lot_size = lot_sizes.get(symbol, 0.01)
+                
+                order_data = {
+                    'symbol': symbol,
+                    'direction': direction,
+                    'volume': lot_size,
+                    'magic': triangle_magic,
+                    'comment': f"{triangle_name}_{symbol}"
+                }
+                
+                # ส่งออเดอร์
+                result = self.broker.send_order(order_data)
+                if result:
+                    self.logger.info(f"✅ {triangle_name} {symbol} {direction} {lot_size} lots - SUCCESS")
+                else:
+                    self.logger.error(f"❌ {triangle_name} {symbol} {direction} {lot_size} lots - FAILED")
+                    
+        except Exception as e:
+            self.logger.error(f"Error in _send_new_triangle_orders: {e}")
     
     def _send_simple_orders(self):
-        """ส่งออเดอร์ง่ายๆ สำหรับทุกสามเหลี่ยม arbitrage - ใช้ balance-based lot sizing"""
+        """⭐ ฟังก์ชันใหม่ - ใช้แค่สูตรใหม่เท่านั้น"""
         try:
-            # ดึง balance จาก broker - บังคับให้ได้จาก MT5 เท่านั้น
-            balance = self.broker.get_account_balance()
-            if not balance:
-                self.logger.error("❌ Cannot get account balance from MT5 - skipping order")
-                return
-            
-            # ⭐ โหลดค่า risk_per_trade_percent จาก config ทุกครั้ง
-            from utils.config_helper import load_config
-            config = load_config('adaptive_params.json')
-            lot_calc_config = config.get('position_sizing', {}).get('lot_calculation', {})
-            risk_per_trade_percent = lot_calc_config.get('risk_per_trade_percent')
-            if risk_per_trade_percent is None:
-                self.logger.error("❌ risk_per_trade_percent not found in config - must be set in GUI Settings")
-                return
-            risk_per_trade_percent = float(risk_per_trade_percent)
-            
-            self.logger.info(f"💰 [Simple Orders] Using Risk per Trade: {risk_per_trade_percent}% from GUI config")
-            
-            # ตรวจสอบไม้จาก MT5 ก่อน
             all_positions = self.broker.get_all_positions()
+            arbitrage_positions = [pos for pos in all_positions if 234001 <= pos.get('magic', 0) <= 234006]
             
-            # ตรวจสอบว่ามีไม้ arbitrage อยู่หรือไม่ (ใช้ magic number)
-            arbitrage_positions = []
-            for pos in all_positions:
-                magic = pos.get('magic', 0)
-                if 234001 <= magic <= 234006:
-                    arbitrage_positions.append(pos)
-            
-            # ซิงค์ข้อมูลจาก MT5 กับ memory
-            self._sync_active_groups_from_mt5(arbitrage_positions)
-            
-            # ตรวจสอบแต่ละสามเหลี่ยมว่าสามารถส่งออเดอร์ได้หรือไม่
-            for i, triangle in enumerate(self.triangle_combinations, 1):
-                triangle_name = f"triangle_{i}"
-                
-                # ตรวจสอบว่าสามเหลี่ยมนี้ถูก pause หรือไม่
-                if self.is_arbitrage_paused.get(triangle_name, False):
-                    continue
-                
-                # ตรวจสอบว่ามีไม้ arbitrage สำหรับสามเหลี่ยมนี้อยู่แล้วหรือไม่ใน MT5 (ใช้ magic number)
-                has_arbitrage_positions = False
-                triangle_magic = self.triangle_magic_numbers.get(triangle_name, 234000)
-                
-                for pos in arbitrage_positions:
-                    magic = pos.get('magic', 0)
-                    if magic == triangle_magic:
-                        has_arbitrage_positions = True
-                        break
-                
-                if has_arbitrage_positions:
-                    continue  # ข้ามไปสามเหลี่ยมถัดไป
-                
-                # ส่งออเดอร์สำหรับสามเหลี่ยมนี้
-                self.logger.info(f"🚀 Sending orders for {triangle_name}: {triangle}")
-                
-                # ⭐ คำนวณ lot แบบใหม่ - ง่ายและชัดเจน
-                triangle_symbols = list(triangle)
-                
-                # สูตร: Risk Amount = Balance × (Risk% ÷ 100)
-                risk_amount = balance * (risk_per_trade_percent / 100.0)
-                max_loss_pips = 100.0
-                
-                self.logger.info(f"💰 Calculating lots: Balance=${balance:,.2f}, Risk={risk_per_trade_percent}%, Risk Amount=${risk_amount:.2f}")
-                
-                # คำนวณ lot สำหรับแต่ละคู่
-                lot_sizes = {}
-                for symbol in triangle_symbols:
-                    # คำนวณ pip value สำหรับ 1 lot
-                    pip_value = TradingCalculations.calculate_pip_value(symbol, 1.0, self.broker)
-                    if pip_value <= 0:
-                        self.logger.error(f"❌ Invalid pip value for {symbol}")
-                        continue
-                    
-                    # สูตร: Lot = Risk Amount ÷ (Pip Value × Max Loss Pips)
-                    lot_size = risk_amount / (pip_value * max_loss_pips)
-                    lot_size = max(0.01, round(lot_size, 2))  # ปัดเป็น 0.01
-                    
-                    lot_sizes[symbol] = lot_size
-                    self.logger.info(f"   {symbol}: pip_value=${pip_value:.2f}, lot={lot_size:.2f}")
-                
-                self._send_orders_for_triangle(triangle, triangle_name, balance, lot_sizes)
-                
+            if not arbitrage_positions:
+                for i, triangle in enumerate(self.triangle_combinations):
+                    triangle_name = f"triangle_{i+1}"
+                    if not self.is_arbitrage_paused.get(triangle_name, False):
+                        self._execute_new_triangle_orders(triangle, triangle_name)
+                        
         except Exception as e:
             self.logger.error(f"Error in _send_simple_orders: {e}")
     
@@ -680,297 +629,7 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error reloading tier config: {e}")
     
-    def _send_orders_for_triangle(self, triangle, triangle_name, balance, lot_sizes=None):
-        """ส่งออเดอร์สำหรับสามเหลี่ยมเดียว"""
-        try:
-            self.logger.info(f"🔍 Processing {triangle_name}: {triangle}")
-            
-            # โหลด config ใหม่ทุกครั้งเพื่อให้ได้ค่าล่าสุด
-            from utils.config_helper import load_config
-            config = load_config('adaptive_params.json')
-            lot_calc_config = config.get('position_sizing', {}).get('lot_calculation', {})
-            
-            # อัปเดต cached config
-            self.lot_calc_config = lot_calc_config
-            use_simple_mode = lot_calc_config.get('use_simple_mode', False)
-            use_risk_based_sizing = lot_calc_config.get('use_risk_based_sizing', True)
-            risk_per_trade_percent = lot_calc_config.get('risk_per_trade_percent')
-            if risk_per_trade_percent is None:
-                self.logger.error("❌ risk_per_trade_percent not found in config - must be set in GUI Settings")
-                return
-            risk_per_trade_percent = float(risk_per_trade_percent)
-
-            # ⭐ ใช้ lot_sizes ที่ส่งมาเท่านั้น - ไม่คำนวณใหม่!
-            if lot_sizes is None:
-                self.logger.error(f"❌ No lot_sizes provided for {triangle_name} - cannot proceed")
-                return
-            
-            self.logger.info(f"📊 {triangle_name} using provided lot sizes: {lot_sizes}")
-            
-            # สร้างกลุ่มใหม่สำหรับสามเหลี่ยมนี้
-            self.group_counters[triangle_name] += 1
-            group_id = f"group_{triangle_name}_{self.group_counters[triangle_name]}"
-            self.logger.info(f"🆕 Creating new group: {group_id} for {triangle_name}")
-            
-            # สร้างข้อมูลกลุ่ม
-            group_data = {
-                'group_id': group_id,
-                'triangle': triangle,
-                'triangle_type': triangle_name,
-                'created_at': datetime.now(),
-                'positions': [],
-                'status': 'active',
-                'total_pnl': 0.0,
-                'recovery_chain': [],
-                'lot_sizes': lot_sizes  # เก็บ lot sizes ไว้ในกลุ่ม
-            }
-            
-            # ส่งออเดอร์ 3 คู่พร้อมกัน
-            self.logger.info("🔍 Preparing to send orders...")
-            orders_sent = 0
-            order_results = []
-            
-            # สร้างข้อมูลออเดอร์ทั้ง 3 คู่ พร้อม lot sizes (ใช้ triangle parameter)
-            orders_to_send = []
-            for i, symbol in enumerate(triangle):
-                # กำหนดทิศทางตามลำดับ: คู่แรก BUY, คู่ที่สอง SELL, คู่ที่สาม BUY
-                direction = 'BUY' if i % 2 == 0 else 'SELL'
-                orders_to_send.append({
-                    'symbol': symbol,
-                    'direction': direction,
-                    'group_id': group_id,
-                    'index': i,
-                    'lot_size': lot_sizes.get(symbol)
-                })
-            
-            # ส่งออเดอร์พร้อมกันด้วย threading
-            self.logger.info("🔍 Setting up threading for order execution...")
-            threads = []
-            results = [None] * 3
-            
-            def send_single_order(order_data, result_index):
-                """ส่งออเดอร์เดี่ยวใน thread แยก"""
-                try:
-                    self.logger.info(f"🔍 Thread {result_index}: Starting order for {order_data['symbol']}")
-                    
-                    # Note: Individual order tracker doesn't prevent duplicates at this level
-                    # Duplicate prevention is handled by the broker API and order execution
-                    
-                    # สร้าง comment ตามหมายเลขสามเหลี่ยม (1-6)
-                    triangle_number = triangle_name.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
-                    comment = f"G{triangle_number}_{order_data['symbol']}"
-                    
-                    # ใช้ lot size ที่คำนวณแล้ว
-                    lot_size = order_data.get('lot_size')
-                    if lot_size is None:
-                        self.logger.error(f"❌ No lot_size in order_data - skipping {order_data['symbol']}")
-                        return None
-                    
-                    # ใช้ magic number สำหรับสามเหลี่ยมนี้
-                    magic_number = self.triangle_magic_numbers.get(triangle_name, 234000)
-                    
-                    # 🆕 แปลง symbol ผ่าน mapper
-                    real_symbol = self.symbol_mapper.get_real_symbol(order_data['symbol'])
-                    
-                    self.logger.info(f"🔍 Thread {result_index}: Sending {order_data['symbol']} → {real_symbol} {order_data['direction']} {lot_size} lot (Magic: {magic_number})")
-                    result = self.broker.place_order(
-                        symbol=real_symbol,
-                        order_type=order_data['direction'],
-                        volume=lot_size,
-                        comment=comment,
-                        magic=magic_number
-                    )
-                    
-                    if result and result.get('retcode') == 10009:
-                        results[result_index] = {
-                            'success': True,
-                            'symbol': order_data['symbol'],
-                            'direction': order_data['direction'],
-                            'order_id': result.get('order_id'),
-                            'index': result_index
-                        }
-                        
-                        # Register original arbitrage order in individual order tracker
-                        if hasattr(self, 'correlation_manager') and self.correlation_manager:
-                            group_id = f"group_{triangle_name}_{self.group_counters[triangle_name]}"
-                            order_id = result.get('order_id')
-                            if order_id:
-                                success = self.correlation_manager.order_tracker.register_original_order(
-                                    str(order_id), order_data['symbol'], group_id
-                                )
-                                if success:
-                                    self.logger.info(f"✅ Original arbitrage order registered: {order_id}_{order_data['symbol']} in {group_id}")
-                                else:
-                                    self.logger.warning(f"⚠️ Failed to register original arbitrage order: {order_id}_{order_data['symbol']}")
-                    else:
-                        results[result_index] = {
-                            'success': False,
-                            'symbol': order_data['symbol'],
-                            'direction': order_data['direction'],
-                            'order_id': None,
-                            'index': result_index
-                        }
-                        
-                except Exception as e:
-                    self.logger.error(f"Error sending order for {order_data['symbol']}: {e}")
-                    results[result_index] = {
-                        'success': False,
-                        'symbol': order_data['symbol'],
-                        'direction': order_data['direction'],
-                        'order_id': None,
-                        'index': result_index,
-                        'error': str(e)
-                    }
-            
-            # เริ่มส่งออเดอร์พร้อมกัน
-            start_time = datetime.now()
-            self.logger.info("🔍 Starting order threads...")
-            for i, order_data in enumerate(orders_to_send):
-                thread = threading.Thread(
-                    target=send_single_order, 
-                    args=(order_data, i),
-                    daemon=True
-                )
-                threads.append(thread)
-                thread.start()
-            
-            # รอให้ออเดอร์ทั้งหมดเสร็จสิ้น
-            self.logger.info("🔍 Waiting for all threads to complete...")
-            for thread in threads:
-                thread.join(timeout=5.0)
-            
-            self.logger.info("🔍 All threads completed, processing results...")
-            
-            end_time = datetime.now()
-            total_execution_time = (end_time - start_time).total_seconds() * 1000
-            
-            # ตรวจสอบผลลัพธ์
-            for result in results:
-                if result and result.get('success') and result.get('order_id'):
-                    orders_sent += 1
-                    # 🆕 แปลง symbol ผ่าน mapper
-                    real_symbol = self.symbol_mapper.get_real_symbol(result['symbol'])
-                    # ดึงราคาปัจจุบันเป็น entry price
-                    entry_price = self.broker.get_current_price(real_symbol)
-                    if not entry_price:
-                        entry_price = 0.0
-                    
-                    # ใช้ lot_size ที่คำนวณแล้ว
-                    lot_size = lot_sizes.get(result['symbol'])
-                    if lot_size is None:
-                        self.logger.error(f"❌ No lot_size for {result['symbol']} - skipping")
-                        continue
-                    
-                    group_data['positions'].append({
-                        'symbol': result['symbol'],
-                        'direction': result['direction'],
-                        'lot_size': lot_size,
-                        'entry_price': entry_price,
-                        'status': 'active',
-                        'order_id': result.get('order_id'),
-                        'comment': f"G{group_id.split('_')[-1]}_{result['symbol']}"
-                    })
-                    self.logger.info(f"✅ Order sent: {result['symbol']} {result['direction']} {lot_size} lot")
-                elif result:
-                    self.logger.error(f"❌ Order failed: {result['symbol']} {result['direction']}")
-                    if 'error' in result:
-                        self.logger.error(f"   Error: {result['error']}")
-            
-            # ตรวจสอบว่าส่งออเดอร์สำเร็จครบ 3 คู่
-            if orders_sent == 3:
-                # เก็บ comment ใน used_currency_pairs เพื่อให้ reset ได้
-                triangle_number = triangle_name.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
-                for result in results:
-                    if result and result.get('success'):
-                        comment = f"G{triangle_number}_{result['symbol']}"
-                        # เก็บคู่เงินใน used_currency_pairs สำหรับสามเหลี่ยมนี้
-                        if triangle_name not in self.used_currency_pairs:
-                            self.used_currency_pairs[triangle_name] = set()
-                        self.used_currency_pairs[triangle_name].add(result['symbol'])
-                        self.logger.debug(f"💾 Added {result['symbol']} to used_currency_pairs[{triangle_name}]")
-                
-                self._update_group_data(group_id, group_data)
-                self.logger.info(f"✅ Group {group_id} created successfully")
-                self.logger.info(f"   🚀 Orders sent: {orders_sent}/3")
-                self.logger.info(f"   ⏱️ Execution time: {total_execution_time:.1f}ms")
-                self.logger.info("🔄 เริ่มใช้ระบบ Correlation Recovery")
-            else:
-                self.logger.error(f"❌ Failed to create group {group_id}")
-                self.logger.error(f"   Orders sent: {orders_sent}/3")
-                
-        except Exception as e:
-            self.logger.error(f"Error sending orders: {e}")
-    
-    def detect_opportunities(self):
-        """Legacy method - ไม่ใช้แล้ว ใช้ _send_simple_orders แทน"""
-        self.logger.debug("🔍 detect_opportunities called (legacy method - not used)")
-        return
-    
-    def _create_arbitrage_group(self, triangle: Tuple[str, str, str], opportunity: Dict) -> bool:
-        """Legacy method - ไม่ใช้แล้ว ใช้ _send_simple_orders แทน"""
-        self.logger.debug("🔍 _create_arbitrage_group called (legacy method - not used)")
-        return False
-    
-    def _send_arbitrage_order(self, symbol: str, direction: str, group_id: str, triangle_name: str = None, lot_sizes: dict = None) -> bool:
-        """ส่งออเดอร์ arbitrage"""
-        try:            
-            # สร้าง comment ที่แสดงกลุ่มและลำดับ
-            if triangle_name:
-                triangle_number = triangle_name.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
-            else:
-                # Fallback: ใช้ group_id
-                triangle_number = group_id.split('_')[-1]
-            comment = f"ARB_G{triangle_number}_{symbol}"
-            
-            # เริ่มส่งออเดอร์พร้อมกัน
-            start_time = datetime.now()
-            
-            # ใช้ lot_size ที่คำนวณจาก Risk-Based Mode
-            if lot_sizes:
-                lot_size = lot_sizes.get(symbol)
-                if lot_size is None:
-                    self.logger.error(f"❌ No lot_size for {symbol} - skipping arbitrage order")
-                    return False
-            else:
-                self.logger.error(f"❌ No lot_sizes provided - skipping arbitrage order for {symbol}")
-                return False
-            
-            result = self.broker.place_order(
-                symbol=symbol,
-                order_type=direction,
-                volume=lot_size,
-                comment=comment
-            )
-            
-            end_time = datetime.now()
-            execution_time = (end_time - start_time).total_seconds() * 1000  # milliseconds
-            
-            if result and result.get('retcode') == 10009:
-                self.logger.debug(f"✅ Order sent: {symbol} {direction} {lot_size} lot (took {execution_time:.1f}ms)")
-                
-                # Track ไม้ arbitrage ใน individual order tracker
-                if hasattr(self, 'correlation_manager') and self.correlation_manager:
-                    # Individual order tracker doesn't need locking - each order is tracked individually
-                    pass
-                
-                return {
-                    'success': True,
-                    'order_id': result.get('order_id'),
-                    'symbol': symbol,
-                    'direction': direction
-                }
-            else:
-                self.logger.error(f"❌ Order failed: {symbol} {direction} (took {execution_time:.1f}ms)")
-                return {
-                    'success': False,
-                    'order_id': None,
-                    'symbol': symbol,
-                    'direction': direction
-                }
-                
-        except Exception as e:
-            self.logger.error(f"Error sending arbitrage order: {e}")
-            return False
+    # ⭐ ฟังก์ชันเก่าถูกลบแล้ว - ใช้ _execute_new_triangle_orders และ _send_new_triangle_orders แทน
     
     def check_group_status(self):
         """ตรวจสอบสถานะของกลุ่มที่เปิดอยู่"""
