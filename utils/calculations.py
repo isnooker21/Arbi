@@ -496,38 +496,54 @@ class TradingCalculations:
     
     @staticmethod
     def calculate_lot_from_balance(balance: float, pip_value: float, risk_percent: float = 1.5, max_loss_pips: float = 0) -> float:
-        """Calculate lot size based on account balance using Risk-Based Sizing (No Stop Loss - Recovery Mode)"""
+        """
+        Calculate lot size based on account balance using Simple Risk-Based Sizing
+        
+        Args:
+            balance: Account balance in USD
+            pip_value: Pip value per 1.0 lot (e.g., $10 for EURUSD)
+            risk_percent: Risk percentage (e.g., 1.5 means 1.5%, NOT 0.015%)
+            
+        Returns:
+            float: Calculated lot size
+        """
         try:
-            if balance <= 0 or pip_value <= 0 or risk_percent <= 0:
+            if balance <= 0 or risk_percent <= 0 or pip_value <= 0:
                 return 0.01  # Minimum lot size
             
-            # ⭐ ใช้ Risk-Based Sizing แบบเดียวกับ triangle arbitrage
-            # ไม่ใช้ Stop Loss เพื่อให้ระบบ Recovery ทำงานได้
+            # 🎯 สูตรง่ายๆ อิงจาก Balance และ Pip Value
+            # Risk Amount = Balance × (Risk% ÷ 100)
+            # Lot Size = Risk Amount ÷ Pip Value
+            
+            # ตัวอย่าง:
+            # Balance = $10,000, Risk = 1% (ใส่ 1.0), Pip Value = $10
+            # Risk Amount = $10,000 × (1 ÷ 100) = $100
+            # Lot Size = $100 ÷ $10 = 10.0 lot
+            
+            # คำนวณ Risk Amount
             risk_amount = balance * (risk_percent / 100.0)
             
-            # คำนวณ lot size จาก risk โดยตรง (ไม่ใช้ SL)
-            # Risk Amount = Lot Size × Pip Value per 0.01 lot × 0.01
-            # Lot Size = Risk Amount / (Pip Value per 0.01 lot) × 0.01
-            theoretical_lot = (risk_amount / pip_value) * 0.01
-            
-            # Debug log
-            logging.getLogger(__name__).info(f"💰 Risk-Based Lot Calculation:")
-            logging.getLogger(__name__).info(f"   Balance=${balance:.2f}, Risk={risk_percent}% (${risk_amount:.2f})")
-            logging.getLogger(__name__).info(f"   Pip Value per 0.01 lot=${pip_value:.2f}")
-            logging.getLogger(__name__).info(f"   Theoretical Lot={theoretical_lot:.4f}")
+            # คำนวณ Lot Size
+            calculated_lot = risk_amount / pip_value
             
             # Round to valid lot size
-            final_lot = TradingCalculations.round_to_valid_lot_size(theoretical_lot)
+            final_lot = TradingCalculations.round_to_valid_lot_size(calculated_lot)
             
-            # จำกัดขนาด lot
-            final_lot = max(0.01, min(final_lot, 1.0))
+            # จำกัดขนาด lot (min 0.01, max 5.0)
+            final_lot = max(0.01, min(final_lot, 5.0))
             
-            logging.getLogger(__name__).info(f"📊 Final lot size: {final_lot:.4f}")
+            # Debug log
+            logging.getLogger(__name__).info(f"💰 Simple Balance-Based Lot Calculation:")
+            logging.getLogger(__name__).info(f"   Balance=${balance:.2f}")
+            logging.getLogger(__name__).info(f"   Risk={risk_percent}% => Risk Amount=${risk_amount:.2f}")
+            logging.getLogger(__name__).info(f"   Pip Value=${pip_value:.2f}/lot")
+            logging.getLogger(__name__).info(f"   Calculated Lot={calculated_lot:.4f}")
+            logging.getLogger(__name__).info(f"   Final Lot={final_lot:.4f}")
             
             return final_lot
             
         except Exception as e:
-            logging.getLogger(__name__).error(f"Error calculating risk-based lot from balance: {e}")
+            logging.getLogger(__name__).error(f"Error calculating simple lot from balance: {e}")
             return 0.01  # Minimum lot size
     
     @staticmethod
@@ -599,22 +615,22 @@ class TradingCalculations:
                 lot_sizes = {}
                 
                 for symbol in triangle_symbols:
-                    # คำนวณ pip value ต่อ 0.01 lot
-                    pip_value_per_001 = TradingCalculations.calculate_pip_value(symbol, 0.01, broker_api)
+                    # 🎯 สูตรง่ายๆ: Lot Size = Risk Amount ÷ Pip Value
+                    # คำนวณ pip value สำหรับ 1.0 lot
+                    pip_value_per_1lot = TradingCalculations.calculate_pip_value(symbol, 1.0, broker_api)
                     
-                    if pip_value_per_001 > 0:
-                        # ไม่ใช้ SL - คำนวณ lot size จาก risk โดยตรง
-                        # ใช้ pip value เป็นตัวกำหนด lot size
-                        # Lot = Risk per Pair / (Pip Value per 0.01 lot) × 0.01
-                        lot_size = (risk_per_pair / pip_value_per_001) * 0.01
+                    if pip_value_per_1lot > 0:
+                        # คำนวณ lot size โดยตรง
+                        # Lot Size = Risk per Pair ÷ Pip Value (1.0 lot)
+                        lot_size = risk_per_pair / pip_value_per_1lot
                         
                         # Round to valid lot size
                         lot_size = TradingCalculations.round_to_valid_lot_size(lot_size)
                         
                         # จำกัดขนาด lot
-                        lot_size = max(0.01, min(lot_size, 1.0))
+                        lot_size = max(0.01, min(lot_size, 5.0))
                         
-                        logging.getLogger(__name__).info(f"🔍 {symbol}: Risk-based lot={lot_size:.4f}")
+                        logging.getLogger(__name__).info(f"🔍 {symbol}: Risk=${risk_per_pair:.2f}, Pip Value=${pip_value_per_1lot:.2f}, Lot={lot_size:.4f}")
                     else:
                         lot_size = 0.01  # Minimum fallback
                         logging.getLogger(__name__).warning(f"⚠️ {symbol}: Cannot calculate pip value, using minimum lot")
@@ -624,9 +640,9 @@ class TradingCalculations:
                 return lot_sizes
             
             # ===== โหมดที่ 2 & 3: Simple หรือ Tier-based =====
-            pos_sizing = config.get('position_sizing', {}).get('account_tiers', {}).get('medium', {})
-            base_lot_size = pos_sizing.get('base_lot_size', 0.01)
-            lot_multiplier = pos_sizing.get('lot_multiplier', 1.0)
+            # ใช้ค่า fallback เนื่องจากไม่ได้ส่ง config มา
+            base_lot_size = 0.01
+            lot_multiplier = 1.0
             
             # คำนวณ balance multiplier (base $10K = 1.0x)
             base_balance = 10000.0

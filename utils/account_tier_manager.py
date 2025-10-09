@@ -111,14 +111,15 @@ class AccountTierManager:
         """ดึงการตั้งค่าของ tier ที่ระบุ"""
         return self.account_tiers.get(tier_name, {})
     
-    def calculate_lot_size_for_tier(self, balance: float, pip_value: float, tier_name: str = None) -> float:
+    def calculate_lot_size_for_tier(self, balance: float, pip_value: float, tier_name: str = None, is_triangle: bool = False) -> float:
         """
-        คำนวณ lot size ตาม tier
+        คำนวณ lot size ตาม tier โดยใช้สูตรง่ายๆ
         
         Args:
             balance: ยอดเงินในบัญชี
-            pip_value: pip value per 0.01 lot
+            pip_value: pip value per 1.0 lot (e.g., $10 for EURUSD)
             tier_name: ชื่อ tier (ถ้าไม่ระบุจะ auto-detect)
+            is_triangle: ถ้าเป็น triangle arbitrage จะแบ่ง risk เป็น 3 ส่วน
             
         Returns:
             float: lot size ที่คำนวณได้
@@ -130,23 +131,35 @@ class AccountTierManager:
             tier_config = self.get_tier_config(tier_name)
             risk_percent = tier_config.get('risk_per_trade_percent', 1.5)
             
-            # คำนวณ lot size ตาม Risk-Based Sizing
-            risk_amount = balance * (risk_percent / 100.0)
-            risk_per_pair = risk_amount / 3.0  # แบ่งเป็น 3 คู่ใน triangle
+            # 🎯 สูตรง่ายๆ อิงจาก Balance และ Pip Value
+            # Risk Amount = Balance × (Risk% ÷ 100)
+            # Lot Size = Risk Amount ÷ Pip Value
             
+            # คำนวณ Risk Amount
+            risk_amount = balance * (risk_percent / 100.0)
+            
+            # ถ้าเป็น triangle arbitrage แบ่ง risk เป็น 3 ส่วน
+            if is_triangle:
+                risk_amount = risk_amount / 3.0
+            
+            # คำนวณ Lot Size
             if pip_value > 0:
-                lot_size = (risk_per_pair / pip_value) * 0.01
+                lot_size = risk_amount / pip_value
             else:
                 lot_size = 0.01
             
+            # Round to valid lot size (0.01 step)
+            lot_size = round(lot_size / 0.01) * 0.01
+            
             # จำกัดขนาด lot ตาม tier
-            max_position_size = tier_config.get('max_position_size', 1.0)
+            max_position_size = tier_config.get('max_position_size', 5.0)
             lot_size = min(lot_size, max_position_size)
             
-            self.logger.info(f"💰 Lot Calculation for {tier_name.upper()}:")
+            self.logger.info(f"💰 Tier Lot Calculation for {tier_name.upper()}:")
             self.logger.info(f"   Balance: ${balance:,.2f}")
-            self.logger.info(f"   Risk: {risk_percent}% (${risk_amount:,.2f})")
-            self.logger.info(f"   Risk per Pair: ${risk_per_pair:,.2f}")
+            self.logger.info(f"   Risk: {risk_percent}% => Risk Amount=${risk_amount:,.2f}")
+            self.logger.info(f"   Pip Value: ${pip_value:.2f}/lot")
+            self.logger.info(f"   Is Triangle: {is_triangle}")
             self.logger.info(f"   Calculated Lot: {lot_size:.4f}")
             
             return max(0.01, lot_size)  # ขั้นต่ำ 0.01 lot

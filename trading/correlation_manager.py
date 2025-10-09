@@ -1499,10 +1499,10 @@ class CorrelationManager:
                 # ใช้ TradingCalculations.calculate_lot_from_balance()
                 # ไม่ใช้ Stop Loss - Recovery Mode เท่านั้น
                 
-                # คำนวณ pip value ของ hedge symbol
-                pip_value = TradingCalculations.calculate_pip_value(hedge_symbol, 0.01, self.broker)
+                # 🎯 คำนวณ pip value สำหรับ 1.0 lot (ไม่ใช่ 0.01 lot)
+                pip_value = TradingCalculations.calculate_pip_value(hedge_symbol, 1.0, self.broker)
                 if pip_value <= 0:
-                    pip_value = 1.0  # fallback
+                    pip_value = 10.0  # fallback สำหรับ major pairs
                 
                 # คำนวณ lot size โดยใช้ risk_per_trade_percent (Risk-Based Sizing)
                 hedge_lot = TradingCalculations.calculate_lot_from_balance(

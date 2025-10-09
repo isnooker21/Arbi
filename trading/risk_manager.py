@@ -148,29 +148,50 @@ class RiskManager:
             return False
     
     def calculate_position_size(self, symbol: str, account_balance: float, 
-                              risk_percent: float = 1.0) -> float:
-        """Calculate appropriate position size based on risk management"""
+                              risk_percent: float = 1.0, pip_value: float = 10.0) -> float:
+        """
+        Calculate appropriate position size based on risk management
+        
+        Args:
+            symbol: Trading symbol
+            account_balance: Account balance in USD
+            risk_percent: Risk percentage (e.g., 1.0 means 1%, NOT 0.01%)
+            pip_value: Pip value per 1.0 lot (default $10 for major pairs)
+            
+        Returns:
+            float: Calculated lot size
+        """
         try:
-            base_lot_size = self.config.get('trading', {}).get('base_lot_size', 0.1)
-            multiplier = self.risk_limits.get('position_size_multiplier', 1.5)
+            # 🎯 สูตรง่ายๆ อิงจาก Balance และ Pip Value
+            # Risk Amount = Balance × (Risk% ÷ 100)
+            # Lot Size = Risk Amount ÷ Pip Value
             
             # Calculate risk amount
-            risk_amount = account_balance * (risk_percent / 100)
+            risk_amount = account_balance * (risk_percent / 100.0)
             
-            # Calculate position size based on risk
-            # This is a simplified calculation - in practice, you'd need
-            # to consider pip value, stop loss distance, etc.
-            position_size = (risk_amount / 1000) * base_lot_size * multiplier
+            # Calculate lot size
+            position_size = risk_amount / pip_value
             
             # Apply minimum and maximum limits
             min_size = 0.01
-            max_size = 10.0
+            max_size = 5.0
             
-            return max(min_size, min(position_size, max_size))
+            # Round to valid lot size (0.01 step)
+            position_size = round(position_size / 0.01) * 0.01
+            
+            final_size = max(min_size, min(position_size, max_size))
+            
+            self.logger.info(f"💰 Risk Manager Lot Calculation:")
+            self.logger.info(f"   Balance=${account_balance:.2f}")
+            self.logger.info(f"   Risk={risk_percent}% => Risk Amount=${risk_amount:.2f}")
+            self.logger.info(f"   Pip Value=${pip_value:.2f}/lot")
+            self.logger.info(f"   Final Lot={final_size:.4f}")
+            
+            return final_size
             
         except Exception as e:
             self.logger.error(f"Error calculating position size: {e}")
-            return 0.1  # Default fallback
+            return 0.01  # Minimum fallback
     
     def check_daily_limits(self, current_pnl: float) -> bool:
         """Check if daily limits have been exceeded"""
