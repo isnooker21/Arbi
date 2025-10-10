@@ -513,6 +513,17 @@ class BrokerAPI:
                 
                 # Get current price if not provided
                 if price is None:
+                    # ลอง select symbol ก่อน
+                    if not mt5.symbol_select(symbol, True):
+                        self.logger.warning(f"⚠️ Cannot select {symbol}, trying alternatives...")
+                        # ลอง format อื่น ๆ
+                        alt_symbols = [f"{symbol}.v", f"{symbol}m", f"{symbol}_v"]
+                        for alt_symbol in alt_symbols:
+                            if mt5.symbol_select(alt_symbol, True):
+                                self.logger.info(f"✅ Selected alternative: {alt_symbol}")
+                                symbol = alt_symbol
+                                break
+                    
                     tick = mt5.symbol_info_tick(symbol)
                     if not tick:
                         return {
@@ -628,11 +639,11 @@ class BrokerAPI:
                         'symbol': symbol,
                         'type': order_type,
                         'volume': volume,
-                        'price': getattr(result, 'price', price),  # ใช้ price ที่ส่งไปถ้า result.price ไม่มี
+                        'price': price,  # ใช้ price ที่ส่งไป (ไม่ใช้ result.price)
                         'sl': sl,
                         'tp': tp,
                         'retcode': result.retcode,
-                        'comment': getattr(result, 'comment', comment),
+                        'comment': comment,  # ใช้ comment ที่ส่งไป (ไม่ใช้ result.comment)
                         'deal': getattr(result, 'deal', None)
                     }
                 else:
@@ -652,9 +663,7 @@ class BrokerAPI:
                         'tp': tp,
                         'retcode': result.retcode,
                         'comment': comment,
-                        'deal': None,
-                        'success': False,
-                        'error': error_desc
+                        'deal': None
                     }
             
             # This should never be reached, but just in case
