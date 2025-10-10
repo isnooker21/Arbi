@@ -616,10 +616,10 @@ class BrokerAPI:
                 self.logger.info(f"📋 Result: RetCode={result.retcode}")
                 
                 if result.retcode == 10009:  # TRADE_RETCODE_DONE
-                    self.logger.info(f"✅ สำเร็จ! Deal: {result.deal}, Order: {result.order}")
+                    self.logger.info(f"✅ สำเร็จ! Deal: {getattr(result, 'deal', 'N/A')}, Order: {getattr(result, 'order', 'N/A')}")
                     return {
                         'success': True,
-                        'order_id': result.order,
+                        'order_id': getattr(result, 'order', None),
                         'symbol': symbol,
                         'type': order_type,
                         'volume': volume,
@@ -628,7 +628,7 @@ class BrokerAPI:
                         'tp': tp,
                         'retcode': result.retcode,
                         'comment': getattr(result, 'comment', comment),
-                        'deal': result.deal
+                        'deal': getattr(result, 'deal', None)
                     }
                 else:
                     error_desc = self._get_error_message(result.retcode)
@@ -716,12 +716,12 @@ class BrokerAPI:
                 if result.retcode == 10009:  # TRADE_RETCODE_DONE
                     # คำนวณ PnL จากข้อมูล position
                     pnl = position.profit
-                    self.logger.info(f"✅ ปิดสำเร็จ! Deal: {result.deal}, Order: {result.order}")
+                    self.logger.info(f"✅ ปิดสำเร็จ! Deal: {getattr(result, 'deal', 'N/A')}, Order: {getattr(result, 'order', 'N/A')}")
                     self.logger.info(f"   💰 PnL: {pnl:.2f} USD")
                     return {
                         'success': True,
-                        'order_id': result.order,
-                        'deal_id': result.deal,
+                        'order_id': getattr(result, 'order', None),
+                        'deal_id': getattr(result, 'deal', None),
                         'pnl': pnl,
                         'symbol': position.symbol,
                         'volume': position.volume
@@ -828,7 +828,7 @@ class BrokerAPI:
                 result = mt5.order_send(request)
                 
                 if result.retcode != mt5.TRADE_RETCODE_DONE:
-                    self.logger.error(f"Cancel order failed: {result.retcode} - {result.comment}")
+                    self.logger.error(f"Cancel order failed: {result.retcode} - {getattr(result, 'comment', 'No comment')}")
                     return False
                 
                 return True
