@@ -628,11 +628,11 @@ class BrokerAPI:
                         'symbol': symbol,
                         'type': order_type,
                         'volume': volume,
-                        'price': result.price,
+                        'price': getattr(result, 'price', price),  # ใช้ price ที่ส่งไปถ้า result.price ไม่มี
                         'sl': sl,
                         'tp': tp,
                         'retcode': result.retcode,
-                        'comment': result.comment,
+                        'comment': getattr(result, 'comment', comment),
                         'deal': result.deal
                     }
                 else:
