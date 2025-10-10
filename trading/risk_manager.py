@@ -35,8 +35,9 @@ class RiskManager:
         self.risk_limits = self.config.get('risk_management', {})
         
         # Enhanced Risk Management
-        self.max_exposure_per_pair = self.risk_limits.get('max_exposure_per_pair', 0.02)  # 2%
-        self.max_total_exposure = self.risk_limits.get('max_total_exposure', 0.1)        # 10%
+        # ⭐ ลบ max_exposure_per_pair และ max_total_exposure - ใช้แค่ risk_per_trade เท่านั้น
+        # self.max_exposure_per_pair = self.risk_limits.get('max_exposure_per_pair', 0.02)  # 2%
+        # self.max_total_exposure = self.risk_limits.get('max_total_exposure', 0.05)        # 5% (ใช้ค่าเดียวกับ config)
         self.current_exposures = {}  # {symbol: exposure_percent}
         self.active_positions = {}   # {symbol: [position_data]}
         self.volatility_data = {}    # {symbol: volatility}

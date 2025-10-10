@@ -361,7 +361,8 @@ class CorrelationManager:
             
             # โหลด risk management parameters
             risk_mgmt = config.get('position_sizing', {}).get('risk_management', {})
-            self.portfolio_balance_threshold = risk_mgmt.get('max_portfolio_risk', 0.05)
+            # ⭐ ลบ portfolio_balance_threshold - ใช้แค่ risk_per_trade เท่านั้น
+            # self.portfolio_balance_threshold = risk_mgmt.get('max_portfolio_risk', 0.05)
             self.max_concurrent_groups = risk_mgmt.get('max_concurrent_groups', 4)
             
             # ⭐ ใช้ risk-based calculation แทน fixed min/max hedge lot

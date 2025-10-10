@@ -77,8 +77,8 @@ class AdaptiveEngine:
         self.position_sizing = {
             'base_lot_size': 0.1,
             'max_position_size': 10.0,
-            'risk_per_trade': 0.02,  # 2% risk per trade
-            'max_portfolio_risk': 0.1,  # 10% max portfolio risk
+            'risk_per_trade': 0.005,  # 0.5% risk per trade (ใช้ค่าเดียวกับ config)
+            # ⭐ ลบ max_portfolio_risk - ใช้แค่ risk_per_trade เท่านั้น
             # ⭐ ลบ account_tiers ที่มี lot_multiplier - ไม่ใช้ในการคำนวณ lot
         }
         
