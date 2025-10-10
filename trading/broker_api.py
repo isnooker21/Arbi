@@ -37,12 +37,8 @@ class BrokerAPI:
     def _load_config(self, config_file: str) -> Dict:
         """Load broker configuration from JSON file"""
         try:
-            # Use config helper to support EXE and user override
-            try:
-                from utils.config_helper import get_config_path
-                cfg_path = get_config_path(os.path.basename(config_file))
-            except Exception:
-                cfg_path = config_file
+            # ใช้ไฟล์ config โดยตรง
+            cfg_path = config_file
             with open(cfg_path, 'r') as f:
                 return json.load(f)
         except Exception as e:
@@ -195,12 +191,8 @@ class BrokerAPI:
     def _save_config(self):
         """Save current config to file"""
         try:
-            # Save to user override location when available
-            try:
-                from utils.config_helper import get_user_config_path
-                save_path = get_user_config_path('broker_config.json')
-            except Exception:
-                save_path = 'config/broker_config.json'
+            # บันทึกไฟล์ config โดยตรง
+            save_path = 'config/broker_config.json'
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, 'w') as f:
                 json.dump(self.config, f, indent=2)

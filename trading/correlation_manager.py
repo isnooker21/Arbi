@@ -270,10 +270,11 @@ class CorrelationManager:
         try:
             import json
             import os
-            # Use config helper to support EXE and user override
+            # โหลด config โดยตรง
             try:
-                from utils.config_helper import load_config
-                config = load_config('adaptive_params.json')
+                import json
+                with open('config/adaptive_params.json', 'r', encoding='utf-8') as f:
+                    config = json.load(f)
             except Exception:
                 # Fallback to direct path if helper unavailable
                 config_path = 'config/adaptive_params.json'

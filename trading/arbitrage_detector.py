@@ -425,12 +425,11 @@ class TriangleArbitrageDetector:
                 self.logger.error("❌ Cannot get balance from MT5")
                 return
             
-            # โหลด risk_per_trade_percent จาก config (force reload)
-            from utils.config_helper import load_config
-            import importlib
-            import utils.config_helper
-            importlib.reload(utils.config_helper)  # Force reload config helper
-            config = load_config('adaptive_params.json')
+            # โหลด risk_per_trade_percent จาก config โดยตรง
+            import json
+            config_path = 'config/adaptive_params.json'
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
             risk_per_trade_percent = config.get('position_sizing', {}).get('lot_calculation', {}).get('risk_per_trade_percent')
             if not risk_per_trade_percent:
                 self.logger.error("❌ risk_per_trade_percent not found in config")
@@ -440,7 +439,8 @@ class TriangleArbitrageDetector:
             max_loss_pips = 100.0
             
             # Debug: แสดงค่า config ที่โหลดมา
-            self.logger.info(f"🔍 DEBUG: Loaded risk_per_trade_percent from config: {risk_per_trade_percent}%")
+            self.logger.info(f"🔍 DEBUG: Loading from: {config_path}")
+            self.logger.info(f"🔍 DEBUG: risk_per_trade_percent = {risk_per_trade_percent}%")
             
             # สูตร: Risk Amount = Balance × (Risk% ÷ 100)
             risk_amount = balance * (risk_per_trade_percent / 100.0)
@@ -628,8 +628,9 @@ class TriangleArbitrageDetector:
             # Removed AccountTierManager - using GUI Risk per Trade only  # รีโหลด tier manager
             
             # 🔄 Cache lot calculation config เพื่อไม่ต้องโหลดทุกครั้ง
-            from utils.config_helper import load_config
-            config = load_config('adaptive_params.json')
+            import json
+            with open('config/adaptive_params.json', 'r', encoding='utf-8') as f:
+                config = json.load(f)
             self.lot_calc_config = config.get('position_sizing', {}).get('lot_calculation', {})
             
             self.logger.info("✅ Account Tier config reloaded successfully")
@@ -2371,8 +2372,9 @@ class TriangleArbitrageDetector:
             import os
             
             try:
-                from utils.config_helper import load_config
-                config = load_config('adaptive_params.json')
+                import json
+                with open('config/adaptive_params.json', 'r', encoding='utf-8') as f:
+                    config = json.load(f)
             except Exception:
                 config_path = 'config/adaptive_params.json'
                 if os.path.exists(config_path):

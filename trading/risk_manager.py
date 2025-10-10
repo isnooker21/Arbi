@@ -53,12 +53,8 @@ class RiskManager:
     def _load_config(self, config_file: str) -> Dict:
         """Load configuration from JSON file"""
         try:
-            # Use config helper to support EXE and user override
-            try:
-                from utils.config_helper import get_config_path
-                cfg_path = get_config_path(os.path.basename(config_file))
-            except Exception:
-                cfg_path = config_file
+            # ใช้ไฟล์ config โดยตรง
+            cfg_path = config_file
             with open(cfg_path, 'r') as f:
                 return json.load(f)
         except Exception as e:

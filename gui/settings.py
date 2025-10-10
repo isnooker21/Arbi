@@ -15,7 +15,8 @@ from typing import Dict, Any
 
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils.config_helper import get_config_path, get_user_config_path, load_config, save_config
+import json
+import os
 
 class SettingsWindow:
     def __init__(self, parent, trading_system=None):
@@ -40,8 +41,7 @@ class SettingsWindow:
     def load_settings(self):
         """Load adaptive_params.json"""
         try:
-            # บังคับให้โหลดจาก path เดียวกับที่ save
-            import os
+            # โหลด config โดยตรง
             config_file_path = os.path.join('config', 'adaptive_params.json')
             
             if os.path.exists(config_file_path):
@@ -50,9 +50,8 @@ class SettingsWindow:
                     print(f"✅ Loaded config from: {config_file_path}")
                     print(f"🔍 Risk per Trade: {self.settings.get('position_sizing', {}).get('lot_calculation', {}).get('risk_per_trade_percent')}")
             else:
-                # Fallback to config helper
-                self.settings = load_config('adaptive_params.json')
-                print(f"⚠️ Fallback loaded from config helper")
+                print(f"❌ Config file not found: {config_file_path}")
+                self.settings = {}
             
             # Store original settings for comparison
             self.original_settings = json.loads(json.dumps(self.settings))
