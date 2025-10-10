@@ -1768,45 +1768,35 @@ class CorrelationManager:
     def _calculate_optimal_hedge_ratio(self, original_symbol: str, recovery_symbol: str, original_lot: float) -> Tuple[float, float]:
         """⭐ UPGRADED: คำนวณ hedge ratio แบบ dynamic ด้วย Beta regression"""
         try:
-            # Get config
             use_dynamic = getattr(self, 'use_dynamic_hedge_ratio', True)
             use_beta = getattr(self, 'use_beta_regression', True)
             
             if not use_dynamic or not use_beta:
-                # Use simple 1:1 ratio
                 return original_lot, 1.0
             
-            # Calculate Beta using linear regression
             returns_original = self._get_price_returns(original_symbol, periods=100)
             returns_recovery = self._get_price_returns(recovery_symbol, periods=100)
             
             if len(returns_original) < 20 or len(returns_recovery) < 20:
-                # Not enough data - use default ratio
                 return original_lot, 1.0
             
-            # Calculate Beta = Cov(original, recovery) / Var(recovery)
             covariance = np.cov(returns_original, returns_recovery)[0, 1]
             variance = np.var(returns_recovery)
             
             if variance == 0:
                 beta = 1.0
-                else:
+            else:
                 beta = covariance / variance
             
-            # Calculate correlation
             correlation = np.corrcoef(returns_original, returns_recovery)[0, 1]
-            
-            # Hedge ratio = Beta * |Correlation|
             hedge_ratio = beta * abs(correlation)
             
-            # Clip to reasonable range (0.8 - 1.2)
             min_ratio = getattr(self, 'hedge_min_ratio', 0.8)
             max_ratio = getattr(self, 'hedge_max_ratio', 1.2)
             hedge_ratio = np.clip(hedge_ratio, min_ratio, max_ratio)
             
-            # Calculate recovery lot size
             recovery_lot = original_lot * hedge_ratio
-            recovery_lot = round(recovery_lot, 2)  # Round to 0.01 lot
+            recovery_lot = round(recovery_lot, 2)
             
             self.logger.info(f"💡 Dynamic Hedge Ratio: {original_symbol} {original_lot} → {recovery_symbol} {recovery_lot} (ratio={hedge_ratio:.3f}, beta={beta:.3f}, corr={correlation:.3f})")
             
@@ -1819,13 +1809,11 @@ class CorrelationManager:
     def _get_price_returns(self, symbol: str, periods: int = 100) -> np.ndarray:
         """ดึง price returns สำหรับคำนวณ Beta"""
         try:
-            # Map symbol if needed
             if self.symbol_mapper:
                 broker_symbol = self.symbol_mapper.get_broker_symbol(symbol)
-                else:
+            else:
                 broker_symbol = symbol
             
-            # Get historical data from broker
             prices = []
             if hasattr(self.broker, 'get_historical_data'):
                 hist_data = self.broker.get_historical_data(broker_symbol, timeframe='1H', count=periods+1)
@@ -1835,7 +1823,6 @@ class CorrelationManager:
             if len(prices) < 2:
                 return np.array([])
             
-            # Calculate returns
             returns = np.diff(prices) / prices[:-1]
             return returns
             
