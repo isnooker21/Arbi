@@ -1649,15 +1649,15 @@ class CorrelationManager:
     def _is_currency_pair(self, symbol: str) -> bool:
         """ตรวจสอบว่าเป็นคู่เงินจริงๆ หรือไม่ (ไม่ใช่ Ukoil, Gold, Silver, etc.)"""
         try:
-            # รายการคู่เงินที่ยอมรับ
+            # รายการคู่เงินที่ยอมรับ (เพิ่ม NZD pairs กลับมา)
             valid_currency_pairs = [
                 'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'USDNZD',
                 'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY', 'CHFJPY', 'NZDJPY',
-                    'EURCHF', 'GBPCHF', 'AUDCHF', 'CADCHF', 'NZDCHF',
-                    'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'AUDNZD',
-                    'EURNZD', 'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD',
-                    'EURCAD', 'GBPCAD', 'USDCAD', 'AUDCAD', 'CADCHF'
-                ]
+                'EURCHF', 'GBPCHF', 'AUDCHF', 'CADCHF', 'NZDCHF',
+                'EURAUD', 'GBPAUD', 'USDAUD', 'AUDCAD', 'AUDNZD',
+                'EURNZD', 'GBPNZD', 'USDNZD', 'AUDNZD', 'CADNZD',
+                'EURCAD', 'GBPCAD', 'USDCAD', 'AUDCAD', 'CADCHF'
+            ]
             
             # ตรวจสอบว่าเป็นคู่เงินที่ยอมรับหรือไม่
             if symbol in valid_currency_pairs:

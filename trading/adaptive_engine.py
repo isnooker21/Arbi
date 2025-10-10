@@ -941,22 +941,21 @@ class AdaptiveEngine:
         default_correlations = {
             'EURUSD': {
                 'USDCHF': -0.85, 'USDCAD': -0.72, 'GBPAUD': -0.68,
-                'NZDUSD': -0.65, 'AUDCAD': -0.75, 'GBPCHF': -0.80
+                'AUDCAD': -0.75, 'GBPCHF': -0.80
             },
             'GBPUSD': {
                 'USDCHF': -0.80, 'USDCAD': -0.70, 'EURAUD': -0.65,
-                'AUDCAD': -0.68, 'NZDCAD': -0.62
+                'AUDCAD': -0.68
             },
             'USDJPY': {
-                'EURUSD': -0.75, 'GBPUSD': -0.70, 'AUDUSD': -0.65,
-                'NZDUSD': -0.60
+                'EURUSD': -0.75, 'GBPUSD': -0.70, 'AUDUSD': -0.65
             },
             'EURJPY': {
-                'GBPAUD': -0.72, 'AUDNZD': -0.65, 'NZDCAD': -0.60,
+                'GBPAUD': -0.72,
                 'USDCHF': -0.70
             },
             'GBPJPY': {
-                'EURAUD': -0.75, 'AUDCAD': -0.68, 'NZDUSD': -0.62,
+                'EURAUD': -0.75, 'AUDCAD': -0.68,
                 'USDCHF': -0.70, 'EURCHF': -0.68
             },
             'AUDJPY': {
@@ -977,10 +976,6 @@ class AdaptiveEngine:
                 'GBPCHF': -0.60, 'AUDUSD': -0.72
             },
             'AUDNZD': {
-                'EURUSD': -0.68, 'GBPUSD': -0.65, 'USDJPY': -0.60,
-                'EURJPY': -0.65, 'GBPJPY': -0.62
-            },
-            'AUDNZDP': {
                 'EURUSD': -0.68, 'GBPUSD': -0.65, 'USDJPY': -0.60,
                 'EURJPY': -0.65, 'GBPJPY': -0.62
             },

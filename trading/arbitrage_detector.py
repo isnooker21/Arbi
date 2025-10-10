@@ -110,7 +110,7 @@ class TriangleArbitrageDetector:
             'USDCHF', 'EURCHF',            # Group 2, 5
             'USDJPY', 'GBPJPY',            # Group 3
             'AUDUSD', 'USDCAD', 'AUDCAD',  # Group 4
-            'NZDUSD', 'NZDCHF', 'AUDNZD'   # Group 5, 6
+            'NZDUSD', 'NZDCHF', 'AUDNZD'   # Group 5, 6 (ใช้ตามตาราง MT5)
         ]
         
         # 6 สามเหลี่ยม arbitrage แยกกัน (Optimized Setup - No Same-Direction Duplicates!)
