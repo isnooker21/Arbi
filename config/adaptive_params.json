@@ -52,7 +52,7 @@
       "description": "\u2b50 Optimized: Min correlation 0.65 for better pair quality"
     },
     "loss_thresholds": {
-      "min_loss_percent": -1.0,
+      "min_loss_percent": -1,
       "min_price_distance_pips": 15.0,
       "recovery_target": 0.0,
       "use_percentage_based": true,
@@ -88,7 +88,7 @@
       "enabled": true,
       "mode": "conditional",
       "max_chain_depth": 3.0,
-      "min_loss_percent_for_chain": -1.0,
+      "min_loss_percent_for_chain": -1,
       "only_when_trend_uncertain": true,
       "description": "\u2b50 Optimized: Max 3 levels chain (reduced from 5) for lower risk"
     },

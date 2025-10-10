@@ -2737,7 +2737,7 @@ class CorrelationManager:
             
             # ตรวจสอบ loss threshold
             balance = self.broker.get_account_balance()
-            min_loss = balance * abs(self.recovery_thresholds.get('min_loss_percent', 0.005))
+            min_loss = balance * abs(self.recovery_thresholds.get('min_loss_percent', 0.5)) / 100
             if abs(profit) < min_loss:
                 return f"รอเงื่อนไข (loss ${abs(profit):.2f} < ${min_loss:.2f})"
             
@@ -3081,7 +3081,7 @@ class CorrelationManager:
                     self.logger.error("❌ Cannot get account balance from MT5 - skipping chain recovery check")
                     return False
                 loss_percent = profit / balance
-                min_chain_percent = self.recovery_thresholds.get('min_loss_percent_for_chain', -1.0)
+                min_chain_percent = self.recovery_thresholds.get('min_loss_percent_for_chain', -1) / 100
                 
                 if loss_percent > min_chain_percent:
                     self.logger.debug(f"❌ {symbol} (Ticket: {ticket}): Chain loss {loss_percent:.4f} ({loss_percent*100:.2f}%) > {min_chain_percent:.4f}")
