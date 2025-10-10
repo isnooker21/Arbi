@@ -513,26 +513,15 @@ class BrokerAPI:
                 
                 # Get current price if not provided
                 if price is None:
-                    # ลอง select symbol ก่อน
-                    if not mt5.symbol_select(symbol, True):
-                        self.logger.warning(f"⚠️ Cannot select {symbol}, trying alternatives...")
-                        # ลอง format อื่น ๆ
-                        alt_symbols = [f"{symbol}.v", f"{symbol}m", f"{symbol}_v"]
-                        for alt_symbol in alt_symbols:
-                            if mt5.symbol_select(alt_symbol, True):
-                                self.logger.info(f"✅ Selected alternative: {alt_symbol}")
-                                symbol = alt_symbol
-                                break
-                    
-                    tick = mt5.symbol_info_tick(symbol)
-                    if not tick:
+                    # ใช้ฟังก์ชันที่มีอยู่แล้ว
+                    price = self.get_current_price(symbol)
+                    if price is None:
                         return {
                             'success': False,
                             'error': f'Cannot get price for {symbol}',
                             'symbol': symbol,
                             'type': order_type
                         }
-                    price = tick.ask if order_type.upper() == 'BUY' else tick.bid
                 
                 # Simple symbol validation - just try to select (like before)
                 if not mt5.symbol_select(symbol, True):
