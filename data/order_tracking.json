@@ -1,23 +1,787 @@
 {
   "order_tracking": {
-    "79510009_NZDUSD": {
-      "ticket": "79510009",
-      "symbol": "NZDUSD",
-      "group_id": "group_triangle_6_1",
+    "34487307_AUDUSD.v": {
+      "ticket": "34487307",
+      "symbol": "AUDUSD.v",
+      "group_id": "G4",
+      "type": "ORIGINAL",
+      "status": "HEDGED",
+      "recovery_orders": [
+        "34664217_EURAUD.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.032975",
+      "last_sync": "2025-10-10T16:55:39.032980",
+      "auto_registered": true,
+      "comment": "G4_AUDUSD"
+    },
+    "34487308_USDCAD.v": {
+      "ticket": "34487308",
+      "symbol": "USDCAD.v",
+      "group_id": "G4",
+      "type": "ORIGINAL",
+      "status": "HEDGED",
+      "recovery_orders": [
+        "34760137_AUDCAD.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.036089",
+      "last_sync": "2025-10-10T16:55:39.036093",
+      "auto_registered": true,
+      "comment": "G4_USDCAD"
+    },
+    "34487309_AUDCAD.v": {
+      "ticket": "34487309",
+      "symbol": "AUDCAD.v",
+      "group_id": "G4",
+      "type": "ORIGINAL",
+      "status": "NOT_HEDGED",
+      "recovery_orders": [
+        "None_AUDUSD.v",
+        "35169131_AUDUSD.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.038411",
+      "last_sync": "2025-10-10T16:55:39.038415",
+      "auto_registered": true,
+      "comment": "G4_AUDCAD"
+    },
+    "34487310_NZDUSD.v": {
+      "ticket": "34487310",
+      "symbol": "NZDUSD.v",
+      "group_id": "G5",
+      "type": "ORIGINAL",
+      "status": "HEDGED",
+      "recovery_orders": [
+        "34663840_EURNZD.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.039551",
+      "last_sync": "2025-10-10T16:55:39.039554",
+      "auto_registered": true,
+      "comment": "G5_NZDUSD"
+    },
+    "34487311_USDCHF.v": {
+      "ticket": "34487311",
+      "symbol": "USDCHF.v",
+      "group_id": "G5",
+      "type": "ORIGINAL",
+      "status": "HEDGED",
+      "recovery_orders": [
+        "34664046_EURCAD.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.040633",
+      "last_sync": "2025-10-10T16:55:39.040636",
+      "auto_registered": true,
+      "comment": "G5_USDCHF"
+    },
+    "34487312_NZDCHF.v": {
+      "ticket": "34487312",
+      "symbol": "NZDCHF.v",
+      "group_id": "G5",
+      "type": "ORIGINAL",
+      "status": "HEDGED",
+      "recovery_orders": [
+        "34664257_GBPNZD.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.041699",
+      "last_sync": "2025-10-10T16:55:39.041703",
+      "auto_registered": true,
+      "comment": "G5_NZDCHF"
+    },
+    "34525753_GBPUSD.v": {
+      "ticket": "34525753",
+      "symbol": "GBPUSD.v",
+      "group_id": "G3",
+      "type": "ORIGINAL",
+      "status": "HEDGED",
+      "recovery_orders": [
+        "34664032_CADJPY.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.043120",
+      "last_sync": "2025-10-10T16:55:39.043124",
+      "auto_registered": true,
+      "comment": "G3_GBPUSD"
+    },
+    "34525754_USDJPY.v": {
+      "ticket": "34525754",
+      "symbol": "USDJPY.v",
+      "group_id": "G3",
+      "type": "ORIGINAL",
+      "status": "HEDGED",
+      "recovery_orders": [
+        "34663815_EURUSD.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.044925",
+      "last_sync": "2025-10-10T16:55:39.044929",
+      "auto_registered": true,
+      "comment": "G3_USDJPY"
+    },
+    "34525755_GBPJPY.v": {
+      "ticket": "34525755",
+      "symbol": "GBPJPY.v",
+      "group_id": "G3",
+      "type": "ORIGINAL",
+      "status": "NOT_HEDGED",
+      "recovery_orders": [
+        "None_EURJPY.v",
+        "35169149_EURJPY.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.046023",
+      "last_sync": "2025-10-10T16:55:39.046027",
+      "auto_registered": true,
+      "comment": "G3_GBPJPY"
+    },
+    "34663815_EURUSD.v": {
+      "ticket": "34663815",
+      "symbol": "EURUSD.v",
+      "group_id": "G2",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.047509",
+      "last_sync": "2025-10-10T16:55:39.047513",
+      "auto_registered": true,
+      "comment": "R4525754_EURUSD.",
+      "hedging_for": "34525754_USDJPY.v"
+    },
+    "34663837_EURAUD.v": {
+      "ticket": "34663837",
+      "symbol": "EURAUD.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.048775",
+      "last_sync": "2025-10-10T16:55:39.048779",
+      "auto_registered": true,
+      "comment": "R_EURAUD.v",
+      "hedging_for": "79510009_NZDUSD"
+    },
+    "34663840_EURNZD.v": {
+      "ticket": "34663840",
+      "symbol": "EURNZD.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.101381",
+      "last_sync": "2025-10-10T16:55:39.101386",
+      "auto_registered": true,
+      "comment": "R4487310_EURNZD.",
+      "hedging_for": "34487310_NZDUSD.v"
+    },
+    "34664032_CADJPY.v": {
+      "ticket": "34664032",
+      "symbol": "CADJPY.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.102661",
+      "last_sync": "2025-10-10T16:55:39.102664",
+      "auto_registered": true,
+      "comment": "R4525753_CADJPY.",
+      "hedging_for": "34525753_GBPUSD.v"
+    },
+    "34664046_EURCAD.v": {
+      "ticket": "34664046",
+      "symbol": "EURCAD.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.106188",
+      "last_sync": "2025-10-10T16:55:39.106193",
+      "auto_registered": true,
+      "comment": "R4487311_EURCAD.",
+      "hedging_for": "34487311_USDCHF.v"
+    },
+    "34664217_EURAUD.v": {
+      "ticket": "34664217",
+      "symbol": "EURAUD.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.107646",
+      "last_sync": "2025-10-10T16:55:39.107650",
+      "auto_registered": true,
+      "comment": "R4487307_EURAUD.",
+      "hedging_for": "34487307_AUDUSD.v"
+    },
+    "34664257_GBPNZD.v": {
+      "ticket": "34664257",
+      "symbol": "GBPNZD.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.108761",
+      "last_sync": "2025-10-10T16:55:39.108765",
+      "auto_registered": true,
+      "comment": "R4487312_GBPNZD.",
+      "hedging_for": "34487312_NZDCHF.v"
+    },
+    "34751856_AUDCHF.v": {
+      "ticket": "34751856",
+      "symbol": "AUDCHF.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.109867",
+      "last_sync": "2025-10-10T16:55:39.109870",
+      "auto_registered": true,
+      "comment": "R4663837_AUDCHF."
+    },
+    "34751863_AUDCHF.v": {
+      "ticket": "34751863",
+      "symbol": "AUDCHF.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.110960",
+      "last_sync": "2025-10-10T16:55:39.110963",
+      "auto_registered": true,
+      "comment": "R4663840_AUDCHF."
+    },
+    "34751883_AUDUSD.v": {
+      "ticket": "34751883",
+      "symbol": "AUDUSD.v",
+      "group_id": "G6",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.113298",
+      "last_sync": "2025-10-10T16:55:39.113302",
+      "auto_registered": true,
+      "comment": "R4663841_AUDUSD."
+    },
+    "34751885_EURCAD.v": {
+      "ticket": "34751885",
+      "symbol": "EURCAD.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.114439",
+      "last_sync": "2025-10-10T16:55:39.114442",
+      "auto_registered": true,
+      "comment": "R4664032_EURCAD."
+    },
+    "34751886_AUDUSD.v": {
+      "ticket": "34751886",
+      "symbol": "AUDUSD.v",
+      "group_id": "G6",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.115550",
+      "last_sync": "2025-10-10T16:55:39.115554",
+      "auto_registered": true,
+      "comment": "R4664217_AUDUSD."
+    },
+    "34751887_EURGBP.v": {
+      "ticket": "34751887",
+      "symbol": "EURGBP.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.116693",
+      "last_sync": "2025-10-10T16:55:39.116697",
+      "auto_registered": true,
+      "comment": "R4664257_EURGBP."
+    },
+    "34760137_AUDCAD.v": {
+      "ticket": "34760137",
+      "symbol": "AUDCAD.v",
+      "group_id": "G4",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.117891",
+      "last_sync": "2025-10-10T16:55:39.117895",
+      "auto_registered": true,
+      "comment": "R4487308_AUDCAD.",
+      "hedging_for": "34487308_USDCAD.v"
+    },
+    "34764640_AUDJPY.v": {
+      "ticket": "34764640",
+      "symbol": "AUDJPY.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.121887",
+      "last_sync": "2025-10-10T16:55:39.121893",
+      "auto_registered": true,
+      "comment": "R4664046_AUDJPY."
+    },
+    "34775734_GBPUSD.v": {
+      "ticket": "34775734",
+      "symbol": "GBPUSD.v",
+      "group_id": "G3",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.955126",
+      "last_sync": "2025-10-10T16:55:39.955141",
+      "auto_registered": true,
+      "comment": "R4663815_GBPUSD."
+    },
+    "34795365_CHFJPY.v": {
+      "ticket": "34795365",
+      "symbol": "CHFJPY.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.956874",
+      "last_sync": "2025-10-10T16:55:39.956878",
+      "auto_registered": true,
+      "comment": "R4775734_CHFJPY."
+    },
+    "34851559_EURCHF.v": {
+      "ticket": "34851559",
+      "symbol": "EURCHF.v",
+      "group_id": "G2",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.958003",
+      "last_sync": "2025-10-10T16:55:39.958006",
+      "auto_registered": true,
+      "comment": "R4795365_EURCHF."
+    },
+    "34859644_GBPAUD.v": {
+      "ticket": "34859644",
+      "symbol": "GBPAUD.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.959135",
+      "last_sync": "2025-10-10T16:55:39.959138",
+      "auto_registered": true,
+      "comment": "R4751886_GBPAUD."
+    },
+    "34861689_AUDCAD.v": {
+      "ticket": "34861689",
+      "symbol": "AUDCAD.v",
+      "group_id": "G4",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.960245",
+      "last_sync": "2025-10-10T16:55:39.960248",
+      "auto_registered": true,
+      "comment": "R4859644_AUDCAD."
+    },
+    "34870799_EURUSD.v": {
+      "ticket": "34870799",
+      "symbol": "EURUSD.v",
+      "group_id": "G1",
+      "type": "ORIGINAL",
+      "status": "HEDGED",
+      "recovery_orders": [
+        "34873580_CADCHF.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.961954",
+      "last_sync": "2025-10-10T16:55:39.961958",
+      "auto_registered": true,
+      "comment": "G1_EURUSD"
+    },
+    "34870800_EURGBP.v": {
+      "ticket": "34870800",
+      "symbol": "EURGBP.v",
+      "group_id": "G1",
+      "type": "ORIGINAL",
+      "status": "HEDGED",
+      "recovery_orders": [
+        "34874788_GBPCHF.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.963266",
+      "last_sync": "2025-10-10T16:55:39.963270",
+      "auto_registered": true,
+      "comment": "G1_EURGBP"
+    },
+    "34870801_GBPUSD.v": {
+      "ticket": "34870801",
+      "symbol": "GBPUSD.v",
+      "group_id": "G1",
+      "type": "ORIGINAL",
+      "status": "HEDGED",
+      "recovery_orders": [
+        "34874835_EURGBP.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.964360",
+      "last_sync": "2025-10-10T16:55:39.964363",
+      "auto_registered": true,
+      "comment": "G1_GBPUSD"
+    },
+    "34873580_CADCHF.v": {
+      "ticket": "34873580",
+      "symbol": "CADCHF.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.965452",
+      "last_sync": "2025-10-10T16:55:39.965457",
+      "auto_registered": true,
+      "comment": "R4870799_CADCHF.",
+      "hedging_for": "34870799_EURUSD.v"
+    },
+    "34873733_CADJPY.v": {
+      "ticket": "34873733",
+      "symbol": "CADJPY.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.966592",
+      "last_sync": "2025-10-10T16:55:39.966596",
+      "auto_registered": true,
+      "comment": "R4751883_CADJPY."
+    },
+    "34874694_EURUSD.v": {
+      "ticket": "34874694",
+      "symbol": "EURUSD.v",
+      "group_id": "G2",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.967992",
+      "last_sync": "2025-10-10T16:55:39.967995",
+      "auto_registered": true,
+      "comment": "R4873580_EURUSD."
+    },
+    "34874788_GBPCHF.v": {
+      "ticket": "34874788",
+      "symbol": "GBPCHF.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.969372",
+      "last_sync": "2025-10-10T16:55:39.969375",
+      "auto_registered": true,
+      "comment": "R4870800_GBPCHF.",
+      "hedging_for": "34870800_EURGBP.v"
+    },
+    "34874835_EURGBP.v": {
+      "ticket": "34874835",
+      "symbol": "EURGBP.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.970461",
+      "last_sync": "2025-10-10T16:55:39.970467",
+      "auto_registered": true,
+      "comment": "R4870801_EURGBP.",
+      "hedging_for": "34870801_GBPUSD.v"
+    },
+    "34876409_GBPCAD.v": {
+      "ticket": "34876409",
+      "symbol": "GBPCAD.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.971601",
+      "last_sync": "2025-10-10T16:55:39.971604",
+      "auto_registered": true,
+      "comment": "R4873733_GBPCAD."
+    },
+    "34879498_EURUSD.v": {
+      "ticket": "34879498",
+      "symbol": "EURUSD.v",
+      "group_id": "G2",
+      "type": "ORIGINAL",
+      "status": "HEDGED",
+      "recovery_orders": [
+        "34884630_CADCHF.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.974064",
+      "last_sync": "2025-10-10T16:55:39.974068",
+      "auto_registered": true,
+      "comment": "G2_EURUSD"
+    },
+    "34879499_USDCHF.v": {
+      "ticket": "34879499",
+      "symbol": "USDCHF.v",
+      "group_id": "G2",
+      "type": "ORIGINAL",
+      "status": "HEDGED",
+      "recovery_orders": [
+        "34904591_GBPCAD.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.975188",
+      "last_sync": "2025-10-10T16:55:39.975192",
+      "auto_registered": true,
+      "comment": "G2_USDCHF"
+    },
+    "34879502_EURCHF.v": {
+      "ticket": "34879502",
+      "symbol": "EURCHF.v",
+      "group_id": "G2",
+      "type": "ORIGINAL",
+      "status": "HEDGED",
+      "recovery_orders": [
+        "34882083_CHFJPY.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.976277",
+      "last_sync": "2025-10-10T16:55:39.976280",
+      "auto_registered": true,
+      "comment": "G2_EURCHF"
+    },
+    "34882083_CHFJPY.v": {
+      "ticket": "34882083",
+      "symbol": "CHFJPY.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.977337",
+      "last_sync": "2025-10-10T16:55:39.977340",
+      "auto_registered": true,
+      "comment": "R4879502_CHFJPY.",
+      "hedging_for": "34879502_EURCHF.v"
+    },
+    "34884630_CADCHF.v": {
+      "ticket": "34884630",
+      "symbol": "CADCHF.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.978773",
+      "last_sync": "2025-10-10T16:55:39.978777",
+      "auto_registered": true,
+      "comment": "R4879498_CADCHF.",
+      "hedging_for": "34879498_EURUSD.v"
+    },
+    "34887682_EURCHF.v": {
+      "ticket": "34887682",
+      "symbol": "EURCHF.v",
+      "group_id": "G2",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.980057",
+      "last_sync": "2025-10-10T16:55:39.980060",
+      "auto_registered": true,
+      "comment": "R4874788_EURCHF."
+    },
+    "34889093_GBPUSD.v": {
+      "ticket": "34889093",
+      "symbol": "GBPUSD.v",
+      "group_id": "G3",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.981644",
+      "last_sync": "2025-10-10T16:55:39.981647",
+      "auto_registered": true,
+      "comment": "R4876409_GBPUSD."
+    },
+    "34902334_AUDJPY.v": {
+      "ticket": "34902334",
+      "symbol": "AUDJPY.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.982781",
+      "last_sync": "2025-10-10T16:55:39.982785",
+      "auto_registered": true,
+      "comment": "R4751885_AUDJPY."
+    },
+    "34904591_GBPCAD.v": {
+      "ticket": "34904591",
+      "symbol": "GBPCAD.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.983859",
+      "last_sync": "2025-10-10T16:55:39.983863",
+      "auto_registered": true,
+      "comment": "R4879499_GBPCAD.",
+      "hedging_for": "34879499_USDCHF.v"
+    },
+    "34915784_GBPCHF.v": {
+      "ticket": "34915784",
+      "symbol": "GBPCHF.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.986635",
+      "last_sync": "2025-10-10T16:55:39.986639",
+      "auto_registered": true,
+      "comment": "R4882083_GBPCHF."
+    },
+    "34915941_NZDUSD.v": {
+      "ticket": "34915941",
+      "symbol": "NZDUSD.v",
+      "group_id": "G6",
       "type": "ORIGINAL",
       "status": "NOT_HEDGED",
       "recovery_orders": [],
-      "created_at": "2025-10-08T04:53:26.896399",
-      "last_sync": "2025-10-08T04:53:26.896400"
+      "created_at": "2025-10-10T16:55:39.987776",
+      "last_sync": "2025-10-10T16:55:39.987780",
+      "auto_registered": true,
+      "comment": "G6_NZDUSD"
+    },
+    "34915943_AUDNZD.v": {
+      "ticket": "34915943",
+      "symbol": "AUDNZD.v",
+      "group_id": "G6",
+      "type": "ORIGINAL",
+      "status": "HEDGED",
+      "recovery_orders": [
+        "34941679_GBPNZD.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.988834",
+      "last_sync": "2025-10-10T16:55:39.988838",
+      "auto_registered": true,
+      "comment": "G6_AUDNZD"
+    },
+    "34915949_AUDUSD.v": {
+      "ticket": "34915949",
+      "symbol": "AUDUSD.v",
+      "group_id": "G6",
+      "type": "ORIGINAL",
+      "status": "HEDGED",
+      "recovery_orders": [
+        "34921609_GBPAUD.v"
+      ],
+      "created_at": "2025-10-10T16:55:39.989913",
+      "last_sync": "2025-10-10T16:55:39.989917",
+      "auto_registered": true,
+      "comment": "G6_AUDUSD"
+    },
+    "34921609_GBPAUD.v": {
+      "ticket": "34921609",
+      "symbol": "GBPAUD.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.990983",
+      "last_sync": "2025-10-10T16:55:39.990987",
+      "auto_registered": true,
+      "comment": "R4915949_GBPAUD.",
+      "hedging_for": "34915949_AUDUSD.v"
+    },
+    "34930407_GBPUSD.v": {
+      "ticket": "34930407",
+      "symbol": "GBPUSD.v",
+      "group_id": "G3",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.994132",
+      "last_sync": "2025-10-10T16:55:39.994139",
+      "auto_registered": true,
+      "comment": "R4874694_GBPUSD."
+    },
+    "34941679_GBPNZD.v": {
+      "ticket": "34941679",
+      "symbol": "GBPNZD.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.995942",
+      "last_sync": "2025-10-10T16:55:39.995948",
+      "auto_registered": true,
+      "comment": "R4915943_GBPNZD.",
+      "hedging_for": "34915943_AUDNZD.v"
+    },
+    "34968381_EURJPY.v": {
+      "ticket": "34968381",
+      "symbol": "EURJPY.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:39.997630",
+      "last_sync": "2025-10-10T16:55:39.997636",
+      "auto_registered": true,
+      "comment": "R4902334_EURJPY."
+    },
+    "34968932_GBPCAD.v": {
+      "ticket": "34968932",
+      "symbol": "GBPCAD.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:40.000015",
+      "last_sync": "2025-10-10T16:55:40.000021",
+      "auto_registered": true,
+      "comment": "R4930407_GBPCAD."
+    },
+    "34970716_GBPCAD.v": {
+      "ticket": "34970716",
+      "symbol": "GBPCAD.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:40.002205",
+      "last_sync": "2025-10-10T16:55:40.002212",
+      "auto_registered": true,
+      "comment": "R4889093_GBPCAD."
+    },
+    "35057880_EURNZD.v": {
+      "ticket": "35057880",
+      "symbol": "EURNZD.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "ORPHANED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T16:55:40.003874",
+      "last_sync": "2025-10-10T16:55:40.003881",
+      "auto_registered": true,
+      "comment": "R4941679_EURNZD."
+    },
+    "35169131_AUDUSD.v": {
+      "ticket": "35169131",
+      "symbol": "AUDUSD.v",
+      "group_id": "G6",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T18:03:32.470467",
+      "last_sync": "2025-10-10T18:03:32.471427",
+      "auto_registered": true,
+      "comment": "R4487309_AUDUSD.",
+      "hedging_for": "34487309_AUDCAD.v"
+    },
+    "35169149_EURJPY.v": {
+      "ticket": "35169149",
+      "symbol": "EURJPY.v",
+      "group_id": "G1",
+      "type": "RECOVERY",
+      "status": "HEDGED",
+      "recovery_orders": [],
+      "created_at": "2025-10-10T18:03:32.801303",
+      "last_sync": "2025-10-10T18:03:32.801308",
+      "auto_registered": true,
+      "comment": "R4525755_EURJPY.",
+      "hedging_for": "34525755_GBPJPY.v"
     }
   },
   "stats": {
-    "original_orders_registered": 3,
-    "recovery_orders_registered": 0,
-    "orders_hedged": 0,
-    "orders_removed": 2,
-    "sync_operations": 282,
-    "last_sync": "2025-10-08T05:31:46.524044"
+    "original_orders_registered": 21,
+    "recovery_orders_registered": 44,
+    "orders_hedged": 2,
+    "orders_removed": 5,
+    "sync_operations": 286,
+    "last_sync": "2025-10-10T18:03:32.804852"
   },
-  "saved_at": "2025-10-08T05:31:46.524044"
+  "saved_at": "2025-10-10T18:03:32.806750"
 }

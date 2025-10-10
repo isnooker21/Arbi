@@ -1,6 +1,628 @@
 {
-  "active_groups": {},
-  "recovery_in_progress": [],
+  "active_groups": {
+    "group_triangle_1_1": {
+      "group_id": "group_triangle_1_1",
+      "triangle": [
+        "EURUSD",
+        "GBPUSD",
+        "EURGBP"
+      ],
+      "triangle_type": "triangle_1",
+      "created_at": "2025-10-10 16:55:40.091352",
+      "positions": [
+        {
+          "symbol": "EURUSD.v",
+          "direction": "BUY",
+          "order_id": 34870799,
+          "lot_size": 1.0,
+          "entry_price": 1.16151,
+          "entry_time": "2025-10-10 16:55:40.091362"
+        },
+        {
+          "symbol": "EURGBP.v",
+          "direction": "BUY",
+          "order_id": 34870800,
+          "lot_size": 1.0,
+          "entry_price": 0.87,
+          "entry_time": "2025-10-10 16:55:40.091369"
+        },
+        {
+          "symbol": "GBPUSD.v",
+          "direction": "SELL",
+          "order_id": 34870801,
+          "lot_size": 1.0,
+          "entry_price": 1.33498,
+          "entry_time": "2025-10-10 16:55:40.091372"
+        },
+        {
+          "symbol": "CADCHF.v",
+          "direction": "BUY",
+          "order_id": 34873580,
+          "lot_size": 0.59,
+          "entry_price": 0.57583,
+          "entry_time": "2025-10-10 16:55:40.091375"
+        },
+        {
+          "symbol": "EURUSD.v",
+          "direction": "BUY",
+          "order_id": 34874694,
+          "lot_size": 0.59,
+          "entry_price": 1.16102,
+          "entry_time": "2025-10-10 16:55:40.091377"
+        },
+        {
+          "symbol": "GBPCHF.v",
+          "direction": "BUY",
+          "order_id": 34874788,
+          "lot_size": 0.73,
+          "entry_price": 1.07205,
+          "entry_time": "2025-10-10 16:55:40.091380"
+        },
+        {
+          "symbol": "EURGBP.v",
+          "direction": "SELL",
+          "order_id": 34874835,
+          "lot_size": 0.44,
+          "entry_price": 0.86889,
+          "entry_time": "2025-10-10 16:55:40.091382"
+        },
+        {
+          "symbol": "EURCHF.v",
+          "direction": "BUY",
+          "order_id": 34887682,
+          "lot_size": 0.59,
+          "entry_price": 0.93056,
+          "entry_time": "2025-10-10 16:55:40.091385"
+        },
+        {
+          "symbol": "GBPUSD.v",
+          "direction": "BUY",
+          "order_id": 34930407,
+          "lot_size": 0.13,
+          "entry_price": 1.33669,
+          "entry_time": "2025-10-10 16:55:40.091387"
+        },
+        {
+          "symbol": "GBPCAD.v",
+          "direction": "BUY",
+          "order_id": 34968932,
+          "lot_size": 0.17,
+          "entry_price": 1.86593,
+          "entry_time": "2025-10-10 16:55:40.091390"
+        }
+      ],
+      "status": "active",
+      "total_pnl": 0.0,
+      "recovery_chain": [],
+      "arbitrage_pnl": -314.08000000000004,
+      "recovery_pnl": 0.0,
+      "net_pnl": -314.08000000000004,
+      "arbitrage_count": 10,
+      "recovery_count": 3,
+      "min_profit_target": 10.0,
+      "trailing_active": false,
+      "trailing_peak": 0.0,
+      "trailing_stop": 0.0,
+      "balance": 10465.15
+    },
+    "group_triangle_2_1": {
+      "group_id": "group_triangle_2_1",
+      "triangle": [
+        "EURUSD",
+        "USDCHF",
+        "EURCHF"
+      ],
+      "triangle_type": "triangle_2",
+      "created_at": "2025-10-10 16:55:40.747877",
+      "positions": [
+        {
+          "symbol": "EURUSD.v",
+          "direction": "BUY",
+          "order_id": 34879498,
+          "lot_size": 1.0,
+          "entry_price": 1.1627,
+          "entry_time": "2025-10-10 16:55:40.747886"
+        },
+        {
+          "symbol": "USDCHF.v",
+          "direction": "SELL",
+          "order_id": 34879499,
+          "lot_size": 1.0,
+          "entry_price": 0.80095,
+          "entry_time": "2025-10-10 16:55:40.747891"
+        },
+        {
+          "symbol": "EURCHF.v",
+          "direction": "BUY",
+          "order_id": 34879502,
+          "lot_size": 1.0,
+          "entry_price": 0.93162,
+          "entry_time": "2025-10-10 16:55:40.747894"
+        },
+        {
+          "symbol": "CHFJPY.v",
+          "direction": "BUY",
+          "order_id": 34882083,
+          "lot_size": 0.27,
+          "entry_price": 190.541,
+          "entry_time": "2025-10-10 16:55:40.747897"
+        },
+        {
+          "symbol": "CADCHF.v",
+          "direction": "BUY",
+          "order_id": 34884630,
+          "lot_size": 0.59,
+          "entry_price": 0.57447,
+          "entry_time": "2025-10-10 16:55:40.747900"
+        },
+        {
+          "symbol": "GBPCAD.v",
+          "direction": "SELL",
+          "order_id": 34904591,
+          "lot_size": 0.1,
+          "entry_price": 1.86473,
+          "entry_time": "2025-10-10 16:55:40.747903"
+        },
+        {
+          "symbol": "GBPCHF.v",
+          "direction": "BUY",
+          "order_id": 34915784,
+          "lot_size": 0.1,
+          "entry_price": 1.07435,
+          "entry_time": "2025-10-10 16:55:40.747905"
+        }
+      ],
+      "status": "active",
+      "total_pnl": 0.0,
+      "recovery_chain": [],
+      "arbitrage_pnl": -1253.09,
+      "recovery_pnl": 0.0,
+      "net_pnl": -1253.09,
+      "arbitrage_count": 7,
+      "recovery_count": 3,
+      "min_profit_target": 10.0,
+      "trailing_active": false,
+      "trailing_peak": 0.0,
+      "trailing_stop": 0.0,
+      "balance": 10465.15
+    },
+    "group_triangle_3_1": {
+      "group_id": "group_triangle_3_1",
+      "triangle": [
+        "GBPUSD",
+        "USDJPY",
+        "GBPJPY"
+      ],
+      "triangle_type": "triangle_3",
+      "created_at": "2025-10-10 16:55:40.759388",
+      "positions": [
+        {
+          "symbol": "GBPUSD.v",
+          "direction": "BUY",
+          "order_id": 34525753,
+          "lot_size": 0.5,
+          "entry_price": 1.34549,
+          "entry_time": "2025-10-10 16:55:40.759398"
+        },
+        {
+          "symbol": "USDJPY.v",
+          "direction": "SELL",
+          "order_id": 34525754,
+          "lot_size": 0.75,
+          "entry_price": 151.052,
+          "entry_time": "2025-10-10 16:55:40.759403"
+        },
+        {
+          "symbol": "GBPJPY.v",
+          "direction": "BUY",
+          "order_id": 34525755,
+          "lot_size": 0.75,
+          "entry_price": 203.276,
+          "entry_time": "2025-10-10 16:55:40.759406"
+        },
+        {
+          "symbol": "EURUSD.v",
+          "direction": "SELL",
+          "order_id": 34663815,
+          "lot_size": 0.64,
+          "entry_price": 1.16143,
+          "entry_time": "2025-10-10 16:55:40.759408"
+        },
+        {
+          "symbol": "CADJPY.v",
+          "direction": "BUY",
+          "order_id": 34664032,
+          "lot_size": 0.44,
+          "entry_price": 109.606,
+          "entry_time": "2025-10-10 16:55:40.759411"
+        },
+        {
+          "symbol": "EURCAD.v",
+          "direction": "BUY",
+          "order_id": 34751885,
+          "lot_size": 0.52,
+          "entry_price": 1.62029,
+          "entry_time": "2025-10-10 16:55:40.759414"
+        },
+        {
+          "symbol": "GBPUSD.v",
+          "direction": "SELL",
+          "order_id": 34775734,
+          "lot_size": 0.79,
+          "entry_price": 1.33959,
+          "entry_time": "2025-10-10 16:55:40.759416"
+        },
+        {
+          "symbol": "CHFJPY.v",
+          "direction": "SELL",
+          "order_id": 34795365,
+          "lot_size": 0.16,
+          "entry_price": 190.29,
+          "entry_time": "2025-10-10 16:55:40.759419"
+        },
+        {
+          "symbol": "EURCHF.v",
+          "direction": "SELL",
+          "order_id": 34851559,
+          "lot_size": 0.27,
+          "entry_price": 0.93181,
+          "entry_time": "2025-10-10 16:55:40.759421"
+        },
+        {
+          "symbol": "AUDJPY.v",
+          "direction": "BUY",
+          "order_id": 34902334,
+          "lot_size": 0.15,
+          "entry_price": 100.876,
+          "entry_time": "2025-10-10 16:55:40.759425"
+        },
+        {
+          "symbol": "EURJPY.v",
+          "direction": "BUY",
+          "order_id": 34968381,
+          "lot_size": 0.17,
+          "entry_price": 177.156,
+          "entry_time": "2025-10-10 16:55:40.759428"
+        }
+      ],
+      "status": "active",
+      "total_pnl": 0.0,
+      "recovery_chain": [],
+      "arbitrage_pnl": -950.6600000000001,
+      "recovery_pnl": 0.0,
+      "net_pnl": -950.6600000000001,
+      "arbitrage_count": 11,
+      "recovery_count": 2,
+      "min_profit_target": 10.0,
+      "trailing_active": false,
+      "trailing_peak": 0.0,
+      "trailing_stop": 0.0,
+      "balance": 10465.15
+    },
+    "group_triangle_4_1": {
+      "group_id": "group_triangle_4_1",
+      "triangle": [
+        "AUDUSD",
+        "USDCAD",
+        "AUDCAD"
+      ],
+      "triangle_type": "triangle_4",
+      "created_at": "2025-10-10 16:55:41.090530",
+      "positions": [
+        {
+          "symbol": "AUDUSD.v",
+          "direction": "BUY",
+          "order_id": 34487307,
+          "lot_size": 0.5,
+          "entry_price": 0.65965,
+          "entry_time": "2025-10-10 16:55:41.090539"
+        },
+        {
+          "symbol": "USDCAD.v",
+          "direction": "SELL",
+          "order_id": 34487308,
+          "lot_size": 0.68,
+          "entry_price": 1.39503,
+          "entry_time": "2025-10-10 16:55:41.090543"
+        },
+        {
+          "symbol": "AUDCAD.v",
+          "direction": "BUY",
+          "order_id": 34487309,
+          "lot_size": 0.68,
+          "entry_price": 0.92028,
+          "entry_time": "2025-10-10 16:55:41.090546"
+        },
+        {
+          "symbol": "EURAUD.v",
+          "direction": "BUY",
+          "order_id": 34663837,
+          "lot_size": 0.54,
+          "entry_price": 1.76972,
+          "entry_time": "2025-10-10 16:55:41.090548"
+        },
+        {
+          "symbol": "EURAUD.v",
+          "direction": "BUY",
+          "order_id": 34664217,
+          "lot_size": 0.54,
+          "entry_price": 1.76974,
+          "entry_time": "2025-10-10 16:55:41.090553"
+        },
+        {
+          "symbol": "AUDCHF.v",
+          "direction": "BUY",
+          "order_id": 34751856,
+          "lot_size": 0.8,
+          "entry_price": 0.52805,
+          "entry_time": "2025-10-10 16:55:41.090558"
+        },
+        {
+          "symbol": "AUDUSD.v",
+          "direction": "BUY",
+          "order_id": 34751886,
+          "lot_size": 0.55,
+          "entry_price": 0.65813,
+          "entry_time": "2025-10-10 16:55:41.090563"
+        },
+        {
+          "symbol": "AUDCAD.v",
+          "direction": "SELL",
+          "order_id": 34760137,
+          "lot_size": 0.15,
+          "entry_price": 0.91809,
+          "entry_time": "2025-10-10 16:55:41.090567"
+        },
+        {
+          "symbol": "GBPAUD.v",
+          "direction": "BUY",
+          "order_id": 34859644,
+          "lot_size": 0.46,
+          "entry_price": 2.03306,
+          "entry_time": "2025-10-10 16:55:41.090572"
+        },
+        {
+          "symbol": "AUDCAD.v",
+          "direction": "BUY",
+          "order_id": 34861689,
+          "lot_size": 0.46,
+          "entry_price": 0.91838,
+          "entry_time": "2025-10-10 16:55:41.090577"
+        }
+      ],
+      "status": "active",
+      "total_pnl": 0.0,
+      "recovery_chain": [],
+      "arbitrage_pnl": -1288.5500000000002,
+      "recovery_pnl": 0.0,
+      "net_pnl": -1288.5500000000002,
+      "arbitrage_count": 10,
+      "recovery_count": 2,
+      "min_profit_target": 10.0,
+      "trailing_active": false,
+      "trailing_peak": 0.0,
+      "trailing_stop": 0.0,
+      "balance": 10465.15
+    },
+    "group_triangle_5_1": {
+      "group_id": "group_triangle_5_1",
+      "triangle": [
+        "NZDUSD",
+        "USDCHF",
+        "NZDCHF"
+      ],
+      "triangle_type": "triangle_5",
+      "created_at": "2025-10-10 16:55:41.098395",
+      "positions": [
+        {
+          "symbol": "NZDUSD.v",
+          "direction": "BUY",
+          "order_id": 34487310,
+          "lot_size": 0.5,
+          "entry_price": 0.5817,
+          "entry_time": "2025-10-10 16:55:41.098404"
+        },
+        {
+          "symbol": "USDCHF.v",
+          "direction": "SELL",
+          "order_id": 34487311,
+          "lot_size": 0.46,
+          "entry_price": 0.79763,
+          "entry_time": "2025-10-10 16:55:41.098407"
+        },
+        {
+          "symbol": "NZDCHF.v",
+          "direction": "BUY",
+          "order_id": 34487312,
+          "lot_size": 0.46,
+          "entry_price": 0.46415,
+          "entry_time": "2025-10-10 16:55:41.098410"
+        },
+        {
+          "symbol": "EURNZD.v",
+          "direction": "BUY",
+          "order_id": 34663840,
+          "lot_size": 0.62,
+          "entry_price": 2.01444,
+          "entry_time": "2025-10-10 16:55:41.098412"
+        },
+        {
+          "symbol": "EURCAD.v",
+          "direction": "SELL",
+          "order_id": 34664046,
+          "lot_size": 0.61,
+          "entry_price": 1.62041,
+          "entry_time": "2025-10-10 16:55:41.098415"
+        },
+        {
+          "symbol": "GBPNZD.v",
+          "direction": "BUY",
+          "order_id": 34664257,
+          "lot_size": 0.59,
+          "entry_price": 2.32664,
+          "entry_time": "2025-10-10 16:55:41.098417"
+        },
+        {
+          "symbol": "AUDCHF.v",
+          "direction": "BUY",
+          "order_id": 34751863,
+          "lot_size": 0.54,
+          "entry_price": 0.52801,
+          "entry_time": "2025-10-10 16:55:41.098420"
+        },
+        {
+          "symbol": "AUDUSD.v",
+          "direction": "BUY",
+          "order_id": 34751883,
+          "lot_size": 0.4,
+          "entry_price": 0.65814,
+          "entry_time": "2025-10-10 16:55:41.098422"
+        },
+        {
+          "symbol": "EURGBP.v",
+          "direction": "BUY",
+          "order_id": 34751887,
+          "lot_size": 0.36,
+          "entry_price": 0.86721,
+          "entry_time": "2025-10-10 16:55:41.098425"
+        },
+        {
+          "symbol": "AUDJPY.v",
+          "direction": "SELL",
+          "order_id": 34764640,
+          "lot_size": 0.16,
+          "entry_price": 100.499,
+          "entry_time": "2025-10-10 16:55:41.098427"
+        },
+        {
+          "symbol": "CADJPY.v",
+          "direction": "BUY",
+          "order_id": 34873733,
+          "lot_size": 0.32,
+          "entry_price": 109.7,
+          "entry_time": "2025-10-10 16:55:41.098430"
+        },
+        {
+          "symbol": "GBPCAD.v",
+          "direction": "BUY",
+          "order_id": 34876409,
+          "lot_size": 0.52,
+          "entry_price": 1.86499,
+          "entry_time": "2025-10-10 16:55:41.098432"
+        },
+        {
+          "symbol": "GBPUSD.v",
+          "direction": "BUY",
+          "order_id": 34889093,
+          "lot_size": 0.82,
+          "entry_price": 1.33653,
+          "entry_time": "2025-10-10 16:55:41.098434"
+        },
+        {
+          "symbol": "GBPCAD.v",
+          "direction": "BUY",
+          "order_id": 34970716,
+          "lot_size": 0.17,
+          "entry_price": 1.8655,
+          "entry_time": "2025-10-10 16:55:41.098437"
+        }
+      ],
+      "status": "active",
+      "total_pnl": 0.0,
+      "recovery_chain": [],
+      "arbitrage_pnl": -2462.31,
+      "recovery_pnl": 0.0,
+      "net_pnl": -2462.31,
+      "arbitrage_count": 14,
+      "recovery_count": 3,
+      "min_profit_target": 10.0,
+      "trailing_active": false,
+      "trailing_peak": 0.0,
+      "trailing_stop": 0.0,
+      "balance": 10465.15
+    },
+    "group_triangle_6_1": {
+      "group_id": "group_triangle_6_1",
+      "triangle": [
+        "AUDUSD",
+        "NZDUSD",
+        "AUDNZD"
+      ],
+      "triangle_type": "triangle_6",
+      "created_at": "2025-10-10 16:55:41.106656",
+      "positions": [
+        {
+          "symbol": "NZDUSD.v",
+          "direction": "SELL",
+          "order_id": 34915941,
+          "lot_size": 1.0,
+          "entry_price": 0.57809,
+          "entry_time": "2025-10-10 16:55:41.106666"
+        },
+        {
+          "symbol": "AUDNZD.v",
+          "direction": "BUY",
+          "order_id": 34915943,
+          "lot_size": 1.0,
+          "entry_price": 1.14283,
+          "entry_time": "2025-10-10 16:55:41.106670"
+        },
+        {
+          "symbol": "AUDUSD.v",
+          "direction": "BUY",
+          "order_id": 34915949,
+          "lot_size": 1.0,
+          "entry_price": 0.66093,
+          "entry_time": "2025-10-10 16:55:41.106673"
+        },
+        {
+          "symbol": "GBPAUD.v",
+          "direction": "BUY",
+          "order_id": 34921609,
+          "lot_size": 0.11,
+          "entry_price": 2.02591,
+          "entry_time": "2025-10-10 16:55:41.106675"
+        },
+        {
+          "symbol": "GBPNZD.v",
+          "direction": "BUY",
+          "order_id": 34941679,
+          "lot_size": 0.12,
+          "entry_price": 2.3186,
+          "entry_time": "2025-10-10 16:55:41.106678"
+        },
+        {
+          "symbol": "EURNZD.v",
+          "direction": "BUY",
+          "order_id": 35057880,
+          "lot_size": 0.19,
+          "entry_price": 2.01007,
+          "entry_time": "2025-10-10 16:55:41.106681"
+        }
+      ],
+      "status": "active",
+      "total_pnl": 0.0,
+      "recovery_chain": [],
+      "arbitrage_pnl": -532.2199999999999,
+      "recovery_pnl": 0.0,
+      "net_pnl": -532.2199999999999,
+      "arbitrage_count": 6,
+      "recovery_count": 2,
+      "min_profit_target": 10.0,
+      "trailing_active": false,
+      "trailing_peak": 0.0,
+      "trailing_stop": 0.0,
+      "balance": 10465.15
+    }
+  },
+  "recovery_in_progress": [
+    "group_triangle_4_1",
+    "group_triangle_6_1",
+    "group_triangle_3_1",
+    "group_triangle_2_1",
+    "group_triangle_5_1",
+    "group_triangle_1_1"
+  ],
   "group_counters": {
     "triangle_1": 0,
     "triangle_2": 0,
@@ -26,5 +648,5 @@
     "triangle_6": []
   },
   "group_currency_mapping": {},
-  "saved_at": "2025-10-08T14:06:20.406363"
+  "saved_at": "2025-10-10T16:57:29.709222"
 }

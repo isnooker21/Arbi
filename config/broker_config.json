@@ -1,7 +1,7 @@
 {
   "MetaTrader5": {
-    "server": "CXMDirect-Demo",
-    "login": 208518,
+    "server": "DupoinMarkets-Real",
+    "login": 2051921,
     "password": "",
     "timeout": 30000,
     "portable": false

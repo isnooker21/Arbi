@@ -1594,88 +1594,9 @@ class CorrelationManager:
         except Exception as e:
             self.logger.debug(f"Error checking recovery opportunities: {e}")
     
-    def _initiate_correlation_recovery(self, losing_position: Dict):
-        """เริ่ม correlation recovery"""
-        try:
-            symbol = losing_position['symbol']
-            self.logger.debug(f"🔄 Starting correlation recovery for {symbol}")
-            
-            # หาคู่เงินที่เหมาะสมสำหรับ recovery (ไม่ซ้ำกับคู่ในกลุ่ม)
-            group_pairs = self._get_group_pairs_from_mt5(losing_position.get('group_id', 'unknown'))
-            correlation_candidates = self._find_optimal_correlation_pairs(symbol, group_pairs)
-            
-            if not correlation_candidates:
-                self.logger.debug(f"   No correlation candidates found for {symbol}")
-                return
-            
-            # เลือกคู่เงินที่ดีที่สุด
-            best_correlation = correlation_candidates[0]
-            # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
-            group_id_str = losing_position.get('group_id', 'unknown')
-            if 'triangle_' in group_id_str:
-                triangle_part = group_id_str.split('triangle_')[1].split('_')[0]
-                group_number = triangle_part
-            else:
-                group_number = 'X'
-            self.logger.info(f"   Best correlation for G{group_number}: {best_correlation['symbol']} (correlation: {best_correlation['correlation']:.2f})")
-            
-            # ส่งออเดอร์ recovery
-            success = self._execute_correlation_position(losing_position, best_correlation, losing_position.get('group_id', 'unknown'))
-            
-            if success:
-                # บันทึกว่าไม้นี้แก้แล้ว
-                self._mark_position_as_hedged(losing_position, losing_position.get('group_id', 'unknown'))
-                self.logger.debug(f"✅ Correlation recovery position opened: {best_correlation['symbol']}")
-            else:
-                self.logger.debug(f"❌ Failed to open correlation recovery position: {best_correlation['symbol']}")
-                
-        except Exception as e:
-            self.logger.debug(f"Error initiating correlation recovery: {e}")
-    
-    def _find_optimal_correlation_pairs(self, base_symbol: str, group_pairs: List[str] = None) -> List[Dict]:
-        """Find optimal correlation pairs with negative correlation filter"""
-        try:
-            # Get correlations from AI engine
-            correlations = self.ai_engine.get_correlations(base_symbol)
-            
-            if not correlations:
-                self.logger.debug(f"No correlations found for {base_symbol}")
-                return []
-            
-            correlation_candidates = []
-            
-            for pair, corr_value in correlations.items():
-                # Skip if pair is in the same group
-                if group_pairs and pair in group_pairs:
-                    continue
-                
-                # ✅ Filter: Common currency
-                if self._has_common_currency(base_symbol, pair):
-                    self.logger.debug(f"⏭️ Skip {pair}: common currency with {base_symbol}")
-                    continue
-                
-                # ✅ Filter: Only negative correlations (RELAXED THRESHOLD)
-                if -0.98 < corr_value < -0.2:
-                    correlation_candidates.append({
-                        'symbol': pair,
-                        'correlation': corr_value,
-                        'direction': 'opposite'
-                    })
-                    self.logger.debug(f"✅ Valid hedge candidate: {pair} (correlation: {corr_value:.2f})")
-            
-            # ✅ Sort by most negative correlation
-            correlation_candidates.sort(key=lambda x: x['correlation'])
-            
-            if correlation_candidates:
-                self.logger.info(f"🎯 Found {len(correlation_candidates)} optimal negative correlation pairs for {base_symbol}")
-                for i, candidate in enumerate(correlation_candidates[:3], 1):
-                    self.logger.info(f"   {i}. {candidate['symbol']}: {candidate['correlation']:.2f}")
-            
-            return correlation_candidates[:5]  # Top 5 best candidates
-            
-        except Exception as e:
-            self.logger.error(f"Error finding optimal pairs: {e}")
-            return []
+    # ⚠️ REMOVED: Old recovery functions replaced by upgraded system
+    # _initiate_correlation_recovery() - not used anymore (integrated into _start_pair_recovery)
+    # _find_optimal_correlation_pairs() - replaced by _select_best_recovery_pair_with_scoring()
     
     def _is_currency_pair(self, symbol: str) -> bool:
         """ตรวจสอบว่าเป็นคู่เงินจริงๆ หรือไม่ (ไม่ใช่ Ukoil, Gold, Silver, etc.)"""
@@ -1780,15 +1701,33 @@ class CorrelationManager:
             if len(returns_original) < 20 or len(returns_recovery) < 20:
                 return original_lot, 1.0
             
-            covariance = np.cov(returns_original, returns_recovery)[0, 1]
+            # Ensure arrays have same length
+            min_len = min(len(returns_original), len(returns_recovery))
+            returns_original = returns_original[:min_len]
+            returns_recovery = returns_recovery[:min_len]
+            
+            if min_len < 20:
+                return original_lot, 1.0
+            
+            # Calculate covariance and variance
+            cov_matrix = np.cov(returns_original, returns_recovery)
+            covariance = cov_matrix[0, 1]
             variance = np.var(returns_recovery)
             
-            if variance == 0:
+            if variance == 0 or np.isnan(variance):
                 beta = 1.0
             else:
                 beta = covariance / variance
             
-            correlation = np.corrcoef(returns_original, returns_recovery)[0, 1]
+            # Calculate correlation
+            corr_matrix = np.corrcoef(returns_original, returns_recovery)
+            correlation = corr_matrix[0, 1]
+            
+            # Handle NaN
+            if np.isnan(beta) or np.isnan(correlation):
+                return original_lot, 1.0
+            
+            # Hedge ratio = Beta × |Correlation|
             hedge_ratio = beta * abs(correlation)
             
             min_ratio = getattr(self, 'hedge_min_ratio', 0.8)
