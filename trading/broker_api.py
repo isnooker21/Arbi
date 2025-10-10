@@ -489,7 +489,12 @@ class BrokerAPI:
         """Place an order"""
         try:
             if not self._connected:
-                return None
+                return {
+                    'success': False,
+                    'error': 'Not connected to broker',
+                    'symbol': symbol,
+                    'type': order_type
+                }
             
             if self.broker_type == "MetaTrader5":
                 # Convert order type
@@ -499,13 +504,23 @@ class BrokerAPI:
                     order_type_mt5 = mt5.ORDER_TYPE_SELL
                 else:
                     self.logger.error(f"Invalid order type: {order_type}")
-                    return None
+                    return {
+                        'success': False,
+                        'error': f'Invalid order type: {order_type}',
+                        'symbol': symbol,
+                        'type': order_type
+                    }
                 
                 # Get current price if not provided
                 if price is None:
                     tick = mt5.symbol_info_tick(symbol)
                     if not tick:
-                        return None
+                        return {
+                            'success': False,
+                            'error': f'Cannot get price for {symbol}',
+                            'symbol': symbol,
+                            'type': order_type
+                        }
                     price = tick.ask if order_type.upper() == 'BUY' else tick.bid
                 
                 # Simple symbol validation - just try to select
@@ -700,11 +715,22 @@ class BrokerAPI:
                         'error': error_desc
                     }
             
-            return None
+            # This should never be reached, but just in case
+            return {
+                'success': False,
+                'error': 'Unexpected end of function',
+                'symbol': symbol,
+                'type': order_type
+            }
             
         except Exception as e:
             self.logger.error(f"Error placing order: {e}")
-            return None
+            return {
+                'success': False,
+                'error': str(e),
+                'symbol': symbol,
+                'type': order_type
+            }
     
     def close_order(self, order_id: int) -> bool:
         """Close an order by ID"""
