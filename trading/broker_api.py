@@ -515,12 +515,7 @@ class BrokerAPI:
                 if price is None:
                     tick = mt5.symbol_info_tick(symbol)
                     if not tick:
-                        return {
-                            'success': False,
-                            'error': f'Cannot get price for {symbol}',
-                            'symbol': symbol,
-                            'type': order_type
-                        }
+                        return None  # เหมือน commit เก่า
                     price = tick.ask if order_type.upper() == 'BUY' else tick.bid
                 
                 # Simple symbol validation - just try to select (like before)
