@@ -403,7 +403,7 @@ class CorrelationManager:
             self.logger.info(f"🎯 Max Symbol Usage: {self.max_symbol_usage} times")
             self.logger.info(f"📏 Base Lot Size: {self.recovery_thresholds['base_lot_size']}")
             self.logger.info(f"🔧 Recovery Lot: ใช้ Risk-Based Calculation (ตาม risk_per_trade_percent)")
-            self.logger.info(f"⚙️ System Limits: Max Portfolio Risk {self.portfolio_balance_threshold:.1%}, Max Groups {self.max_concurrent_groups}")
+            self.logger.info(f"⚙️ System Limits: Max Groups {self.max_concurrent_groups} (ใช้แค่ Risk per Trade)")
             self.logger.info(f"⭐ Risk-Based Sizing: {'ENABLED' if self.use_risk_based_sizing else 'DISABLED'}")
             if self.use_risk_based_sizing:
                 self.logger.info(f"💰 Risk Per Trade: {self.risk_per_trade_percent}% of balance")
@@ -450,8 +450,8 @@ class CorrelationManager:
         self.min_price_distance_pips = 10  # ต้องห่าง >= 10 pips
         self.min_position_age_seconds = 60  # ต้องเปิดมา >= 60 วินาที
         
-        # Portfolio balance threshold ที่ระมัดระวัง
-        self.portfolio_balance_threshold = 0.05  # 5% imbalance threshold
+        # ⭐ ลบ portfolio_balance_threshold - ใช้แค่ risk_per_trade เท่านั้น
+        # self.portfolio_balance_threshold = 0.05  # 5% imbalance threshold
         
         self.logger.info("✅ Fallback configuration applied")
     
