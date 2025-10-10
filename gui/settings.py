@@ -162,7 +162,7 @@ class SettingsWindow:
         # 1. Recovery Parameters
         self.create_section(left_column, "🔧 Recovery Parameters (การแก้ไม้)", [
             ("ขาดทุนขั้นต่ำ (%)", "recovery_params.loss_thresholds.min_loss_percent", 
-             "float", -0.02, 0.0, "เช่น -0.005 = ขาดทุน 0.5% ของ balance จึงแก้ไม้"),
+             "float", -10.0, 0.0, "เช่น -1 = ขาดทุน 1% ของ balance จึงแก้ไม้"),
             ("ระยะทางขั้นต่ำ (pips)", "recovery_params.loss_thresholds.min_price_distance_pips", 
              "int", 5, 50, "เช่น 10 = ราคาต้องห่าง 10 pips จากจุดเปิดไม้"),
             ("อายุไม้ขั้นต่ำ (วินาที)", "recovery_params.timing.min_position_age_seconds", 
@@ -180,7 +180,7 @@ class SettingsWindow:
             ("ความลึกสูงสุด", "recovery_params.chain_recovery.max_chain_depth", 
              "int", 1, 5, "เช่น 2 = แก้ไม้ได้ลึก 2 ชั้น"),
             ("ขาดทุนสำหรับ Chain (%)", "recovery_params.chain_recovery.min_loss_percent_for_chain", 
-             "float", -0.02, 0.0, "เช่น -0.006 = ไม้ recovery ขาดทุน 0.6%")
+             "float", -10.0, 0.0, "เช่น -1 = ไม้ recovery ขาดทุน 1%")
         ])
         
         # 3. Trailing Stop
