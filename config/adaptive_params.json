@@ -180,7 +180,7 @@
   },
   "system_limits": {
     "max_concurrent_groups": 6,
-    "max_portfolio_risk": 0.15,
+    "max_portfolio_risk": 0.05,
     "max_drawdown_percent": 30,
     "max_position_hold_hours": 24,
     "max_recovery_attempts": 3,

@@ -425,8 +425,11 @@ class TriangleArbitrageDetector:
                 self.logger.error("❌ Cannot get balance from MT5")
                 return
             
-            # โหลด risk_per_trade_percent จาก config
+            # โหลด risk_per_trade_percent จาก config (force reload)
             from utils.config_helper import load_config
+            import importlib
+            import utils.config_helper
+            importlib.reload(utils.config_helper)  # Force reload config helper
             config = load_config('adaptive_params.json')
             risk_per_trade_percent = config.get('position_sizing', {}).get('lot_calculation', {}).get('risk_per_trade_percent')
             if not risk_per_trade_percent:
@@ -435,6 +438,9 @@ class TriangleArbitrageDetector:
             
             risk_per_trade_percent = float(risk_per_trade_percent)
             max_loss_pips = 100.0
+            
+            # Debug: แสดงค่า config ที่โหลดมา
+            self.logger.info(f"🔍 DEBUG: Loaded risk_per_trade_percent from config: {risk_per_trade_percent}%")
             
             # สูตร: Risk Amount = Balance × (Risk% ÷ 100)
             risk_amount = balance * (risk_per_trade_percent / 100.0)

@@ -69,8 +69,13 @@ def load_config(filename):
     """
     try:
         config_path = get_config_path(filename)
+        print(f"🔍 DEBUG: Loading config from path: {config_path}")
         with open(config_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            config_data = json.load(f)
+            if filename == 'adaptive_params.json':
+                risk_value = config_data.get('position_sizing', {}).get('lot_calculation', {}).get('risk_per_trade_percent')
+                print(f"🔍 DEBUG: risk_per_trade_percent = {risk_value}")
+            return config_data
     except Exception as e:
         print(f"Error loading config {filename}: {e}")
         return {}
