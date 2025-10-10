@@ -628,43 +628,16 @@ class BrokerAPI:
                         'type': order_type
                     }
                 
-                # Log detailed result
-                self.logger.info(f"📋 Result: RetCode={result.retcode}")
-                
-                if result.retcode == 10009:  # TRADE_RETCODE_DONE
-                    self.logger.info(f"✅ สำเร็จ! Deal: {getattr(result, 'deal', 'N/A')}, Order: {getattr(result, 'order', 'N/A')}")
-                    return {
-                        'success': True,
-                        'order_id': getattr(result, 'order', None),
-                        'symbol': symbol,
-                        'type': order_type,
-                        'volume': volume,
-                        'price': price,  # ใช้ price ที่ส่งไป (ไม่ใช้ result.price)
-                        'sl': sl,
-                        'tp': tp,
-                        'retcode': result.retcode,
-                        'comment': comment,  # ใช้ comment ที่ส่งไป (ไม่ใช้ result.comment)
-                        'deal': getattr(result, 'deal', None)
-                    }
-                else:
-                    error_desc = self._get_error_message(result.retcode)
-                    self.logger.error(f"❌ ไม่สำเร็จ: RetCode {result.retcode} - {error_desc}")
-                    self.logger.error(f"❌ Full result: {result}")
-                    # Return error result instead of None
-                    return {
-                        'success': False,
-                        'error': f"RetCode {result.retcode}: {error_desc}",
-                        'order_id': None,
-                        'symbol': symbol,
-                        'type': order_type,
-                        'volume': volume,
-                        'price': price,
-                        'sl': sl,
-                        'tp': tp,
-                        'retcode': result.retcode,
-                        'comment': comment,
-                        'deal': None
-                    }
+                # ตรวจสอบผลลัพธ์แบบง่าย ๆ
+                try:
+                    if result.retcode == 10009:  # สำเร็จ
+                        self.logger.info(f"✅ Order successful: {symbol} {order_type}")
+                        return {'success': True, 'symbol': symbol, 'type': order_type, 'volume': volume}
+                    else:
+                        return {'success': False, 'error': f'Order failed: {result.retcode}'}
+                except:
+                    # ถ้า result ไม่มี retcode attribute
+                    return {'success': False, 'error': 'Order result invalid'}
             
             # This should never be reached, but just in case
             return {
@@ -725,9 +698,9 @@ class BrokerAPI:
                     return False
                 
                 # Log detailed result
-                self.logger.info(f"📋 Close Result: RetCode={result.retcode}")
+                self.logger.info(f"📋 Close Result: RetCode={getattr(result, 'retcode', 'N/A')}")
                 
-                if result.retcode == 10009:  # TRADE_RETCODE_DONE
+                if getattr(result, 'retcode', 0) == 10009:  # TRADE_RETCODE_DONE
                     # คำนวณ PnL จากข้อมูล position
                     pnl = position.profit
                     self.logger.info(f"✅ ปิดสำเร็จ! Deal: {getattr(result, 'deal', 'N/A')}, Order: {getattr(result, 'order', 'N/A')}")
@@ -741,8 +714,8 @@ class BrokerAPI:
                         'volume': position.volume
                     }
                 else:
-                    error_desc = self._get_error_message(result.retcode)
-                    self.logger.error(f"❌ ไม่สำเร็จ: RetCode {result.retcode} - {error_desc}")
+                    error_desc = self._get_error_message(getattr(result, 'retcode', 0))
+                    self.logger.error(f"❌ ไม่สำเร็จ: RetCode {getattr(result, 'retcode', 0)} - {error_desc}")
                     return {
                         'success': False,
                         'error': error_desc
@@ -841,8 +814,8 @@ class BrokerAPI:
                 # Send cancel request
                 result = mt5.order_send(request)
                 
-                if result.retcode != mt5.TRADE_RETCODE_DONE:
-                    self.logger.error(f"Cancel order failed: {result.retcode} - {getattr(result, 'comment', 'No comment')}")
+                if getattr(result, 'retcode', 0) != mt5.TRADE_RETCODE_DONE:
+                    self.logger.error(f"Cancel order failed: {getattr(result, 'retcode', 0)} - {getattr(result, 'comment', 'No comment')}")
                     return False
                 
                 return True
