@@ -523,26 +523,9 @@ class BrokerAPI:
                         }
                     price = tick.ask if order_type.upper() == 'BUY' else tick.bid
                 
-                # Simple symbol validation - just try to select
-                self.logger.info(f"🔍 Attempting to select symbol: {symbol}")
+                # Simple symbol validation - just try to select (like before)
                 if not mt5.symbol_select(symbol, True):
-                    self.logger.error(f"❌ Could not select symbol {symbol}")
-                    # Try alternative symbol formats
-                    alt_symbols = [f"{symbol}.v", f"{symbol}m", f"{symbol}_v"]
-                    for alt in alt_symbols:
-                        self.logger.info(f"🔍 Trying alternative: {alt}")
-                        if mt5.symbol_select(alt, True):
-                            self.logger.info(f"✅ Found alternative symbol: {alt}")
-                            symbol = alt
-                            break
-                    else:
-                        self.logger.error(f"❌ No alternative symbols found for {symbol}")
-                        return {
-                            'success': False,
-                            'error': f'Symbol {symbol} not available',
-                            'symbol': symbol,
-                            'type': order_type
-                        }
+                    self.logger.warning(f"⚠️ Could not select symbol {symbol}, but continuing...")
                 
                 # Prepare request for REAL TRADING (แบบง่ายเหมือน Huakuy_)
                 # ใช้ comment ตามกลุ่มและลำดับ
@@ -583,14 +566,6 @@ class BrokerAPI:
                         'type': order_type
                     }
                 
-                # Debug MT5 connection status
-                account_info = mt5.account_info()
-                if account_info:
-                    self.logger.info(f"🔍 MT5 Account: {account_info.login}, Balance: {account_info.balance}, Equity: {account_info.equity}")
-                    self.logger.info(f"🔍 Trade allowed: {account_info.trade_allowed}, Trade expert: {account_info.trade_expert}")
-                else:
-                    self.logger.error(f"❌ Cannot get account info from MT5")
-                
                 # Check symbol info
                 symbol_info = mt5.symbol_info(symbol)
                 if symbol_info is None:
@@ -602,14 +577,6 @@ class BrokerAPI:
                         'type': order_type
                     }
                 
-                # Debug symbol info
-                self.logger.info(f"🔍 Symbol info for {symbol}:")
-                self.logger.info(f"   Trade mode: {symbol_info.trade_mode}")
-                self.logger.info(f"   Visible: {symbol_info.visible}")
-                self.logger.info(f"   Volume min: {symbol_info.volume_min}")
-                self.logger.info(f"   Volume max: {symbol_info.volume_max}")
-                self.logger.info(f"   Volume step: {symbol_info.volume_step}")
-                
                 # Check if symbol is tradeable
                 if not symbol_info.trade_mode:
                     self.logger.error(f"❌ Symbol {symbol} is not tradeable")
@@ -620,34 +587,10 @@ class BrokerAPI:
                         'type': order_type
                     }
                 
-                # Validate volume
-                min_volume = symbol_info.volume_min
-                max_volume = symbol_info.volume_max
-                volume_step = symbol_info.volume_step
-                
-                self.logger.info(f"🔍 Volume validation:")
-                self.logger.info(f"   Requested: {volume}")
-                self.logger.info(f"   Min: {min_volume}, Max: {max_volume}, Step: {volume_step}")
-                
-                # Normalize volume to step
-                normalized_volume = round(volume / volume_step) * volume_step
-                if normalized_volume != volume:
-                    self.logger.warning(f"⚠️ Volume {volume} normalized to {normalized_volume}")
-                    volume = normalized_volume
-                
-                # Check volume limits
-                if volume < min_volume:
-                    self.logger.error(f"❌ Volume {volume} below minimum {min_volume}")
-                    volume = min_volume
-                elif volume > max_volume:
-                    self.logger.error(f"❌ Volume {volume} above maximum {max_volume}")
-                    volume = max_volume
                 
                 # Send order
                 self.logger.info(f"🚀 ส่ง Order: {symbol} {order_type_mt5} Volume: {volume}")
-                self.logger.info(f"🔍 Request details: {request}")
                 result = mt5.order_send(request)
-                self.logger.info(f"🔍 MT5 result: {result}")
                 
                 # Check result
                 if result is None:
@@ -663,7 +606,6 @@ class BrokerAPI:
                     self.logger.error(f"   Error Code: {error_code}")
                     self.logger.error(f"   Specific Issue: {specific_error['issue']}")
                     self.logger.error(f"   Solution: {specific_error['solution']}")
-                    self.logger.error(f"   🔍 Full error details: {last_error}")
                     
                     return {
                         'success': False,

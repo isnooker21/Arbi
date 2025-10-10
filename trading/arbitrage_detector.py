@@ -488,7 +488,6 @@ class TriangleArbitrageDetector:
                 comment = f"G{triangle_number}_{symbol}"
                 
                 # ส่งออเดอร์
-                self.logger.info(f"🔍 Placing order: {symbol} {direction} {lot_size} lots")
                 result = self.broker.place_order(
                     symbol=symbol,
                     order_type=direction,
@@ -496,7 +495,6 @@ class TriangleArbitrageDetector:
                     comment=comment,
                     magic=triangle_magic
                 )
-                self.logger.info(f"🔍 Order result: {result}")
                 if result and result.get('success', False):
                     self.logger.info(f"✅ {triangle_name} {symbol} {direction} {lot_size} lots - SUCCESS")
                 else:
