@@ -5,28 +5,28 @@
       "recovery_aggressiveness": 0.6,
       "max_triangles": 3,
       "execution_speed_ms": 150,
-      "description": "High volatility market - conservative approach (\u2b50 optimized for $10K)"
+      "description": "High volatility market - conservative approach"
     },
     "trending": {
       "arbitrage_threshold": 0.002,
       "recovery_aggressiveness": 0.8,
       "max_triangles": 3,
       "execution_speed_ms": 100,
-      "description": "Strong trend market - conservative approach (\u2b50 optimized for $10K)"
+      "description": "Strong trend market - conservative approach"
     },
     "ranging": {
       "arbitrage_threshold": 0.001,
       "recovery_aggressiveness": 0.7,
       "max_triangles": 3,
       "execution_speed_ms": 80,
-      "description": "Range-bound market - balanced approach (\u2b50 optimized for $10K)"
+      "description": "Range-bound market - balanced approach"
     },
     "normal": {
       "arbitrage_threshold": 0.0012,
       "recovery_aggressiveness": 0.7,
       "max_triangles": 3,
       "execution_speed_ms": 100,
-      "description": "Normal market conditions - standard approach (\u2b50 optimized for $10K)"
+      "description": "Normal market conditions - standard approach"
     }
   },
   "position_sizing": {
