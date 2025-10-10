@@ -395,7 +395,7 @@ class TriangleArbitrageDetector:
                     self.logger.info("🔄 No active triangles - resetting data")
                     self._reset_group_data()
                 
-                time.sleep(30.0)  # รอ 30 วินาที
+                time.sleep(1.0)  # ⭐ UPGRADED: รอ 1 วินาที (เช็ค trailing stop เร็วขึ้น)
                 continue
                     
             except Exception as e:

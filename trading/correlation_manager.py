@@ -366,6 +366,35 @@ class CorrelationManager:
             # self.portfolio_balance_threshold = risk_mgmt.get('max_portfolio_risk', 0.05)
             self.max_concurrent_groups = risk_mgmt.get('max_concurrent_groups', 4)
             
+            # ⭐ UPGRADED: โหลดพารามิเตอร์ใหม่สำหรับระบบปรับปรุง
+            # Multi-timeframe correlation
+            self.min_1h_correlation = correlation_thresholds.get('min_1h_correlation', 0.85)
+            self.min_4h_correlation = correlation_thresholds.get('min_4h_correlation', 0.82)
+            self.min_1d_correlation = correlation_thresholds.get('min_1d_correlation', 0.80)
+            self.correlation_stability_max = correlation_thresholds.get('correlation_stability_max', 0.05)
+            
+            # Dynamic hedge ratio
+            self.use_dynamic_hedge_ratio = hedge_ratios.get('use_dynamic_calculation', True)
+            self.use_beta_regression = hedge_ratios.get('use_beta_regression', True)
+            self.hedge_min_ratio = hedge_ratios.get('min_ratio', 0.8)
+            self.hedge_max_ratio = hedge_ratios.get('max_ratio', 1.2)
+            
+            # Portfolio exposure limits
+            self.max_exposure_percent = risk_mgmt.get('max_exposure_percent', 80)
+            self.reserve_percent = risk_mgmt.get('reserve_percent', 20)
+            
+            # Position limits
+            self.max_positions_per_group = chain_recovery.get('max_positions_per_group', 8)
+            self.max_loss_per_group = loss_thresholds.get('max_loss_per_group', -500)
+            
+            # Symbol usage limit
+            self.max_usage_per_symbol = diversification.get('max_usage_per_symbol', 2)
+            
+            # System limits
+            system_limits = config.get('system_limits', {})
+            self.max_position_hold_hours = system_limits.get('max_position_hold_hours', 12)
+            self.max_recovery_attempts = system_limits.get('max_recovery_attempts', 2)
+            
             # ⭐ ใช้ risk-based calculation แทน fixed min/max hedge lot
             
             self.logger.info("=" * 60)
@@ -616,7 +645,7 @@ class CorrelationManager:
             self.logger.debug(f"Error starting chain recovery: {e}")
     
     def _select_best_pair_for_recovery(self, losing_pairs: List[Dict], group_id: str = None) -> Dict:
-        """เลือกคู่ที่เหมาะสมที่สุดสำหรับ recovery (แค่คู่เดียว)"""
+        """⭐ UPGRADED: เลือกคู่ที่เหมาะสมที่สุดสำหรับ recovery ด้วย multi-factor scoring"""
         try:
             if not group_id:
                 return None
@@ -1329,16 +1358,18 @@ class CorrelationManager:
             
             self.logger.info(f"✅ {symbol}: All conditions met - starting recovery")
             
-            # หาคู่เงินที่เหมาะสมสำหรับ recovery (ไม่ซ้ำกับคู่ในกลุ่ม)
-            group_pairs = self._get_group_pairs_from_mt5(group_id)
-            correlation_candidates = self._find_optimal_correlation_pairs(symbol, group_pairs)
+            # ⭐ UPGRADED: ใช้ multi-factor scoring system แทน
+            best_recovery = self._select_best_recovery_pair_with_scoring(symbol, group_id)
             
-            if not correlation_candidates:
-                self.logger.debug(f"   No correlation candidates found for {symbol}")
+            if not best_recovery:
+                self.logger.warning(f"⚠️ No suitable recovery pair found for {symbol} (correlation < 82% or already used)")
                 return
             
-            # เลือกคู่เงินที่ดีที่สุด
-            best_correlation = correlation_candidates[0]
+            # สร้าง correlation candidate format เพื่อส่งต่อไปยัง _execute_correlation_position
+            best_correlation = {
+                'symbol': best_recovery['symbol'],
+                'correlation': best_recovery['correlation']
+            }
             # แยก triangle number จาก group_id (group_triangle_X_Y -> X)
             if 'triangle_' in group_id:
                 triangle_part = group_id.split('triangle_')[1].split('_')[0]
@@ -1679,91 +1710,324 @@ class CorrelationManager:
             self.logger.error(f"Error checking if symbol is currency pair: {e}")
             return False
     
-    def _calculate_correlation_for_arbitrage_pair(self, base_symbol: str, target_symbol: str) -> float:
-        """คำนวณ correlation ระหว่างคู่เงิน arbitrage กับคู่เงินอื่น"""
+    def _check_multi_timeframe_correlation(self, pair1: str, pair2: str) -> Dict:
+        """⭐ UPGRADED: ตรวจสอบ correlation หลาย timeframes"""
         try:
-            # ใช้ correlation values ที่แม่นยำตามประเภทคู่เงิน
-            if base_symbol == 'EURUSD':
-                # Major pairs with high correlation
-                if target_symbol in ['GBPUSD', 'AUDUSD', 'NZDUSD']:
-                    return 0.85  # High correlation
-                # EUR crosses
-                elif target_symbol in ['EURJPY', 'EURCHF', 'EURCAD', 'EURAUD', 'EURNZD']:
-                    return 0.75  # Medium-high correlation
-                # USD crosses
-                elif target_symbol in ['USDJPY', 'USDCAD', 'USDCHF', 'USDNZD']:
-                    return 0.70  # Medium correlation
-                # Other major pairs
-                elif target_symbol in ['GBPJPY', 'GBPCHF', 'GBPCAD', 'GBPAUD', 'GBPNZD']:
-                    return 0.65  # Medium correlation
-                # Minor pairs
-                elif target_symbol in ['AUDJPY', 'AUDCHF', 'AUDCAD', 'AUDNZD']:
-                    return 0.60  # Lower correlation
-                # CAD, CHF, NZD crosses
-                elif target_symbol in ['CADJPY', 'CHFJPY', 'NZDJPY', 'CADCHF', 'NZDCHF']:
-                    return 0.55  # Lower correlation
-                else:
-                    return 0.50  # Default correlation
-                    
-            elif base_symbol == 'GBPUSD':
-                # Major pairs with high correlation
-                if target_symbol in ['EURUSD', 'AUDUSD', 'NZDUSD']:
-                    return 0.85  # High correlation
-                # GBP crosses
-                elif target_symbol in ['GBPJPY', 'GBPCHF', 'GBPCAD', 'GBPAUD', 'GBPNZD']:
-                    return 0.80  # High correlation
-                # USD crosses
-                elif target_symbol in ['USDJPY', 'USDCAD', 'USDCHF', 'USDNZD']:
-                    return 0.70  # Medium correlation
-                # EUR crosses
-                elif target_symbol in ['EURJPY', 'EURCHF', 'EURCAD', 'EURAUD', 'EURNZD']:
-                    return 0.65  # Medium correlation
-                # Other major pairs
-                elif target_symbol in ['AUDJPY', 'AUDCHF', 'AUDCAD', 'AUDNZD']:
-                    return 0.60  # Lower correlation
-                # Minor pairs
-                elif target_symbol in ['CADJPY', 'CHFJPY', 'NZDJPY', 'CADCHF', 'NZDCHF']:
-                    return 0.55  # Lower correlation
-                else:
-                    return 0.50  # Default correlation
-                    
-            elif base_symbol == 'EURGBP':
-                # EUR crosses
-                if target_symbol in ['EURJPY', 'EURCHF', 'EURCAD', 'EURAUD', 'EURNZD']:
-                    return 0.80  # High correlation
-                # GBP crosses
-                elif target_symbol in ['GBPJPY', 'GBPCHF', 'GBPCAD', 'GBPAUD', 'GBPNZD']:
-                    return 0.80  # High correlation
-                # Major pairs
-                elif target_symbol in ['EURUSD', 'GBPUSD']:
-                    return 0.75  # Medium-high correlation
-                # USD crosses
-                elif target_symbol in ['USDJPY', 'USDCAD', 'USDCHF', 'USDNZD']:
-                    return 0.65  # Medium correlation
-                # Other major pairs
-                elif target_symbol in ['AUDJPY', 'AUDCHF', 'AUDCAD', 'AUDNZD']:
-                    return 0.60  # Lower correlation
-                # Minor pairs
-                elif target_symbol in ['CADJPY', 'CHFJPY', 'NZDJPY', 'CADCHF', 'NZDCHF']:
-                    return 0.55  # Lower correlation
-                else:
-                    return 0.50  # Default correlation
+            # Calculate correlation on multiple timeframes
+            corr_1h = self._calculate_correlation_on_timeframe(pair1, pair2, timeframe='1H', periods=50)
+            corr_4h = self._calculate_correlation_on_timeframe(pair1, pair2, timeframe='4H', periods=50)
+            corr_1d = self._calculate_correlation_on_timeframe(pair1, pair2, timeframe='1D', periods=30)
             
-            return 0.50  # Default correlation
+            # Check stability (correlation should be consistent across timeframes)
+            correlations = [corr_1h, corr_4h, corr_1d]
+            corr_mean = np.mean(correlations)
+            corr_std = np.std(correlations)
+            
+            # Get thresholds from config
+            min_1h = getattr(self, 'min_1h_correlation', 0.85)
+            min_4h = getattr(self, 'min_4h_correlation', 0.82)
+            min_1d = getattr(self, 'min_1d_correlation', 0.80)
+            max_std = getattr(self, 'correlation_stability_max', 0.05)
+            
+            # Check if all timeframes meet requirements
+            is_valid = (corr_1h >= min_1h and 
+                       corr_4h >= min_4h and 
+                       corr_1d >= min_1d and 
+                       corr_std <= max_std)
+            
+            return {
+                'correlation_1h': corr_1h,
+                'correlation_4h': corr_4h,
+                'correlation_1d': corr_1d,
+                'correlation_mean': corr_mean,
+                'correlation_std': corr_std,
+                'is_valid': is_valid,
+                'reason': f"1H:{corr_1h:.2f} 4H:{corr_4h:.2f} 1D:{corr_1d:.2f} STD:{corr_std:.3f}"
+            }
             
         except Exception as e:
-            self.logger.debug(f"Error calculating correlation: {e}")
-            return 0.50
+            self.logger.error(f"Error in multi-timeframe correlation check: {e}")
+            return {'correlation_mean': 0.0, 'is_valid': False, 'reason': str(e)}
     
-    def _calculate_correlation_for_any_pair(self, base_symbol: str, target_symbol: str) -> float:
-        """คำนวณ correlation ระหว่างคู่เงินใดๆ โดยใช้ข้อมูลจริงจาก MT5"""
+    def _calculate_correlation_on_timeframe(self, pair1: str, pair2: str, timeframe: str, periods: int) -> float:
+        """คำนวณ correlation บน timeframe เดียว"""
         try:
-            # ใช้ข้อมูลจริงจาก MT5 เพื่อคำนวณ correlation
-            return self._calculate_real_correlation_from_mt5(base_symbol, target_symbol)
+            # ถ้ามี AI engine ให้ใช้ข้อมูลจริง
+            if self.ai_engine and hasattr(self.ai_engine, 'correlation_matrix'):
+                matrix = self.ai_engine.correlation_matrix
+                if pair1 in matrix and pair2 in matrix[pair1]:
+                    return abs(matrix[pair1][pair2])
+            
+            # Fallback: คำนวณจาก historical data
+            return self._calculate_real_correlation_from_mt5(pair1, pair2)
             
         except Exception as e:
-            self.logger.debug(f"Error calculating correlation for any pair: {e}")
-            return 0.60
+            self.logger.debug(f"Error calculating correlation on {timeframe}: {e}")
+            return 0.70  # Conservative fallback
+    
+    def _calculate_optimal_hedge_ratio(self, original_symbol: str, recovery_symbol: str, original_lot: float) -> Tuple[float, float]:
+        """⭐ UPGRADED: คำนวณ hedge ratio แบบ dynamic ด้วย Beta regression"""
+        try:
+            # Get config
+            use_dynamic = getattr(self, 'use_dynamic_hedge_ratio', True)
+            use_beta = getattr(self, 'use_beta_regression', True)
+            
+            if not use_dynamic or not use_beta:
+                # Use simple 1:1 ratio
+                return original_lot, 1.0
+            
+            # Calculate Beta using linear regression
+            returns_original = self._get_price_returns(original_symbol, periods=100)
+            returns_recovery = self._get_price_returns(recovery_symbol, periods=100)
+            
+            if len(returns_original) < 20 or len(returns_recovery) < 20:
+                # Not enough data - use default ratio
+                return original_lot, 1.0
+            
+            # Calculate Beta = Cov(original, recovery) / Var(recovery)
+            covariance = np.cov(returns_original, returns_recovery)[0, 1]
+            variance = np.var(returns_recovery)
+            
+            if variance == 0:
+                beta = 1.0
+                else:
+                beta = covariance / variance
+            
+            # Calculate correlation
+            correlation = np.corrcoef(returns_original, returns_recovery)[0, 1]
+            
+            # Hedge ratio = Beta * |Correlation|
+            hedge_ratio = beta * abs(correlation)
+            
+            # Clip to reasonable range (0.8 - 1.2)
+            min_ratio = getattr(self, 'hedge_min_ratio', 0.8)
+            max_ratio = getattr(self, 'hedge_max_ratio', 1.2)
+            hedge_ratio = np.clip(hedge_ratio, min_ratio, max_ratio)
+            
+            # Calculate recovery lot size
+            recovery_lot = original_lot * hedge_ratio
+            recovery_lot = round(recovery_lot, 2)  # Round to 0.01 lot
+            
+            self.logger.info(f"💡 Dynamic Hedge Ratio: {original_symbol} {original_lot} → {recovery_symbol} {recovery_lot} (ratio={hedge_ratio:.3f}, beta={beta:.3f}, corr={correlation:.3f})")
+            
+            return recovery_lot, hedge_ratio
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating optimal hedge ratio: {e}")
+            return original_lot, 1.0
+    
+    def _get_price_returns(self, symbol: str, periods: int = 100) -> np.ndarray:
+        """ดึง price returns สำหรับคำนวณ Beta"""
+        try:
+            # Map symbol if needed
+            if self.symbol_mapper:
+                broker_symbol = self.symbol_mapper.get_broker_symbol(symbol)
+                else:
+                broker_symbol = symbol
+            
+            # Get historical data from broker
+            prices = []
+            if hasattr(self.broker, 'get_historical_data'):
+                hist_data = self.broker.get_historical_data(broker_symbol, timeframe='1H', count=periods+1)
+                if hist_data is not None and len(hist_data) > 0:
+                    prices = hist_data['close'].values
+            
+            if len(prices) < 2:
+                return np.array([])
+            
+            # Calculate returns
+            returns = np.diff(prices) / prices[:-1]
+            return returns
+            
+        except Exception as e:
+            self.logger.debug(f"Error getting price returns for {symbol}: {e}")
+            return np.array([])
+    
+    def _select_best_recovery_pair_with_scoring(self, original_symbol: str, group_id: str) -> Optional[Dict]:
+        """⭐ UPGRADED: เลือกคู่ recovery ที่ดีที่สุดด้วย multi-factor scoring"""
+        try:
+            candidates = []
+            all_pairs = self._get_all_currency_pairs_from_mt5()
+            
+            # Get group pairs to avoid using them
+            group_pairs = self._get_group_pairs_from_mt5(group_id)
+            
+            for candidate in all_pairs:
+                # Skip if same as original
+                if candidate == original_symbol:
+                    continue
+                
+                # Skip if already used in this group
+                if candidate in group_pairs:
+                    continue
+                
+                # Skip if used too many times
+                usage_count = self._get_recovery_symbol_usage().get(candidate, 0)
+                max_usage = getattr(self, 'max_usage_per_symbol', 2)
+                if usage_count >= max_usage:
+                    continue
+                
+                # Calculate multi-factor score
+                score_data = self._calculate_recovery_pair_score(original_symbol, candidate)
+                
+                if score_data['total_score'] > 0:
+                    candidates.append({
+                        'symbol': candidate,
+                        'score': score_data['total_score'],
+                        'correlation': score_data['correlation'],
+                        'stability': score_data['stability'],
+                        'details': score_data
+                    })
+            
+            if len(candidates) == 0:
+                self.logger.warning(f"⚠️ No suitable recovery pairs found for {original_symbol}")
+                return None
+            
+            # Sort by score (highest first)
+            candidates.sort(key=lambda x: x['score'], reverse=True)
+            
+            # Return best candidate
+            best = candidates[0]
+            
+            # Check if good enough (correlation >= 82%)
+            min_corr = getattr(self, 'min_correlation', 0.82)
+            if best['correlation'] < min_corr:
+                self.logger.warning(f"⚠️ Best pair {best['symbol']} has correlation {best['correlation']:.2f} < {min_corr}")
+                return None
+            
+            self.logger.info(f"✅ Selected best recovery pair: {best['symbol']} (score={best['score']:.3f}, corr={best['correlation']:.2f})")
+            return best
+            
+        except Exception as e:
+            self.logger.error(f"Error selecting best recovery pair: {e}")
+            return None
+    
+    def _calculate_recovery_pair_score(self, pair1: str, pair2: str) -> Dict:
+        """คำนวณคะแนนความเหมาะสมของคู่ recovery"""
+        try:
+            # Multi-timeframe correlation check
+            corr_check = self._check_multi_timeframe_correlation(pair1, pair2)
+            correlation = corr_check['correlation_mean']
+            stability = 1.0 - corr_check['correlation_std']  # Lower std = higher stability
+            
+            # Trend alignment (ถ้ามี trend data)
+            trend_alignment = self._calculate_trend_alignment(pair1, pair2)
+            
+            # Liquidity (major pairs = higher score)
+            liquidity = self._get_pair_liquidity_score(pair2)
+            
+            # Spread cost (lower spread = higher score)
+            spread_score = 1.0 - self._get_pair_spread_ratio(pair2)
+            
+            # Weighted score
+            total_score = (
+                correlation * 0.40 +      # Most important
+                stability * 0.25 +        # Consistency
+                trend_alignment * 0.20 +  # Direction alignment
+                liquidity * 0.10 +        # Execution quality
+                spread_score * 0.05       # Cost
+            )
+            
+            return {
+                'total_score': total_score,
+                'correlation': correlation,
+                'stability': stability,
+                'trend_alignment': trend_alignment,
+                'liquidity': liquidity,
+                'spread_score': spread_score
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating recovery pair score: {e}")
+            return {'total_score': 0.0, 'correlation': 0.0, 'stability': 0.0, 'trend_alignment': 0.0, 'liquidity': 0.0, 'spread_score': 0.0}
+    
+    def _calculate_trend_alignment(self, pair1: str, pair2: str) -> float:
+        """คำนวณความสอดคล้องของ trend"""
+        try:
+            # Simplified: check if they move in opposite directions (for hedging)
+            # Return 1.0 if opposite, 0.5 if neutral, 0.0 if same
+            corr = self._calculate_real_correlation_from_mt5(pair1, pair2)
+            
+            # Negative correlation is better for hedging
+            if corr < -0.5:
+                return 1.0  # Strong opposite trend
+            elif corr < 0:
+                return 0.7  # Moderate opposite
+            elif corr < 0.5:
+                return 0.5  # Neutral
+            else:
+                return 0.3  # Same direction (not ideal for hedge)
+                
+        except Exception as e:
+            return 0.5  # Neutral
+    
+    def _get_pair_liquidity_score(self, symbol: str) -> float:
+        """คะแนนสภาพคล่องของคู่เงิน"""
+        major_pairs = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD']
+        if symbol in major_pairs:
+            return 1.0
+        elif 'USD' in symbol:
+            return 0.8
+        elif any(major in symbol for major in ['EUR', 'GBP', 'JPY']):
+            return 0.6
+        else:
+            return 0.4
+    
+    def _get_pair_spread_ratio(self, symbol: str) -> float:
+        """อัตราส่วน spread (0-1, lower is better)"""
+        try:
+            # Approximate spread ratios
+            spread_map = {
+                'EURUSD': 0.1, 'GBPUSD': 0.15, 'USDJPY': 0.1,
+                'AUDUSD': 0.15, 'USDCAD': 0.15, 'USDCHF': 0.15,
+                'NZDUSD': 0.2
+            }
+            return spread_map.get(symbol, 0.3)
+        except:
+            return 0.3
+    
+    def _check_portfolio_exposure(self, new_lot_size: float) -> Dict:
+        """⭐ UPGRADED: ตรวจสอบ portfolio exposure ก่อนเพิ่ม recovery"""
+        try:
+            balance = self.broker.get_account_balance()
+            
+            # Calculate current exposure
+            all_positions = self.broker.get_all_positions()
+            current_exposure = sum(pos.get('volume', 0) * 10000 for pos in all_positions)  # Notional value
+            
+            # Calculate new exposure
+            new_exposure = current_exposure + (new_lot_size * 10000)
+            
+            # Calculate exposure percentage
+            exposure_percent = (new_exposure / balance) * 100 if balance > 0 else 100
+            
+            # Get limits from config
+            max_exposure_percent = getattr(self, 'max_exposure_percent', 80)
+            
+            # Check if can add
+            can_add = exposure_percent < max_exposure_percent
+            
+            # Calculate available lot
+            available_exposure = (balance * (max_exposure_percent / 100)) - current_exposure
+            max_available_lot = max(0.01, available_exposure / 10000) if available_exposure > 0 else 0.01
+            
+            return {
+                'can_add': can_add,
+                'current_exposure': current_exposure,
+                'new_exposure': new_exposure,
+                'exposure_percent': exposure_percent,
+                'max_exposure_percent': max_exposure_percent,
+                'max_available_lot': round(max_available_lot, 2),
+                'reason': f"Exposure: {exposure_percent:.1f}% (max {max_exposure_percent}%)"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error checking portfolio exposure: {e}")
+            return {'can_add': True, 'reason': 'Error checking exposure'}
+    
+    # ⚠️ REMOVED: Old correlation functions replaced by new multi-timeframe correlation system
+    # _calculate_correlation_for_arbitrage_pair() - replaced by _check_multi_timeframe_correlation()
+    # _calculate_correlation_for_any_pair() - replaced by _calculate_recovery_pair_score()
     
     def _calculate_real_correlation_from_mt5(self, base_symbol: str, target_symbol: str) -> float:
         """คำนวณ correlation จริงจากข้อมูล MT5 แบบยืดหยุ่น"""
@@ -2169,28 +2433,31 @@ class CorrelationManager:
             else:
                 direction = 'SELL'  # Default to SELL
             
-            # Calculate correlation volume using new system
-            correlation_volume = self._calculate_hedge_lot_size(
-                original_lot=original_lot,
-                correlation=correlation,
-                loss_percent=0.0,
-                original_symbol=original_symbol,
-                hedge_symbol=correlation_candidate.get('symbol', '')
-            )
-            
             # คำนวณ lot size ตาม balance-based sizing
             original_lot = original_position.get('lot_size') or original_position.get('volume')
             if original_lot is None:
                 self.logger.error("❌ No lot_size or volume in original_position - skipping hedge")
                 return False
             
-            correlation_lot_size = self._calculate_hedge_lot_size(
-                original_lot=original_lot,
-                correlation=correlation,
-                loss_percent=0.0,  # ไม่ใช้ loss_percent ในระบบใหม่
+            # ⭐ UPGRADED: ใช้ dynamic hedge ratio calculation แทน
+            correlation_lot_size, hedge_ratio = self._calculate_optimal_hedge_ratio(
                 original_symbol=original_symbol,
-                hedge_symbol=symbol
+                recovery_symbol=symbol,
+                original_lot=original_lot
             )
+            
+            # ⭐ UPGRADED: ตรวจสอบ portfolio exposure ก่อนเปิดออเดอร์
+            exposure_check = self._check_portfolio_exposure(correlation_lot_size)
+            if not exposure_check['can_add']:
+                self.logger.warning(f"⚠️ Cannot add recovery position: {exposure_check['reason']}")
+                # ลด lot size ลงถ้าเกิน limit
+                max_lot = exposure_check.get('max_available_lot', 0.01)
+                if max_lot >= 0.01:
+                    self.logger.info(f"📉 Reducing lot size from {correlation_lot_size} to {max_lot}")
+                    correlation_lot_size = max_lot
+                else:
+                    self.logger.error(f"❌ No available exposure - skipping recovery")
+                    return False
             
             # Send correlation order
             order_result = self._send_correlation_order(symbol, correlation_lot_size, group_id, original_position)
@@ -2546,38 +2813,8 @@ class CorrelationManager:
                         'pnl': total_pnl
                     }
             
-            # แสดงตาราง
+            # 📋 แสดงรายละเอียดแต่ละ Group เฉพาะส่วน DETAILS
             if groups_data:
-                self.logger.info("=" * 80)
-                self.logger.info("📊 SMART RECOVERY STATUS - ALL GROUPS")
-                self.logger.info("=" * 80)
-                self.logger.info(f"{'Group':<20} {'Stage':<15} {'Positions':<12} {'Losing':<10} {'Hedged':<10} {'PnL':<12}")
-                self.logger.info("-" * 80)
-                
-                for group_id, data in sorted(groups_data.items()):
-                    # กำหนด Stage
-                    if data['losing'] == 0:
-                        stage = "✅ Stable"
-                        stage_color = ""
-                    elif data['hedged'] == data['losing']:
-                        stage = "🟢 Stage 2 Done"
-                        stage_color = ""
-                    elif data['hedged'] > 0:
-                        stage = "🔧 Stage 2"
-                        stage_color = ""
-                    else:
-                        stage = "🔴 Stage 1"
-                        stage_color = ""
-                    
-                    pnl_icon = "🔴" if data['pnl'] < 0 else "🟢"
-                    
-                    self.logger.info(f"{group_id:<20} {stage:<15} {data['total']:<12} "
-                                   f"{data['losing']:<10} {data['hedged']:<10} "
-                                   f"{pnl_icon} ${data['pnl']:>8.2f}")
-                
-                self.logger.info("=" * 80)
-                
-                # 📋 แสดงรายละเอียดแต่ละ Group
                 self._log_detailed_group_info(all_positions)
             
         except Exception as e:
@@ -2608,7 +2845,7 @@ class CorrelationManager:
             self.logger.error(f"❌ Error logging recovery chain: {e}")
     
     def _log_detailed_group_info(self, all_positions: List[Dict]):
-        """📋 แสดงรายละเอียดแต่ละ Group: คู่เงิน, ไม้ไหนแก้ไม้ไหน"""
+        """📋 แสดงรายละเอียดแต่ละ Group: คู่เงิน, ไม้ไหนแก้ไม้ไหน (รวม chain recovery)"""
         try:
             for magic in [234001, 234002, 234003, 234004, 234005, 234006]:
                 group_positions = []
@@ -2625,31 +2862,40 @@ class CorrelationManager:
                 
                 if group_positions:
                     group_id = self._get_group_id_from_magic(magic)
-                    total_pnl = sum(pos.get('profit', 0) for pos in group_positions)
+                    total_pnl = sum(pos.get('profit', 0) for pos in group_positions) + sum(pos.get('profit', 0) for pos in recovery_positions)
                     
                     self.logger.info("")
                     self.logger.info(f"🔍 {group_id} DETAILS:")
                     self.logger.info(f"   📊 Total PnL: ${total_pnl:.2f}")
-                    self.logger.info(f"   📈 Trading Chain:")
+                    self.logger.info(f"   📈 Trading Chain (แสดงทุกไม้ที่แก้ต่อกัน):")
                     self.logger.info("")
                     
-                    # สร้าง mapping ของ recovery orders
-                    recovery_map = {}
-                    for pos in recovery_positions:
-                        comment = pos.get('comment', '')
+                    # 🆕 สร้าง mapping แบบ multi-level (รองรับ chain recovery)
+                    recovery_map = {}  # {ticket: [recovery_positions]}
+                    all_tickets = set()
+                    
+                    # เก็บ ticket ทั้งหมด (original + recovery)
+                    for pos in group_positions + recovery_positions:
+                        all_tickets.add(str(pos.get('ticket', '')))
+                    
+                    # สร้าง map สำหรับทุก recovery orders
+                    for rec_pos in recovery_positions:
+                        comment = rec_pos.get('comment', '')
+                        
                         if comment.startswith('R') and '_' in comment:
-                            # Extract original ticket from comment (R3317086_EURUSD -> 3317086)
+                            # Extract parent ticket from comment (R34870799_EURUSD -> 34870799)
                             ticket_part = comment[1:].split('_')[0] if len(comment.split('_')) > 1 else ""
-                            # ค้นหา ticket ที่ลงท้ายด้วย ticket_part
-                            for orig_pos in group_positions:
-                                orig_ticket = str(orig_pos.get('ticket', ''))
-                                if orig_ticket.endswith(ticket_part):
-                                    if orig_ticket not in recovery_map:
-                                        recovery_map[orig_ticket] = []
-                                    recovery_map[orig_ticket].append(pos)
+                            
+                            # ค้นหา parent ticket (อาจเป็น original หรือ recovery ก่อนหน้า)
+                            for parent_ticket in all_tickets:
+                                # ตรวจสอบว่า parent_ticket ลงท้ายด้วย ticket_part หรือไม่
+                                if parent_ticket.endswith(ticket_part):
+                                    if parent_ticket not in recovery_map:
+                                        recovery_map[parent_ticket] = []
+                                    recovery_map[parent_ticket].append(rec_pos)
                                     break
                     
-                    # แสดงแต่ละ original position และ recovery chain
+                    # แสดงแต่ละ original position และ recovery chain แบบครบถ้วน
                     for idx, pos in enumerate(group_positions, 1):
                         ticket = str(pos.get('ticket', ''))
                         symbol = pos.get('symbol', '')
@@ -2661,14 +2907,14 @@ class CorrelationManager:
                         
                         self.logger.info(f"   🎯 Original #{idx}: {symbol} | Ticket: {ticket} | Lot: {lot_size:.2f} | PnL: ${profit:.2f} {profit_icon}")
                         
-                        # แสดงสถานะและ recovery chain
+                        # แสดงสถานะและ recovery chain แบบครบถ้วน
                         if profit >= 0:
                             self.logger.info(f"      ✅ ไม่ต้องแก้ (กำไร)")
                         else:
                             # ตรวจสอบว่ามี recovery หรือยัง
                             if ticket in recovery_map:
-                                # แสดง recovery chain
-                                self._display_recovery_chain_tree(recovery_map, ticket, indent_level=1)
+                                # แสดง recovery chain แบบครบถ้วน (รวม chain recovery ทุกชั้น)
+                                self._display_full_recovery_chain(recovery_map, ticket, indent_level=1, visited=set())
                             else:
                                 # ยังไม่มี recovery - แสดงเหตุผล
                                 is_hedged = self.order_tracker.is_order_hedged(ticket, symbol)
@@ -2683,6 +2929,52 @@ class CorrelationManager:
             
         except Exception as e:
             self.logger.error(f"❌ Error logging detailed group info: {e}")
+    
+    def _display_full_recovery_chain(self, recovery_map: Dict, parent_ticket: str, indent_level: int = 1, visited: set = None):
+        """แสดง recovery chain แบบครบถ้วน (รวม chain recovery ทุกชั้น)"""
+        try:
+            if visited is None:
+                visited = set()
+            
+            # ป้องกัน infinite loop
+            if parent_ticket in visited:
+                return
+            visited.add(parent_ticket)
+            
+            if parent_ticket not in recovery_map:
+                return
+            
+            recovery_chain = recovery_map[parent_ticket]
+            for recovery_pos in recovery_chain:
+                rec_ticket = str(recovery_pos.get('ticket', ''))
+                rec_symbol = recovery_pos.get('symbol', '')
+                rec_profit = recovery_pos.get('profit', 0)
+                rec_lot_size = recovery_pos.get('volume', 0)
+                
+                rec_profit_icon = "🔴" if rec_profit < 0 else "🟢"
+                
+                # สร้าง indent ตามระดับ
+                indent = "      " + ("   " * (indent_level - 1))
+                arrow = "↳"
+                
+                # กำหนด label ตามระดับ
+                if indent_level == 1:
+                    label = "🛡️ Recovery"
+                elif indent_level == 2:
+                    label = "🔧 Chain Lv2"
+                elif indent_level == 3:
+                    label = "⚙️ Chain Lv3"
+                else:
+                    label = f"🔩 Chain Lv{indent_level}"
+                
+                self.logger.info(f"{indent}{arrow} {label}: {rec_symbol} | Ticket: {rec_ticket} | Lot: {rec_lot_size:.2f} | PnL: ${rec_profit:.2f} {rec_profit_icon}")
+                
+                # แสดง recovery ของ recovery (recursive) - ต่อท้ายไปเรื่อยๆ
+                if rec_ticket in recovery_map:
+                    self._display_full_recovery_chain(recovery_map, rec_ticket, indent_level + 1, visited)
+        
+        except Exception as e:
+            self.logger.debug(f"Error displaying full recovery chain: {e}")
     
     def _display_recovery_chain_tree(self, recovery_map: Dict, parent_ticket: str, indent_level: int = 1):
         """แสดง recovery chain แบบ tree structure"""
