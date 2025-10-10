@@ -513,8 +513,10 @@ class BrokerAPI:
                 
                 # Get current price if not provided
                 if price is None:
+                    self.logger.info(f"🔍 Getting price for {symbol}")
                     tick = mt5.symbol_info_tick(symbol)
                     if not tick:
+                        self.logger.error(f"❌ Cannot get tick for {symbol} - symbol may not exist or market closed")
                         return {
                             'success': False,
                             'error': f'Cannot get price for {symbol}',
@@ -522,10 +524,20 @@ class BrokerAPI:
                             'type': order_type
                         }
                     price = tick.ask if order_type.upper() == 'BUY' else tick.bid
+                    self.logger.info(f"✅ Got price for {symbol}: {price}")
                 
                 # Simple symbol validation - just try to select (like before)
+                self.logger.info(f"🔍 Attempting to select symbol: {symbol}")
                 if not mt5.symbol_select(symbol, True):
                     self.logger.warning(f"⚠️ Could not select symbol {symbol}, but continuing...")
+                    # Try to get symbol info to see if it exists
+                    symbol_info = mt5.symbol_info(symbol)
+                    if symbol_info:
+                        self.logger.info(f"✅ Symbol {symbol} exists but cannot be selected")
+                    else:
+                        self.logger.error(f"❌ Symbol {symbol} does not exist in MT5")
+                else:
+                    self.logger.info(f"✅ Successfully selected symbol: {symbol}")
                 
                 # Prepare request for REAL TRADING (แบบง่ายเหมือน Huakuy_)
                 # ใช้ comment ตามกลุ่มและลำดับ
@@ -565,6 +577,15 @@ class BrokerAPI:
                         'symbol': symbol,
                         'type': order_type
                     }
+                
+                # Debug MT5 connection status
+                self.logger.info(f"🔍 MT5 Connection Status:")
+                account_info = mt5.account_info()
+                if account_info:
+                    self.logger.info(f"   Account: {account_info.login}, Balance: {account_info.balance}")
+                    self.logger.info(f"   Trade allowed: {account_info.trade_allowed}, Trade expert: {account_info.trade_expert}")
+                else:
+                    self.logger.error(f"   ❌ Cannot get account info from MT5")
                 
                 # Check symbol info
                 symbol_info = mt5.symbol_info(symbol)
