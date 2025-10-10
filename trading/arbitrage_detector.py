@@ -487,9 +487,10 @@ class TriangleArbitrageDetector:
                 triangle_number = triangle_name.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
                 comment = f"G{triangle_number}_{symbol}"
                 
-                # ส่งออเดอร์
+                # ส่งออเดอร์ (ใช้ real symbol จาก SymbolMapper)
+                real_symbol = self.symbol_mapper.get_real_symbol(symbol)
                 result = self.broker.place_order(
-                    symbol=symbol,
+                    symbol=real_symbol,
                     order_type=direction,
                     volume=lot_size,
                     comment=comment,
