@@ -392,13 +392,13 @@ class TriangleArbitrageDetector:
                 
                 # แสดงสถานะเฉพาะเมื่อมีการเปลี่ยนแปลง
                 if closed_triangles:
-                    self.logger.info(f"📊 Closed triangles: {closed_triangles}")
+                    self.logger.debug(f"📊 Closed triangles: {closed_triangles}")
                 
                 # ตรวจสอบและปิด groups ที่มีกำไร (ทำใน loop ข้างบนแล้ว)
                 
                 # ส่งไม้ใหม่สำหรับ triangles ที่ปิดแล้ว
                 if closed_triangles:
-                    self.logger.info(f"🎯 Sending new orders for closed triangles: {closed_triangles}")
+                    self.logger.debug(f"🎯 Sending new orders for closed triangles: {closed_triangles}")
                     self._send_orders_for_closed_triangles(closed_triangles)
                 else:
                     self.logger.debug("⏭️ No closed triangles to process")
@@ -457,7 +457,7 @@ class TriangleArbitrageDetector:
             triangle_index = int(triangle_name.split('_')[-1]) - 1
             if triangle_index < len(self.triangle_combinations):
                 triangle = self.triangle_combinations[triangle_index]
-                self.logger.info(f"🚀 Executing new orders for {triangle_name} (no existing orders found)")
+                self.logger.debug(f"🚀 Executing new orders for {triangle_name} (no existing orders found)")
                 
                 # อัปเดตเวลาที่ส่งออเดอร์ล่าสุด
                 self.last_order_time = current_time
@@ -469,7 +469,7 @@ class TriangleArbitrageDetector:
                     self.daily_order_count += 1
                     self.logger.info(f"📊 Order count: {self.daily_order_count}/{self.daily_order_limit}")
                 else:
-                    self.logger.warning(f"⚠️ Order execution failed for {triangle_name} - not counting")
+                    self.logger.debug(f"⚠️ Order execution failed for {triangle_name} - not counting")
     
     def _execute_new_triangle_orders(self, triangle, triangle_name):
         """⭐ ปรับปรุงใหม่ - คำนวณทิศทางและตรวจสอบก่อนส่งออเดอร์"""
@@ -481,7 +481,7 @@ class TriangleArbitrageDetector:
             direction_info = self.calculate_arbitrage_direction(triangle)
             
             if not direction_info:
-                self.logger.info(f"⏭️ {triangle_name}: No profitable arbitrage opportunity - skipping")
+                self.logger.debug(f"⏭️ {triangle_name}: No profitable arbitrage opportunity - skipping")
                 return
             
             # Track: ผ่านการตรวจสอบทิศทาง
@@ -493,7 +493,7 @@ class TriangleArbitrageDetector:
             
             # 2. ตรวจสอบความเป็นไปได้
             if not self._validate_execution_feasibility(triangle, direction_info):
-                self.logger.info(f"⏭️ {triangle_name}: Failed feasibility check (profit: {direction_info.get('profit_percent', 0):.4f}%)")
+                self.logger.debug(f"⏭️ {triangle_name}: Failed feasibility check (profit: {direction_info.get('profit_percent', 0):.4f}%)")
                 return
             
             # Track: ผ่านการตรวจสอบความเป็นไปได้
