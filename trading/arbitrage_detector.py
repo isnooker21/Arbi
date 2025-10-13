@@ -400,6 +400,8 @@ class TriangleArbitrageDetector:
                 if closed_triangles:
                     self.logger.info(f"🎯 Sending new orders for closed triangles: {closed_triangles}")
                     self._send_orders_for_closed_triangles(closed_triangles)
+                else:
+                    self.logger.debug("⏭️ No closed triangles to process")
                 
                 # ถ้าไม่มี triangles ที่เปิดอยู่เลย
                 if not active_triangles:
@@ -418,14 +420,56 @@ class TriangleArbitrageDetector:
         self.logger.info("🛑 Simple trading system stopped")
     
     def _send_orders_for_closed_triangles(self, closed_triangles: List[str]):
-        """⭐ ฟังก์ชันใหม่ - ใช้แค่สูตรใหม่เท่านั้น"""
+        """⭐ ปรับปรุงใหม่ - ตรวจสอบสถานะออเดอร์จริงและ rate limiting"""
+        
+        # Rate limiting: ตรวจสอบเวลาที่ส่งออเดอร์ล่าสุด
+        current_time = time.time()
+        if current_time - self.last_order_time < self.min_order_interval:
+            self.logger.debug(f"⏳ Rate limiting: waiting {self.min_order_interval - (current_time - self.last_order_time):.1f}s")
+            return
+        
+        # ตรวจสอบ daily order limit
+        today = datetime.now().date()
+        if today != self.last_reset_date:
+            self.daily_order_count = 0
+            self.last_reset_date = today
+            self.logger.info(f"📅 Daily order count reset for {today}")
+        
+        if self.daily_order_count >= self.daily_order_limit:
+            self.logger.warning(f"⚠️ Daily order limit reached: {self.daily_order_count}/{self.daily_order_limit}")
+            return
+        
         for triangle_name in closed_triangles:
             if self.is_arbitrage_paused.get(triangle_name, False):
                 continue
+            
+            # ตรวจสอบว่ามีออเดอร์เปิดอยู่สำหรับ triangle นี้หรือไม่
+            triangle_magic = self.triangle_magic_numbers.get(triangle_name, 234000)
+            existing_positions = self.broker.get_all_positions()
+            
+            # ตรวจสอบว่ามีออเดอร์ที่ magic number นี้อยู่หรือไม่
+            has_existing_orders = any(pos.get('magic', 0) == triangle_magic for pos in existing_positions)
+            
+            if has_existing_orders:
+                self.logger.debug(f"⏭️ {triangle_name}: Still has existing orders (magic: {triangle_magic}) - skipping")
+                continue
+            
             triangle_index = int(triangle_name.split('_')[-1]) - 1
             if triangle_index < len(self.triangle_combinations):
                 triangle = self.triangle_combinations[triangle_index]
-                self._execute_new_triangle_orders(triangle, triangle_name)
+                self.logger.info(f"🚀 Executing new orders for {triangle_name} (no existing orders found)")
+                
+                # อัปเดตเวลาที่ส่งออเดอร์ล่าสุด
+                self.last_order_time = current_time
+                
+                success = self._execute_new_triangle_orders(triangle, triangle_name)
+                
+                # นับจำนวนออเดอร์เฉพาะเมื่อสำเร็จ
+                if success:
+                    self.daily_order_count += 1
+                    self.logger.info(f"📊 Order count: {self.daily_order_count}/{self.daily_order_limit}")
+                else:
+                    self.logger.warning(f"⚠️ Order execution failed for {triangle_name} - not counting")
     
     def _execute_new_triangle_orders(self, triangle, triangle_name):
         """⭐ ปรับปรุงใหม่ - คำนวณทิศทางและตรวจสอบก่อนส่งออเดอร์"""
@@ -437,7 +481,7 @@ class TriangleArbitrageDetector:
             direction_info = self.calculate_arbitrage_direction(triangle)
             
             if not direction_info:
-                self.logger.debug(f"⏭️ {triangle_name}: No profitable arbitrage opportunity")
+                self.logger.info(f"⏭️ {triangle_name}: No profitable arbitrage opportunity - skipping")
                 return
             
             # Track: ผ่านการตรวจสอบทิศทาง
@@ -449,7 +493,7 @@ class TriangleArbitrageDetector:
             
             # 2. ตรวจสอบความเป็นไปได้
             if not self._validate_execution_feasibility(triangle, direction_info):
-                self.logger.debug(f"⏭️ {triangle_name}: Failed feasibility check")
+                self.logger.info(f"⏭️ {triangle_name}: Failed feasibility check (profit: {direction_info.get('profit_percent', 0):.4f}%)")
                 return
             
             # Track: ผ่านการตรวจสอบความเป็นไปได้
