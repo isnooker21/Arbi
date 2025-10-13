@@ -29,8 +29,8 @@ class GroupDashboard:
         # Stats Overview Cards
         self.create_stats_overview()
         
-        # Groups grid - ปรับปรุงใหม่
-        self.create_modern_groups_grid()
+        # Main content area - แบ่งเป็น 2 ส่วน
+        self.create_main_content_area()
         
         # Summary panel
         self.create_summary_panel()
@@ -144,10 +144,317 @@ class GroupDashboard:
             
             self.stats_cards[stat['title']] = value_label
     
-    def create_modern_groups_grid(self):
+    def create_main_content_area(self):
+        """สร้างพื้นที่หลักแบ่งเป็น 2 ส่วน"""
+        # Main content frame
+        content_frame = tk.Frame(self.main_frame, bg='#1a1a1a')
+        content_frame.pack(fill='both', expand=True)
+        
+        # Left side - Groups
+        left_frame = tk.Frame(content_frame, bg='#1a1a1a', width=400)
+        left_frame.pack(side='left', fill='y', padx=(0, 10))
+        left_frame.pack_propagate(False)
+        
+        # Groups grid
+        self.create_modern_groups_grid(left_frame)
+        
+        # Right side - Detailed view
+        right_frame = tk.Frame(content_frame, bg='#1a1a1a')
+        right_frame.pack(side='right', fill='both', expand=True, padx=(10, 0))
+        
+        # Detailed view
+        self.create_detailed_view(right_frame)
+    
+    def create_detailed_view(self, parent):
+        """สร้าง detailed view สำหรับแสดงไม้และการแก้ไม้"""
+        # Header
+        header_frame = tk.Frame(parent, bg='#2d2d2d', height=50)
+        header_frame.pack(fill='x', pady=(0, 10))
+        header_frame.pack_propagate(False)
+        
+        # Title
+        title_label = tk.Label(
+            header_frame,
+            text="📊 Group Details",
+            font=('Arial', 14, 'bold'),
+            bg='#2d2d2d',
+            fg='#FFD700'
+        )
+        title_label.pack(side='left', padx=15, pady=10)
+        
+        # Selected group info
+        self.selected_group_label = tk.Label(
+            header_frame,
+            text="No Group Selected",
+            font=('Arial', 12),
+            bg='#2d2d2d',
+            fg='white'
+        )
+        self.selected_group_label.pack(side='right', padx=15, pady=10)
+        
+        # Main content area
+        content_frame = tk.Frame(parent, bg='#1a1a1a')
+        content_frame.pack(fill='both', expand=True)
+        
+        # Create notebook for tabs
+        from tkinter import ttk
+        self.notebook = ttk.Notebook(content_frame)
+        self.notebook.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Configure notebook style
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure('TNotebook', background='#2d2d2d')
+        style.configure('TNotebook.Tab', background='#2d2d2d', foreground='white')
+        style.map('TNotebook.Tab', background=[('selected', '#4CAF50')])
+        
+        # Tab 1: Active Positions
+        self.positions_frame = tk.Frame(self.notebook, bg='#2d2d2d')
+        self.notebook.add(self.positions_frame, text="🎯 Active Positions")
+        self.create_positions_tab()
+        
+        # Tab 2: Recovery History
+        self.recovery_frame = tk.Frame(self.notebook, bg='#2d2d2d')
+        self.notebook.add(self.recovery_frame, text="🔄 Recovery History")
+        self.create_recovery_tab()
+        
+        # Tab 3: Trading Log
+        self.log_frame = tk.Frame(self.notebook, bg='#2d2d2d')
+        self.notebook.add(self.log_frame, text="📝 Trading Log")
+        self.create_log_tab()
+        
+        # Tab 4: Performance
+        self.performance_frame = tk.Frame(self.notebook, bg='#2d2d2d')
+        self.notebook.add(self.performance_frame, text="📈 Performance")
+        self.create_performance_tab()
+    
+    def create_positions_tab(self):
+        """สร้าง tab แสดง positions"""
+        # Header
+        header_frame = tk.Frame(self.positions_frame, bg='#3d3d3d', height=40)
+        header_frame.pack(fill='x', padx=10, pady=10)
+        header_frame.pack_propagate(False)
+        
+        tk.Label(
+            header_frame,
+            text="🎯 Active Positions",
+            font=('Arial', 12, 'bold'),
+            bg='#3d3d3d',
+            fg='#FFD700'
+        ).pack(side='left', padx=10, pady=8)
+        
+        # Positions list
+        positions_container = tk.Frame(self.positions_frame, bg='#2d2d2d')
+        positions_container.pack(fill='both', expand=True, padx=10, pady=(0, 10))
+        
+        # Create treeview for positions
+        columns = ('Symbol', 'Type', 'Volume', 'Open Price', 'Current P&L', 'Status')
+        self.positions_tree = ttk.Treeview(positions_container, columns=columns, show='headings', height=15)
+        
+        # Configure columns
+        for col in columns:
+            self.positions_tree.heading(col, text=col)
+            self.positions_tree.column(col, width=100, anchor='center')
+        
+        # Scrollbar
+        positions_scrollbar = ttk.Scrollbar(positions_container, orient='vertical', command=self.positions_tree.yview)
+        self.positions_tree.configure(yscrollcommand=positions_scrollbar.set)
+        
+        # Pack
+        self.positions_tree.pack(side='left', fill='both', expand=True)
+        positions_scrollbar.pack(side='right', fill='y')
+        
+        # Sample data
+        sample_positions = [
+            ('EURUSD', 'BUY', '0.50', '1.08520', '+$12.30', 'Active'),
+            ('GBPUSD', 'BUY', '0.48', '1.26520', '+$8.75', 'Active'),
+            ('EURGBP', 'SELL', '0.52', '0.85820', '-$5.55', 'Active')
+        ]
+        
+        for pos in sample_positions:
+            self.positions_tree.insert('', 'end', values=pos)
+    
+    def create_recovery_tab(self):
+        """สร้าง tab แสดง recovery history"""
+        # Header
+        header_frame = tk.Frame(self.recovery_frame, bg='#3d3d3d', height=40)
+        header_frame.pack(fill='x', padx=10, pady=10)
+        header_frame.pack_propagate(False)
+        
+        tk.Label(
+            header_frame,
+            text="🔄 Recovery History",
+            font=('Arial', 12, 'bold'),
+            bg='#3d3d3d',
+            fg='#FFD700'
+        ).pack(side='left', padx=10, pady=8)
+        
+        # Recovery list
+        recovery_container = tk.Frame(self.recovery_frame, bg='#2d2d2d')
+        recovery_container.pack(fill='both', expand=True, padx=10, pady=(0, 10))
+        
+        # Create treeview for recovery
+        columns = ('Time', 'Original', 'Recovery', 'Correlation', 'Result', 'P&L')
+        self.recovery_tree = ttk.Treeview(recovery_container, columns=columns, show='headings', height=15)
+        
+        # Configure columns
+        for col in columns:
+            self.recovery_tree.heading(col, text=col)
+            self.recovery_tree.column(col, width=100, anchor='center')
+        
+        # Scrollbar
+        recovery_scrollbar = ttk.Scrollbar(recovery_container, orient='vertical', command=self.recovery_tree.yview)
+        self.recovery_tree.configure(yscrollcommand=recovery_scrollbar.set)
+        
+        # Pack
+        self.recovery_tree.pack(side='left', fill='both', expand=True)
+        recovery_scrollbar.pack(side='right', fill='y')
+        
+        # Sample data
+        sample_recovery = [
+            ('14:30:25', 'EURUSD', 'GBPUSD', '0.85', 'Success', '+$3.20'),
+            ('13:45:12', 'GBPUSD', 'USDJPY', '0.78', 'Success', '+$1.85'),
+            ('12:15:33', 'EURGBP', 'EURUSD', '0.92', 'Success', '+$2.45')
+        ]
+        
+        for rec in sample_recovery:
+            self.recovery_tree.insert('', 'end', values=rec)
+    
+    def create_log_tab(self):
+        """สร้าง tab แสดง trading log"""
+        # Header
+        header_frame = tk.Frame(self.log_frame, bg='#3d3d3d', height=40)
+        header_frame.pack(fill='x', padx=10, pady=10)
+        header_frame.pack_propagate(False)
+        
+        tk.Label(
+            header_frame,
+            text="📝 Trading Log",
+            font=('Arial', 12, 'bold'),
+            bg='#3d3d3d',
+            fg='#FFD700'
+        ).pack(side='left', padx=10, pady=8)
+        
+        # Log text area
+        log_container = tk.Frame(self.log_frame, bg='#2d2d2d')
+        log_container.pack(fill='both', expand=True, padx=10, pady=(0, 10))
+        
+        # Text widget with scrollbar
+        self.log_text = tk.Text(
+            log_container,
+            bg='#1a1a1a',
+            fg='#00FF00',
+            font=('Consolas', 9),
+            wrap='word',
+            height=20
+        )
+        
+        log_scrollbar = ttk.Scrollbar(log_container, orient='vertical', command=self.log_text.yview)
+        self.log_text.configure(yscrollcommand=log_scrollbar.set)
+        
+        # Pack
+        self.log_text.pack(side='left', fill='both', expand=True)
+        log_scrollbar.pack(side='right', fill='y')
+        
+        # Sample log
+        sample_log = """2025-01-13 17:30:25 - Triangle 1: Checking arbitrage conditions for ('EURUSD', 'GBPUSD', 'EURGBP')
+2025-01-13 17:30:25 - ('EURUSD', 'GBPUSD', 'EURGBP'): Calculating arbitrage direction...
+2025-01-13 17:30:25 - ('EURUSD', 'GBPUSD', 'EURGBP'): Prices - EURUSD: 1.08500/1.08520, GBPUSD: 1.26500/1.26520, EURGBP: 0.85800/0.85820
+2025-01-13 17:30:25 - ('EURUSD', 'GBPUSD', 'EURGBP'): Forward path = 0.45%, Reverse path = 0.38%, Cost = 0.12%
+2025-01-13 17:30:25 - ('EURUSD', 'GBPUSD', 'EURGBP'): Net profits - Forward: 0.33%, Reverse: 0.26%, Min threshold: 0.30%
+2025-01-13 17:30:25 - ✅ ('EURUSD', 'GBPUSD', 'EURGBP'): FORWARD path selected - Net profit: 0.33%
+2025-01-13 17:30:25 - ✅ EURUSD_GBPUSD_EURGBP_1: Direction check passed - FORWARD path, profit: 0.3300%
+2025-01-13 17:30:25 - 💰 ('EURUSD', 'GBPUSD', 'EURGBP'): Raw profit: 0.45%, Cost: 0.12%, Net: 0.33%
+2025-01-13 17:30:25 - ✅ ('EURUSD', 'GBPUSD', 'EURGBP'): Profit check passed (0.33% >= 0.30%)
+2025-01-13 17:30:25 - ✅ EURUSD_GBPUSD_EURGBP_1: Feasibility check passed
+2025-01-13 17:30:25 - 📊 ('EURUSD', 'GBPUSD', 'EURGBP'): Spreads - EURUSD: 1.2, GBPUSD: 1.5, EURGBP: 1.8
+2025-01-13 17:30:25 - ✅ ('EURUSD', 'GBPUSD', 'EURGBP'): All spreads acceptable (max: 1.8 <= 3.0)
+2025-01-13 17:30:25 - ✅ ('EURUSD', 'GBPUSD', 'EURGBP'): Spread check passed
+2025-01-13 17:30:25 - 💰 EURUSD_GBPUSD_EURGBP_1: Account balance: $10,000.00
+2025-01-13 17:30:25 - ⚙️ EURUSD_GBPUSD_EURGBP_1: Risk per trade: 1.0%
+2025-01-13 17:30:25 - 🚀 EURUSD_GBPUSD_EURGBP_1: All checks passed! Sending orders...
+2025-01-13 17:30:25 - 🚀 Sending FORWARD arbitrage for EURUSD_GBPUSD_EURGBP_1: ['EURUSD', 'GBPUSD', 'EURGBP']
+2025-01-13 17:30:25 - ✅ EURUSD BUY 0.50 lots - SUCCESS (Ticket: 12345)
+2025-01-13 17:30:25 - ✅ GBPUSD BUY 0.48 lots - SUCCESS (Ticket: 12346)
+2025-01-13 17:30:25 - ✅ EURGBP SELL 0.52 lots - SUCCESS (Ticket: 12347)
+2025-01-13 17:30:25 - ✅ EURUSD_GBPUSD_EURGBP_1: All 3 orders placed successfully!
+2025-01-13 17:30:25 - 🎉 EURUSD_GBPUSD_EURGBP_1: All orders placed successfully!"""
+        
+        self.log_text.insert('1.0', sample_log)
+        self.log_text.config(state='disabled')
+    
+    def create_performance_tab(self):
+        """สร้าง tab แสดง performance metrics"""
+        # Header
+        header_frame = tk.Frame(self.performance_frame, bg='#3d3d3d', height=40)
+        header_frame.pack(fill='x', padx=10, pady=10)
+        header_frame.pack_propagate(False)
+        
+        tk.Label(
+            header_frame,
+            text="📈 Performance Metrics",
+            font=('Arial', 12, 'bold'),
+            bg='#3d3d3d',
+            fg='#FFD700'
+        ).pack(side='left', padx=10, pady=8)
+        
+        # Performance metrics
+        metrics_frame = tk.Frame(self.performance_frame, bg='#2d2d2d')
+        metrics_frame.pack(fill='both', expand=True, padx=10, pady=(0, 10))
+        
+        # Create metrics grid
+        metrics_data = [
+            ("Total Trades", "15", "#4CAF50"),
+            ("Winning Trades", "9", "#4CAF50"),
+            ("Losing Trades", "6", "#F44336"),
+            ("Win Rate", "60%", "#4CAF50"),
+            ("Average Win", "$8.45", "#4CAF50"),
+            ("Average Loss", "-$5.20", "#F44336"),
+            ("Profit Factor", "2.43", "#4CAF50"),
+            ("Max Drawdown", "$15.30", "#F44336"),
+            ("Recovery Success", "85%", "#4CAF50"),
+            ("Avg Recovery Time", "2.5 min", "#2196F3"),
+            ("Best Trade", "$22.80", "#4CAF50"),
+            ("Worst Trade", "-$12.50", "#F44336")
+        ]
+        
+        for i, (metric, value, color) in enumerate(metrics_data):
+            row = i // 3
+            col = i % 3
+            
+            metric_frame = tk.Frame(metrics_frame, bg=color, width=150, height=80)
+            metric_frame.grid(row=row, column=col, padx=5, pady=5, sticky='nsew')
+            metric_frame.grid_propagate(False)
+            
+            tk.Label(
+                metric_frame,
+                text=metric,
+                font=('Arial', 9, 'bold'),
+                bg=color,
+                fg='white'
+            ).pack(pady=(5, 0))
+            
+            tk.Label(
+                metric_frame,
+                text=value,
+                font=('Arial', 14, 'bold'),
+                bg=color,
+                fg='white'
+            ).pack(expand=True)
+        
+        # Configure grid weights
+        for i in range(4):  # 4 rows
+            metrics_frame.grid_rowconfigure(i, weight=1)
+        for i in range(3):  # 3 columns
+            metrics_frame.grid_columnconfigure(i, weight=1)
+    
+    def create_modern_groups_grid(self, parent=None):
         """สร้าง groups grid แบบใหม่ - สวยและใช้งานง่าย"""
+        if parent is None:
+            parent = self.main_frame
+            
         # Main container
-        container_frame = tk.Frame(self.main_frame, bg='#1a1a1a')
+        container_frame = tk.Frame(parent, bg='#1a1a1a')
         container_frame.pack(fill='both', expand=True)
         
         # Create canvas for scrolling
