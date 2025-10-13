@@ -107,17 +107,25 @@ class MainWindow:
     
     def create_main_content(self):
         """Create main content area"""
+        print("🔍 Debug: create_main_content called")
         content_frame = tk.Frame(self.main_frame, bg=TradingTheme.COLORS['primary_bg'])
         content_frame.pack(fill='both', expand=True)
+        print("🔍 Debug: content_frame created and packed")
         
         # Group Dashboard - ใช้พื้นที่เต็ม
+        print("🔍 Debug: Creating GroupDashboard...")
         self.group_dashboard = GroupDashboard(content_frame)
+        print("✅ Debug: GroupDashboard created successfully")
         
         # Initialize group dashboard with default status
+        print("🔍 Debug: Calling update_group_dashboard...")
         self.update_group_dashboard()
+        print("✅ Debug: update_group_dashboard completed")
         
         # Load sample data to show groups
+        print("🔍 Debug: Calling load_sample_data...")
         self.load_sample_data()
+        print("✅ Debug: load_sample_data completed")
     
     def load_sample_data(self):
         """Load sample data to show groups"""
@@ -129,8 +137,13 @@ class MainWindow:
                 self.group_dashboard.refresh_groups()
                 print("✅ Debug: refresh_groups completed")
                 
+                # Force GUI update
+                self.root.update_idletasks()
+                print("🔍 Debug: GUI updated after refresh_groups")
+                
                 # Start update loop immediately to show data
                 self.start_group_dashboard_update_loop()
+                print("✅ Debug: Update loop started")
             else:
                 print("❌ Debug: group_dashboard not found")
         except Exception as e:
@@ -604,10 +617,14 @@ class MainWindow:
     def update_group_dashboard(self):
         """Update Group Dashboard with current data"""
         try:
+            print("🔍 Debug: update_group_dashboard called")
             # Check if group_dashboard exists
             if not hasattr(self, 'group_dashboard') or not self.group_dashboard:
                 self.log_message("⚠️ Group dashboard not initialized")
+                print("❌ Debug: Group dashboard not initialized")
                 return
+            
+            print("✅ Debug: Group dashboard exists")
             
             # Always try to get real data first, fallback to sample data
             real_data_available = False
@@ -617,14 +634,19 @@ class MainWindow:
                 if hasattr(self.trading_system.arbitrage_detector, 'active_groups'):
                     real_data_available = True
                     self.log_message("📊 Using real trading data")
+                    print("✅ Debug: Using real trading data")
                 else:
                     self.log_message("⚠️ Active groups not available - using sample data")
+                    print("⚠️ Debug: Active groups not available - using sample data")
             else:
                 self.log_message("⚠️ Trading system not connected - using sample data")
+                print("⚠️ Debug: Trading system not connected - using sample data")
             
             if not real_data_available:
                 # Load sample data instead of showing empty
+                print("🔍 Debug: Loading sample data...")
                 self.group_dashboard.refresh_groups()
+                print("✅ Debug: Sample data loaded")
                 return
                 
             # Update enhanced data in active_groups

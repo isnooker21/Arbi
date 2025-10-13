@@ -174,6 +174,9 @@ class GroupDashboard:
         # Initialize group detail views (hidden by default)
         self.group_detail_views = {}
         self.current_view = 'groups'
+        
+        # Force immediate display
+        self.content_frame.update_idletasks()
         print("✅ Debug: create_main_content_area completed")
     
     def create_groups_view(self):
@@ -185,41 +188,20 @@ class GroupDashboard:
             widget.destroy()
         print("🔍 Debug: Cleared existing content")
         
-        # Groups container
-        groups_container = tk.Frame(self.content_frame, bg='#1a1a1a')
-        groups_container.pack(fill='both', expand=True, padx=20, pady=20)
-        print("🔍 Debug: Groups container created")
-        
-        # Create canvas for scrolling
-        self.groups_canvas = tk.Canvas(
-            groups_container,
-            bg='#1a1a1a',
-            highlightthickness=0
-        )
-        print("🔍 Debug: Groups canvas created")
-        
-        # Scrollbar
-        groups_scrollbar = ttk.Scrollbar(groups_container, orient='vertical', command=self.groups_canvas.yview)
-        self.groups_canvas.configure(yscrollcommand=groups_scrollbar.set)
-        
-        self.groups_canvas.pack(side='left', fill='both', expand=True)
-        groups_scrollbar.pack(side='right', fill='y')
-        print("🔍 Debug: Canvas and scrollbar packed")
-        
-        # Groups frame inside canvas
-        self.groups_frame = tk.Frame(self.groups_canvas, bg='#1a1a1a')
-        self.canvas_frame = self.groups_canvas.create_window((0, 0), window=self.groups_frame, anchor='nw')
-        print("🔍 Debug: Groups frame inside canvas created")
-        
-        # Bind events
-        self.groups_frame.bind('<Configure>', lambda e: self.groups_canvas.configure(scrollregion=self.groups_canvas.bbox('all')))
-        self.groups_canvas.bind_all('<MouseWheel>', lambda e: self.groups_canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
-        print("🔍 Debug: Events bound")
+        # Groups container - ใช้ Frame ธรรมดาแทน Canvas
+        self.groups_frame = tk.Frame(self.content_frame, bg='#1a1a1a')
+        self.groups_frame.pack(fill='both', expand=True, padx=20, pady=20)
+        print("🔍 Debug: Groups frame created directly")
         
         # Create group cards
         print("🔍 Debug: Creating full size group cards...")
         self.create_full_size_group_cards()
         print("✅ Debug: Full size group cards created")
+        
+        # Force immediate display
+        self.groups_frame.update_idletasks()
+        self.parent.update_idletasks()
+        print("🔍 Debug: Forced immediate display")
     
     def create_full_size_group_cards(self):
         """สร้าง group cards ขนาดใหญ่เต็มหน้า"""
@@ -283,6 +265,11 @@ class GroupDashboard:
             self.create_single_full_size_group_card(config, i)
         
         print("✅ Debug: All group cards created successfully")
+        
+        # Force update after creating all cards
+        self.groups_frame.update_idletasks()
+        self.parent.update_idletasks()
+        print("🔍 Debug: Frame updated after creating cards")
     
     def create_single_full_size_group_card(self, config, row):
         """สร้าง group card ขนาดใหญ่เต็มแถว"""
@@ -467,6 +454,8 @@ class GroupDashboard:
             'config': config
         }
         
+        # Force immediate display of this card
+        card_frame.update_idletasks()
         print(f"✅ Debug: Card for {config['name']} created and stored")
     
     def show_group_details(self, group_id):
@@ -887,6 +876,9 @@ class GroupDashboard:
                 print("🔍 Debug: groups_data is None, using empty dict")
 
             print(f"🔍 Debug: groups_data keys: {list(groups_data.keys())}")
+            print(f"🔍 Debug: hasattr(self, 'stats_cards'): {hasattr(self, 'stats_cards')}")
+            print(f"🔍 Debug: hasattr(self, 'group_cards'): {hasattr(self, 'group_cards')}")
+            print(f"🔍 Debug: current_view: {getattr(self, 'current_view', 'None')}")
 
             # Update stats overview
             if hasattr(self, 'stats_cards'):
@@ -898,6 +890,7 @@ class GroupDashboard:
             # Update group cards (only if in groups view)
             if hasattr(self, 'group_cards') and self.current_view == 'groups':
                 print(f"🔍 Debug: Updating group cards, current_view: {self.current_view}")
+                print(f"🔍 Debug: group_cards keys: {list(self.group_cards.keys())}")
                 for triangle_id in self.group_cards.keys():
                     group_data = groups_data.get(triangle_id, {})
                     print(f"🔍 Debug: Updating {triangle_id} with data: {group_data}")
@@ -906,6 +899,13 @@ class GroupDashboard:
                 print(f"❌ Debug: Cannot update group cards - has group_cards: {hasattr(self, 'group_cards')}, current_view: {getattr(self, 'current_view', 'None')}")
 
             print("✅ Debug: update_group_dashboard completed")
+            
+            # Force GUI update
+            self.parent.update_idletasks()
+            
+            # Update frame if exists
+            if hasattr(self, 'groups_frame'):
+                self.groups_frame.update_idletasks()
 
         except Exception as e:
             print(f"❌ Error updating dashboard: {e}")
@@ -951,6 +951,10 @@ class GroupDashboard:
             
             # Force GUI update
             self.parent.update_idletasks()
+            
+            # Update frame if exists
+            if hasattr(self, 'groups_frame'):
+                self.groups_frame.update_idletasks()
                 
         except Exception as e:
             print(f"Error updating stats overview: {e}")
@@ -1101,6 +1105,9 @@ class GroupDashboard:
         """รีเฟรชข้อมูล groups"""
         try:
             print("🔍 Debug: refresh_groups called")
+            print(f"🔍 Debug: hasattr(self, 'group_cards'): {hasattr(self, 'group_cards')}")
+            print(f"🔍 Debug: current_view: {getattr(self, 'current_view', 'None')}")
+            
             # Simulate data update (ในระบบจริงจะดึงจาก trading system)
             sample_data = {
                 'triangle_1': {
@@ -1160,6 +1167,11 @@ class GroupDashboard:
             
             # Force GUI update
             self.parent.update_idletasks()
+            
+            # Update frame
+            if hasattr(self, 'groups_frame'):
+                self.groups_frame.update_idletasks()
+                print("🔍 Debug: Frame updated in refresh_groups")
             
         except Exception as e:
             print(f"❌ Error refreshing groups: {e}")
