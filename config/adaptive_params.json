@@ -1,28 +1,28 @@
 {
   "market_regimes": {
     "volatile": {
-      "arbitrage_threshold": 0.0025,
+      "arbitrage_threshold": 0.0015,
       "recovery_aggressiveness": 0.6,
       "max_triangles": 3,
       "execution_speed_ms": 150,
       "description": "High volatility market - conservative approach"
     },
     "trending": {
-      "arbitrage_threshold": 0.002,
+      "arbitrage_threshold": 0.001,
       "recovery_aggressiveness": 0.8,
       "max_triangles": 3,
       "execution_speed_ms": 100,
       "description": "Strong trend market - conservative approach"
     },
     "ranging": {
-      "arbitrage_threshold": 0.001,
+      "arbitrage_threshold": 0.0005,
       "recovery_aggressiveness": 0.7,
       "max_triangles": 3,
       "execution_speed_ms": 80,
       "description": "Range-bound market - balanced approach"
     },
     "normal": {
-      "arbitrage_threshold": 0.003,
+      "arbitrage_threshold": 0.0015,
       "recovery_aggressiveness": 0.5,
       "max_triangles": 2,
       "execution_speed_ms": 150,
@@ -140,9 +140,9 @@
   },
   "arbitrage_params": {
     "detection": {
-      "min_threshold": 0.0003,
+      "min_threshold": 0.0001,
       "max_threshold": 0.01,
-      "spread_tolerance": 0.3,
+      "spread_tolerance": 0.5,
       "execution_timeout_ms": 2000,
       "description": "⭐ UPGRADED: Min 3 pips (was 1.5 pips), 30% spread tolerance = realistic edge"
     },

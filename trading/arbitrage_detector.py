@@ -2082,7 +2082,7 @@ class TriangleArbitrageDetector:
                 return True
             
             # Check if all spreads are below threshold
-            max_spread = 2.0  # เพิ่มเป็น 2.0 pips เพื่อให้ยืดหยุ่นมากขึ้น
+            max_spread = 3.0  # เพิ่มเป็น 3.0 pips เพื่อให้ออกไม้ง่ายขึ้น
             acceptable = (spread1 < max_spread and 
                          spread2 < max_spread and 
                          spread3 < max_spread)
@@ -2150,9 +2150,9 @@ class TriangleArbitrageDetector:
             reverse_net = reverse_profit_percent - total_cost_percent
             
             # 6. Threshold ขั้นต่ำ (ดึงจาก config)
-            min_profit_threshold = self._get_config_value('arbitrage_params.detection.min_threshold', 0.0003) * 100
-            if min_profit_threshold < 0.3:  # ขั้นต่ำ 0.3% (3 pips)
-                min_profit_threshold = 0.3
+            min_profit_threshold = self._get_config_value('arbitrage_params.detection.min_threshold', 0.0001) * 100
+            if min_profit_threshold < 0.1:  # ขั้นต่ำ 0.1% (1 pip) - ปรับให้ง่ายขึ้น
+                min_profit_threshold = 0.1
             
             # 7. ตัดสินใจ
             self.logger.info(f"📊 {triangle}: Net profits - Forward: {forward_net:.4f}%, Reverse: {reverse_net:.4f}%, Min threshold: {min_profit_threshold:.4f}%")
@@ -2282,8 +2282,8 @@ class TriangleArbitrageDetector:
             
             self.logger.info(f"💰 {triangle}: Raw profit: {raw_profit:.4f}%, Cost: {cost_percent:.4f}%, Net: {profit_percent:.4f}%")
             
-            # ต้องกำไรสุทธิอย่างน้อย 0.3% (3 pips)
-            min_threshold = 0.3
+            # ต้องกำไรสุทธิอย่างน้อย 0.1% (1 pip) - ปรับให้ง่ายขึ้น
+            min_threshold = 0.1
             
             if profit_percent < min_threshold:
                 self.logger.info(f"❌ {triangle}: Profit too low ({profit_percent:.4f}% < {min_threshold}%)")
@@ -2342,8 +2342,8 @@ class TriangleArbitrageDetector:
             
             self.logger.info(f"📊 {triangle}: Triangle Balance - {pair1}=${value1:.0f}, {pair2}=${value2:.0f}, {pair3}=${value3:.0f}, Deviation={deviation_percent:.1f}%")
             
-            # ยอมรับได้ถ้าต่างกันไม่เกิน 15%
-            max_deviation = 15.0
+            # ยอมรับได้ถ้าต่างกันไม่เกิน 25% - ปรับให้ยืดหยุ่นขึ้น
+            max_deviation = 25.0
             
             if deviation_percent > max_deviation:
                 self.logger.info(f"❌ {triangle}: Imbalance too high ({deviation_percent:.1f}% > {max_deviation}%)")
