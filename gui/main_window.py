@@ -122,18 +122,18 @@ class MainWindow:
         self.update_group_dashboard()
         print("✅ Debug: update_group_dashboard completed")
         
-        # Load sample data to show groups
-        print("🔍 Debug: Calling load_sample_data...")
-        self.load_sample_data()
-        print("✅ Debug: load_sample_data completed")
+        # Load real data to show groups
+        print("🔍 Debug: Calling load_real_data...")
+        self.load_real_data()
+        print("✅ Debug: load_real_data completed")
     
-    def load_sample_data(self):
-        """Load sample data to show groups"""
+    def load_real_data(self):
+        """Load real trading data to show groups"""
         try:
-            print("🔍 Debug: Loading sample data...")
+            print("🔍 Debug: Loading real trading data...")
             if hasattr(self, 'group_dashboard') and self.group_dashboard:
                 print("🔍 Debug: group_dashboard found, calling refresh_groups...")
-                # Call refresh_groups to show sample data
+                # Call refresh_groups to show real data
                 self.group_dashboard.refresh_groups()
                 print("✅ Debug: refresh_groups completed")
                 
@@ -147,7 +147,7 @@ class MainWindow:
             else:
                 print("❌ Debug: group_dashboard not found")
         except Exception as e:
-            print(f"❌ Error loading sample data: {e}")
+            print(f"❌ Error loading real data: {e}")
             import traceback
             traceback.print_exc()
     
@@ -712,8 +712,8 @@ class MainWindow:
                             'total_trades': 0
                         }
                 
-                # Update group dashboard with converted data
-                self.group_dashboard.update_group_dashboard(groups_data)
+                # Let group_dashboard handle real data loading internally
+                self.group_dashboard.update_group_dashboard()
             else:
                 self.log_message("⚠️ Group dashboard not ready yet")
                 
