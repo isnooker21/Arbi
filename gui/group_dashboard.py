@@ -342,137 +342,137 @@ class GroupDashboard:
         """สร้าง group card ขนาดใหญ่เต็มแถว - ปรับปรุงให้สวยขึ้น"""
         print(f"🔍 Debug: Creating card for {config['name']} (row {row})")
         
-        # Card container with shadow
+        # Card container with shadow - ลด padding และกำหนดขนาดคงที่
         card_container = tk.Frame(self.groups_frame, bg='#1a1a1a')
-        card_container.pack(fill='x', padx=15, pady=8)
+        card_container.pack(fill='x', padx=8, pady=4)
         
-        # Shadow frame
+        # Shadow frame - ลดความสูงให้เหมาะสม
         shadow_frame = tk.Frame(
             card_container,
             bg='#000000',
-            height=220
+            height=180  # ลดจาก 220 เป็น 180
         )
-        shadow_frame.pack(fill='x', padx=(3, 0), pady=(3, 0))
+        shadow_frame.pack(fill='x', padx=(2, 0), pady=(2, 0))
         shadow_frame.pack_propagate(False)
         
-        # Main card frame
+        # Main card frame - ลดความสูงให้เหมาะสม
         card_frame = tk.Frame(
             shadow_frame,
             bg='#2d2d2d',
             relief='flat',
             bd=0,
-            height=217
+            height=177  # ลดจาก 217 เป็น 177
         )
         card_frame.pack(fill='x', padx=0, pady=0)
         card_frame.pack_propagate(False)
         print(f"🔍 Debug: Card frame created for {config['name']}")
         
-        # Header with gradient effect
-        header_frame = tk.Frame(card_frame, bg=config['color'], height=60)
+        # Header with gradient effect - ลดความสูง
+        header_frame = tk.Frame(card_frame, bg=config['color'], height=45)
         header_frame.pack(fill='x')
         header_frame.pack_propagate(False)
         
-        # Header content
+        # Header content - ลด padding
         header_content = tk.Frame(header_frame, bg=config['color'])
-        header_content.pack(fill='x', padx=20, pady=15)
+        header_content.pack(fill='x', padx=15, pady=8)
         
-        # Group name and magic
+        # Group name and magic - ปรับขนาดฟอนต์
         name_label = tk.Label(
             header_content,
             text=f"{config['name']}",
-            font=('Segoe UI', 16, 'bold'),
+            font=('Segoe UI', 14, 'bold'),
             bg=config['color'],
             fg='white'
         )
         name_label.pack(side='left')
         
-        # Magic number
+        # Magic number - ปรับขนาดฟอนต์
         magic_label = tk.Label(
             header_content,
             text=f"Magic: {config['magic']}",
-            font=('Segoe UI', 10),
+            font=('Segoe UI', 9),
             bg=config['color'],
             fg='white'
         )
-        magic_label.pack(side='left', padx=(10, 0))
+        magic_label.pack(side='left', padx=(8, 0))
         
-        # Status indicator
+        # Status indicator - ปรับขนาด
         status_indicator = tk.Label(
             header_content,
             text="🔴",
-            font=('Segoe UI', 20),
+            font=('Segoe UI', 16),
             bg=config['color'],
             fg='white'
         )
         status_indicator.pack(side='right')
         self.status_indicators[config['id']] = status_indicator
         
-        # Content area
+        # Content area - ลด padding
         content_frame = tk.Frame(card_frame, bg='#2d2d2d')
-        content_frame.pack(fill='both', expand=True, padx=25, pady=20)
+        content_frame.pack(fill='both', expand=True, padx=15, pady=12)
         
-        # Left side - Basic info
-        left_frame = tk.Frame(content_frame, bg='#2d2d2d', width=350)
-        left_frame.pack(side='left', fill='y', padx=(0, 25))
+        # Left side - Basic info - ปรับขนาด
+        left_frame = tk.Frame(content_frame, bg='#2d2d2d', width=300)
+        left_frame.pack(side='left', fill='y', padx=(0, 15))
         left_frame.pack_propagate(False)
         
-        # Pairs info with better styling
+        # Pairs info with better styling - ลด padding
         pairs_section = tk.Frame(left_frame, bg='#2d2d2d')
-        pairs_section.pack(fill='x', pady=(0, 20))
+        pairs_section.pack(fill='x', pady=(0, 12))
         
         pairs_label = tk.Label(
             pairs_section,
             text="📊 Currency Pairs",
-            font=('Segoe UI', 12, 'bold'),
+            font=('Segoe UI', 10, 'bold'),
             bg='#2d2d2d',
             fg='#FFD700'
         )
-        pairs_label.pack(anchor='w', pady=(0, 8))
+        pairs_label.pack(anchor='w', pady=(0, 4))
         
         pairs_text = tk.Label(
             pairs_section,
             text=f"{' • '.join(config['pairs'])}",
-            font=('Consolas', 13),
+            font=('Consolas', 10),
             bg='#2d2d2d',
             fg='#E0E0E0'
         )
         pairs_text.pack(anchor='w')
         
-        # P&L Section with better styling
+        # P&L Section with better styling - ลด padding
         pnl_section = tk.Frame(left_frame, bg='#2d2d2d')
-        pnl_section.pack(fill='x', pady=(0, 20))
+        pnl_section.pack(fill='x', pady=(0, 12))
         
         pnl_title = tk.Label(
             pnl_section,
             text="💰 P&L Summary",
-            font=('Segoe UI', 12, 'bold'),
+            font=('Segoe UI', 10, 'bold'),
             bg='#2d2d2d',
             fg='#FFD700'
         )
-        pnl_title.pack(anchor='w', pady=(0, 8))
+        pnl_title.pack(anchor='w', pady=(0, 4))
         
-        # P&L values with better styling
+        # P&L values with better styling - ปรับขนาดฟอนต์
         pnl_values = {
-            'arb': tk.Label(pnl_section, text="Arbitrage: $0.00", font=('Consolas', 11), bg='#2d2d2d', fg='#E0E0E0'),
-            'rec': tk.Label(pnl_section, text="Recovery: $0.00", font=('Consolas', 11), bg='#2d2d2d', fg='#E0E0E0'),
-            'net': tk.Label(pnl_section, text="Net: $0.00", font=('Consolas', 13, 'bold'), bg='#2d2d2d', fg='#4CAF50')
+            'arb': tk.Label(pnl_section, text="Arbitrage: $0.00", font=('Consolas', 9), bg='#2d2d2d', fg='#E0E0E0'),
+            'rec': tk.Label(pnl_section, text="Recovery: $0.00", font=('Consolas', 9), bg='#2d2d2d', fg='#E0E0E0'),
+            'net': tk.Label(pnl_section, text="Net: $0.00", font=('Consolas', 10, 'bold'), bg='#2d2d2d', fg='#4CAF50')
         }
         
         for label in pnl_values.values():
-            label.pack(anchor='w', pady=2)
+            label.pack(anchor='w', pady=1)
         
         if not hasattr(self, 'pnl_labels'):
             self.pnl_labels = {}
         self.pnl_labels[config['id']] = pnl_values
         
-        # Status info with better styling
+        # Status info with better styling - ปรับขนาดฟอนต์
         status_section = tk.Frame(left_frame, bg='#2d2d2d')
         status_section.pack(fill='x')
         
         status_info = tk.Label(
             status_section,
             text="📈 Status: No Active Positions",
-            font=('Segoe UI', 11),
+            font=('Segoe UI', 9),
             bg='#2d2d2d',
             fg='#888888'
         )
@@ -482,73 +482,73 @@ class GroupDashboard:
         right_frame = tk.Frame(content_frame, bg='#2d2d2d')
         right_frame.pack(side='right', fill='both', expand=True)
         
-        # Quick actions section
+        # Quick actions section - ลด padding
         actions_section = tk.Frame(right_frame, bg='#2d2d2d')
-        actions_section.pack(fill='x', pady=(0, 25))
+        actions_section.pack(fill='x', pady=(0, 15))
         
         actions_label = tk.Label(
             actions_section,
             text="⚡ Quick Actions",
-            font=('Segoe UI', 12, 'bold'),
+            font=('Segoe UI', 10, 'bold'),
             bg='#2d2d2d',
             fg='#FFD700'
         )
-        actions_label.pack(anchor='w', pady=(0, 12))
+        actions_label.pack(anchor='w', pady=(0, 8))
         
-        # Action buttons with better styling
+        # Action buttons with better styling - ปรับขนาดปุ่ม
         buttons_frame = tk.Frame(actions_section, bg='#2d2d2d')
         buttons_frame.pack(fill='x')
         
-        # View Details button
+        # View Details button - ปรับขนาด
         view_details_btn = tk.Button(
             buttons_frame,
             text="🔍 View Details",
             command=lambda: self.show_group_details(config['id']),
             bg='#4CAF50',
             fg='white',
-            font=('Segoe UI', 11, 'bold'),
-            padx=20,
-            pady=10,
+            font=('Segoe UI', 9, 'bold'),
+            padx=15,
+            pady=6,
             relief='flat',
             cursor='hand2',
             bd=0
         )
-        view_details_btn.pack(side='left', padx=(0, 12))
+        view_details_btn.pack(side='left', padx=(0, 8))
         
-        # Close All Positions button
+        # Close All Positions button - ปรับขนาด
         close_all_btn = tk.Button(
             buttons_frame,
             text="⏹️ Close All",
             command=lambda: self.close_all_positions(config['id']),
             bg='#F44336',
             fg='white',
-            font=('Segoe UI', 11, 'bold'),
-            padx=20,
-            pady=10,
+            font=('Segoe UI', 9, 'bold'),
+            padx=15,
+            pady=6,
             relief='flat',
             cursor='hand2',
             bd=0
         )
         close_all_btn.pack(side='left')
         
-        # Quick positions overview
+        # Quick positions overview - ลด padding
         positions_section = tk.Frame(right_frame, bg='#2d2d2d')
         positions_section.pack(fill='x')
         
         positions_label = tk.Label(
             positions_section,
             text="🎯 Active Positions",
-            font=('Segoe UI', 12, 'bold'),
+            font=('Segoe UI', 10, 'bold'),
             bg='#2d2d2d',
             fg='#FFD700'
         )
-        positions_label.pack(anchor='w', pady=(0, 8))
+        positions_label.pack(anchor='w', pady=(0, 4))
         
-        # Simple positions list
+        # Simple positions list - ปรับขนาดฟอนต์
         positions_text = tk.Label(
             positions_section,
             text="No active positions",
-            font=('Segoe UI', 11),
+            font=('Segoe UI', 9),
             bg='#2d2d2d',
             fg='#888888',
             justify='left'
