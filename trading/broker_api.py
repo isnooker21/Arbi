@@ -16,7 +16,12 @@
 - Error Handling: จัดการข้อผิดพลาด
 """
 
-import MetaTrader5 as mt5
+try:
+    import MetaTrader5 as mt5
+    MT5_AVAILABLE = True
+except ImportError:
+    MT5_AVAILABLE = False
+    print("⚠️ MetaTrader5 not available - using fallback mode")
 
 import pandas as pd
 import numpy as np

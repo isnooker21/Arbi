@@ -29,7 +29,12 @@ import threading
 import time
 import os
 import sys
-import MetaTrader5 as mt5
+try:
+    import MetaTrader5 as mt5
+    MT5_AVAILABLE = True
+except ImportError:
+    MT5_AVAILABLE = False
+    print("⚠️ MetaTrader5 not available - using fallback mode")
 
 # Ensure project root is on sys.path when running this module directly
 try:
