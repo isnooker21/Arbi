@@ -115,6 +115,18 @@ class MainWindow:
         
         # Initialize group dashboard with default status
         self.update_group_dashboard()
+        
+        # Load sample data to show groups
+        self.load_sample_data()
+    
+    def load_sample_data(self):
+        """Load sample data to show groups"""
+        try:
+            if hasattr(self, 'group_dashboard') and self.group_dashboard:
+                # Call refresh_groups to show sample data
+                self.group_dashboard.refresh_groups()
+        except Exception as e:
+            print(f"Error loading sample data: {e}")
     
     def create_trading_control_panel(self, parent):
         """Create trading control panel"""
@@ -582,20 +594,27 @@ class MainWindow:
     def update_group_dashboard(self):
         """Update Group Dashboard with current data"""
         try:
+            # Check if group_dashboard exists
+            if not hasattr(self, 'group_dashboard') or not self.group_dashboard:
+                return
+            
             # Debug: Check if trading system exists
             if not self.trading_system:
-                self.log_message("⚠️ Trading system not connected - showing default status")
-                self._show_default_group_status()
+                self.log_message("⚠️ Trading system not connected - showing sample data")
+                # Load sample data instead of showing empty
+                self.group_dashboard.refresh_groups()
                 return
             
             if not hasattr(self.trading_system, 'arbitrage_detector'):
-                self.log_message("⚠️ Arbitrage detector not available - showing default status")
-                self._show_default_group_status()
+                self.log_message("⚠️ Arbitrage detector not available - showing sample data")
+                # Load sample data instead of showing empty
+                self.group_dashboard.refresh_groups()
                 return
             
             if not hasattr(self.trading_system.arbitrage_detector, 'active_groups'):
-                self.log_message("⚠️ Active groups not available - showing default status")
-                self._show_default_group_status()
+                self.log_message("⚠️ Active groups not available - showing sample data")
+                # Load sample data instead of showing empty
+                self.group_dashboard.refresh_groups()
                 return
                 
             # Update enhanced data in active_groups
@@ -614,12 +633,11 @@ class MainWindow:
                 except Exception as e:
                     self.log_message(f"⚠️ Error calling correlation manager: {e}")
             
-            # Update each triangle
-            if (hasattr(self, 'group_dashboard') and 
-                self.group_dashboard and 
-                hasattr(self.group_dashboard, 'triangle_configs')):
-                
-                for triangle_id in self.group_dashboard.triangle_configs.keys():
+            # Update group dashboard with real data
+            if hasattr(self, 'group_dashboard') and self.group_dashboard:
+                # Convert active_groups to format expected by new group_dashboard
+                groups_data = {}
+                for triangle_id in ['triangle_1', 'triangle_2', 'triangle_3', 'triangle_4', 'triangle_5', 'triangle_6']:
                     # Find group data for this triangle
                     group_data = None
                     for group_id, group_info in active_groups.items():
@@ -642,38 +660,30 @@ class MainWindow:
                             'existing_correlation': group_positions.get('existing_correlation', [])
                         }
                         
-                        # Update group status
-                        self.group_dashboard.update_group_status(triangle_id, enhanced_group_data)
+                        # Convert to format expected by new group_dashboard
+                        groups_data[triangle_id] = {
+                            'net_pnl': group_data.get('total_pnl', 0.0),
+                            'arbitrage_pnl': group_data.get('profit_arbitrage', 0.0),
+                            'recovery_pnl': group_data.get('profit_correlation', 0.0),
+                            'status': 'active',
+                            'total_positions': len(group_data.get('positions', [])),
+                            'total_trades': group_data.get('total_trades', 0)
+                        }
                     else:
                         # No active group for this triangle
-                        empty_data = {
+                        groups_data[triangle_id] = {
+                            'net_pnl': 0.0,
+                            'arbitrage_pnl': 0.0,
+                            'recovery_pnl': 0.0,
                             'status': 'inactive',
-                            'group_id': 'None',
-                            'total_pnl': 0.0,
-                            'positions': [],
-                            'recovery_chain': [],
-                            'profit_arbitrage': [],
-                            'losing_arbitrage': [],
-                            'profit_correlation': [],
-                            'losing_correlation': [],
-                            'existing_correlation': []
+                            'total_positions': 0,
+                            'total_trades': 0
                         }
-                        self.group_dashboard.update_group_status(triangle_id, empty_data)
+                
+                # Update group dashboard with converted data
+                self.group_dashboard.update_group_dashboard(groups_data)
             else:
                 self.log_message("⚠️ Group dashboard not ready yet")
-            
-            # Update summary
-            if (hasattr(self, 'group_dashboard') and 
-                self.group_dashboard and 
-                hasattr(self.group_dashboard, 'update_summary')):
-                self.group_dashboard.update_summary(active_groups)
-            
-            # Update positions status
-            if (hasattr(self, 'group_dashboard') and 
-                self.group_dashboard and 
-                hasattr(self.group_dashboard, 'update_positions_status')):
-                positions_data = self.get_positions_status_data()
-                self.group_dashboard.update_positions_status(positions_data)
                 
         except Exception as e:
             import traceback
@@ -773,54 +783,6 @@ class MainWindow:
         }
         return magic_to_group.get(magic, 'group_triangle_1_1')  # Default to group 1
     
-    def _show_default_group_status(self):
-        """Show default status for all groups when not connected"""
-        try:
-            self.log_message("🔍 Debug: Checking group_dashboard...")
-            
-            # Check if group_dashboard exists
-            if not hasattr(self, 'group_dashboard'):
-                self.log_message("❌ Debug: No group_dashboard attribute")
-                return
-            
-            if not self.group_dashboard:
-                self.log_message("❌ Debug: group_dashboard is None")
-                return
-            
-            if not hasattr(self.group_dashboard, 'triangle_configs'):
-                self.log_message("❌ Debug: No triangle_configs attribute")
-                return
-            
-            self.log_message("✅ Debug: group_dashboard is ready")
-            
-            # Check if group_dashboard exists and has triangle_configs
-            if (hasattr(self, 'group_dashboard') and 
-                self.group_dashboard and 
-                hasattr(self.group_dashboard, 'triangle_configs')):
-                
-                self.log_message(f"🔍 Debug: triangle_configs keys: {list(self.group_dashboard.triangle_configs.keys())}")
-                
-                for triangle_id in self.group_dashboard.triangle_configs.keys():
-                    self.log_message(f"🔍 Debug: Processing {triangle_id}")
-                    empty_data = {
-                        'status': 'disconnected',
-                        'group_id': 'Not Connected',
-                        'total_pnl': 0.0,
-                        'positions': [],
-                        'recovery_chain': []
-                    }
-                    self.group_dashboard.update_group_status(triangle_id, empty_data)
-                
-                # Update summary with empty data
-                self.group_dashboard.update_summary({})
-                self.log_message("✅ Debug: Default group status updated")
-            else:
-                self.log_message("⚠️ Group dashboard not ready yet")
-                
-        except Exception as e:
-            import traceback
-            self.log_message(f"❌ Error showing default group status: {e}")
-            self.log_message(f"❌ Traceback: {traceback.format_exc()}")
     
     def start_group_dashboard_update_loop(self):
         """Start Group Dashboard update loop"""
