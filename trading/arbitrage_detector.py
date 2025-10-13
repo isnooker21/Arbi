@@ -477,11 +477,13 @@ class TriangleArbitrageDetector:
             # Track: ตรวจสอบโอกาสใหม่
             self.performance_metrics['opportunities_checked'] += 1
             
+            self.logger.info(f"🔍 {triangle_name}: Checking arbitrage conditions for {triangle}")
+            
             # 1. คำนวณทิศทางที่ถูกต้อง
             direction_info = self.calculate_arbitrage_direction(triangle)
             
             if not direction_info:
-                self.logger.debug(f"⏭️ {triangle_name}: No profitable arbitrage opportunity - skipping")
+                self.logger.info(f"❌ {triangle_name}: No profitable arbitrage opportunity - skipping")
                 return
             
             # Track: ผ่านการตรวจสอบทิศทาง
@@ -491,19 +493,24 @@ class TriangleArbitrageDetector:
             else:
                 self.performance_metrics['reverse_path_selected'] += 1
             
+            self.logger.info(f"✅ {triangle_name}: Direction check passed - {direction_info['direction'].upper()} path, profit: {direction_info.get('profit_percent', 0):.4f}%")
+            
             # 2. ตรวจสอบความเป็นไปได้
             if not self._validate_execution_feasibility(triangle, direction_info):
-                self.logger.debug(f"⏭️ {triangle_name}: Failed feasibility check (profit: {direction_info.get('profit_percent', 0):.4f}%)")
+                self.logger.info(f"❌ {triangle_name}: Failed feasibility check (profit: {direction_info.get('profit_percent', 0):.4f}% too low)")
                 return
             
             # Track: ผ่านการตรวจสอบความเป็นไปได้
             self.performance_metrics['passed_feasibility_check'] += 1
+            self.logger.info(f"✅ {triangle_name}: Feasibility check passed")
             
             # 3. ดึง balance จาก MT5
             balance = self.broker.get_account_balance()
             if not balance:
                 self.logger.error("❌ Cannot get balance from MT5")
                 return
+            
+            self.logger.info(f"💰 {triangle_name}: Account balance: ${balance:,.2f}")
             
             # 4. โหลด risk_per_trade_percent จาก config
             import json
@@ -513,7 +520,9 @@ class TriangleArbitrageDetector:
             risk_per_trade_percent = config.get('position_sizing', {}).get('lot_calculation', {}).get('risk_per_trade_percent')
             if not risk_per_trade_percent:
                 self.logger.error("❌ risk_per_trade_percent not found in config")
-                return
+                risk_per_trade_percent = 1.0  # fallback
+            
+            self.logger.info(f"⚙️ {triangle_name}: Risk per trade: {risk_per_trade_percent}%")
             
             risk_per_trade_percent = float(risk_per_trade_percent)
             max_loss_pips = config.get('position_sizing', {}).get('lot_calculation', {}).get('max_loss_pips', 50.0)
@@ -545,6 +554,7 @@ class TriangleArbitrageDetector:
             balance_ok = self._verify_triangle_balance(triangle, lot_sizes)
             if balance_ok:
                 self.performance_metrics['passed_balance_check'] += 1
+                self.logger.info(f"✅ {triangle_name}: Triangle balance check passed")
             else:
                 self.logger.warning(f"⚠️ {triangle_name}: Triangle not balanced, adjusting...")
                 # ยังคงส่งต่อไป แต่เตือน (เพราะ deviation อาจยอมรับได้)
@@ -559,10 +569,14 @@ class TriangleArbitrageDetector:
                 )
             
             # 8. ส่งออเดอร์พร้อมทิศทางที่คำนวณแล้ว
+            self.logger.info(f"🚀 {triangle_name}: All checks passed! Sending orders...")
             success = self._send_new_triangle_orders(triangle, triangle_name, lot_sizes, direction_info)
             
             if success:
                 self.performance_metrics['successful_trades'] += 1
+                self.logger.info(f"🎉 {triangle_name}: All orders placed successfully!")
+            else:
+                self.logger.error(f"❌ {triangle_name}: Failed to place orders")
             
         except Exception as e:
             self.logger.error(f"Error in _execute_new_triangle_orders: {e}")
@@ -2058,9 +2072,11 @@ class TriangleArbitrageDetector:
             spread2 = self.broker.get_spread(pair2)
             spread3 = self.broker.get_spread(pair3)
             
+            self.logger.info(f"📊 {triangle}: Spreads - {pair1}: {spread1}, {pair2}: {spread2}, {pair3}: {spread3}")
+            
             # ตรวจสอบว่าได้ค่า spread หรือไม่
             if spread1 is None or spread2 is None or spread3 is None:
-                self.logger.debug(f"Spread data unavailable for {triangle}: {spread1}, {spread2}, {spread3}")
+                self.logger.info(f"⚠️ {triangle}: Some spreads unavailable, using bid/ask calculation")
                 # ถ้าไม่มีข้อมูล spread ให้อนุญาตผ่าน (ไม่บล็อก arbitrage)
                 # เพราะระบบจะคำนวณต้นทุนจาก Bid-Ask ใน _calculate_total_cost แทน
                 return True
@@ -2072,7 +2088,9 @@ class TriangleArbitrageDetector:
                          spread3 < max_spread)
             
             if not acceptable:
-                self.logger.debug(f"Spreads too high for {triangle}: {spread1:.2f}, {spread2:.2f}, {spread3:.2f} pips")
+                self.logger.info(f"❌ {triangle}: Spreads too high - {spread1:.2f}, {spread2:.2f}, {spread3:.2f} pips (max: {max_spread})")
+            else:
+                self.logger.info(f"✅ {triangle}: All spreads acceptable (max: {max(spread1, spread2, spread3):.2f} <= {max_spread})")
             
             return acceptable
                    
@@ -2094,14 +2112,18 @@ class TriangleArbitrageDetector:
         try:
             pair1, pair2, pair3 = triangle
             
+            self.logger.info(f"🧮 {triangle}: Calculating arbitrage direction...")
+            
             # 1. ดึงราคา Bid/Ask
             bid1, ask1 = self._get_bid_ask(pair1)
             bid2, ask2 = self._get_bid_ask(pair2)
             bid3, ask3 = self._get_bid_ask(pair3)
             
             if not all([bid1, ask1, bid2, ask2, bid3, ask3]):
-                self.logger.warning(f"Cannot get bid/ask prices for {triangle}")
+                self.logger.info(f"❌ {triangle}: Cannot get bid/ask prices")
                 return None
+            
+            self.logger.info(f"💱 {triangle}: Prices - {pair1}: {bid1:.5f}/{ask1:.5f}, {pair2}: {bid2:.5f}/{ask2:.5f}, {pair3}: {bid3:.5f}/{ask3:.5f}")
             
             # 2. คำนวณ Forward Path (BUY pair1, BUY pair2, SELL pair3)
             # เริ่มด้วย 1 USD
@@ -2121,6 +2143,8 @@ class TriangleArbitrageDetector:
             # 4. คำนวณต้นทุนรวม
             total_cost_percent = self._calculate_total_cost(triangle, bid1, ask1, bid2, ask2, bid3, ask3)
             
+            self.logger.info(f"🔄 {triangle}: Forward path = {forward_profit_percent:.4f}%, Reverse path = {reverse_profit_percent:.4f}%, Cost = {total_cost_percent:.4f}%")
+            
             # 5. คำนวณกำไรสุทธิ
             forward_net = forward_profit_percent - total_cost_percent
             reverse_net = reverse_profit_percent - total_cost_percent
@@ -2131,7 +2155,10 @@ class TriangleArbitrageDetector:
                 min_profit_threshold = 0.3
             
             # 7. ตัดสินใจ
+            self.logger.info(f"📊 {triangle}: Net profits - Forward: {forward_net:.4f}%, Reverse: {reverse_net:.4f}%, Min threshold: {min_profit_threshold:.4f}%")
+            
             if forward_net > min_profit_threshold and forward_net >= reverse_net:
+                self.logger.info(f"✅ {triangle}: FORWARD path selected - Net profit: {forward_net:.4f}%")
                 return {
                     'direction': 'forward',
                     'profit_percent': forward_net,
@@ -2144,6 +2171,7 @@ class TriangleArbitrageDetector:
                     }
                 }
             elif reverse_net > min_profit_threshold:
+                self.logger.info(f"✅ {triangle}: REVERSE path selected - Net profit: {reverse_net:.4f}%")
                 return {
                     'direction': 'reverse',
                     'profit_percent': reverse_net,
@@ -2157,7 +2185,7 @@ class TriangleArbitrageDetector:
                 }
             else:
                 # ไม่มีโอกาสที่ทำกำไรได้
-                self.logger.debug(f"{triangle}: No profitable opportunity - Forward: {forward_net:.4f}%, Reverse: {reverse_net:.4f}%")
+                self.logger.info(f"❌ {triangle}: No profitable opportunity - Forward: {forward_net:.4f}%, Reverse: {reverse_net:.4f}% (min: {min_profit_threshold:.4f}%)")
                 return None
                 
         except Exception as e:
@@ -2245,21 +2273,30 @@ class TriangleArbitrageDetector:
         """
         try:
             if not direction_info:
+                self.logger.info(f"❌ {triangle}: No direction info provided")
                 return False
             
             profit_percent = direction_info.get('profit_percent', 0)
+            raw_profit = direction_info.get('raw_profit', 0)
+            cost_percent = direction_info.get('cost_percent', 0)
+            
+            self.logger.info(f"💰 {triangle}: Raw profit: {raw_profit:.4f}%, Cost: {cost_percent:.4f}%, Net: {profit_percent:.4f}%")
             
             # ต้องกำไรสุทธิอย่างน้อย 0.3% (3 pips)
             min_threshold = 0.3
             
             if profit_percent < min_threshold:
-                self.logger.debug(f"{triangle}: Profit too low ({profit_percent:.4f}% < {min_threshold}%)")
+                self.logger.info(f"❌ {triangle}: Profit too low ({profit_percent:.4f}% < {min_threshold}%)")
                 return False
+            
+            self.logger.info(f"✅ {triangle}: Profit check passed ({profit_percent:.4f}% >= {min_threshold}%)")
             
             # ตรวจสอบ spread ไม่สูงเกินไป
             if not self._check_spread_acceptable(triangle):
-                self.logger.debug(f"{triangle}: Spread too high")
+                self.logger.info(f"❌ {triangle}: Spread too high")
                 return False
+            
+            self.logger.info(f"✅ {triangle}: Spread check passed")
             
             return True
             
@@ -2303,15 +2340,16 @@ class TriangleArbitrageDetector:
             
             deviation_percent = ((max_value - min_value) / avg_value) * 100
             
-            self.logger.debug(f"📊 Triangle Balance: {pair1}=${value1:.0f}, {pair2}=${value2:.0f}, {pair3}=${value3:.0f}, Dev={deviation_percent:.1f}%")
+            self.logger.info(f"📊 {triangle}: Triangle Balance - {pair1}=${value1:.0f}, {pair2}=${value2:.0f}, {pair3}=${value3:.0f}, Deviation={deviation_percent:.1f}%")
             
             # ยอมรับได้ถ้าต่างกันไม่เกิน 15%
             max_deviation = 15.0
             
             if deviation_percent > max_deviation:
-                self.logger.warning(f"⚠️ {triangle}: Imbalance too high ({deviation_percent:.1f}% > {max_deviation}%)")
+                self.logger.info(f"❌ {triangle}: Imbalance too high ({deviation_percent:.1f}% > {max_deviation}%)")
                 return False
             
+            self.logger.info(f"✅ {triangle}: Balance acceptable (deviation {deviation_percent:.1f}% <= {max_deviation}%)")
             return True
             
         except Exception as e:
