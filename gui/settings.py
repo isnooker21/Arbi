@@ -560,8 +560,9 @@ class SettingsWindow:
                 if isinstance(value, bool):
                     pass
                 elif isinstance(value, str):
-                    if value.lower() in ['true', 'false', '1', '0']:
-                        value = value.lower() in ['true', '1']
+                    # ตรวจสอบว่าเป็น boolean string หรือไม่ (เฉพาะ true/false เท่านั้น)
+                    if value.lower() in ['true', 'false']:
+                        value = value.lower() == 'true'
                     elif value.replace('.', '', 1).replace('-', '', 1).isdigit():
                         # แปลงเป็น float เสมอสำหรับตัวเลข
                         value = float(value)
