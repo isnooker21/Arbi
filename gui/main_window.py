@@ -21,7 +21,7 @@ class MainWindow:
     def __init__(self, trading_system=None):
         self.root = tk.Tk()
         self.root.title("🎯 ArbiTrader - Colorful & Beautiful")
-        self.root.geometry("1300x850")
+        self.root.geometry("1500x950")
         self.root.configure(bg='#0a0a0a')
         self.root.resizable(True, True)
         
@@ -557,10 +557,8 @@ class MainWindow:
                         "เชื่อมต่อกับ Broker สำเร็จแล้ว!\n\nพร้อมเริ่มเทรดได้เลย"
                     )
                     print("✅ Connected to broker successfully")
-                else:
-                    raise Exception("Failed to initialize broker connection")
             else:
-                raise Exception("Trading system not available - cannot connect to broker")
+                raise Exception("Failed to initialize broker connection")
                 
         except Exception as e:
             print(f"❌ Failed to connect to broker: {e}")
@@ -834,8 +832,8 @@ class MainWindow:
             )
             
             # Start real trading system
-            if self.trading_system and hasattr(self.trading_system, 'start_trading'):
-                success = self.trading_system.start_trading()
+            if self.trading_system and hasattr(self.trading_system, 'start'):
+                success = self.trading_system.start()
                 if success:
                     messagebox.showinfo(
                         "🚀 เริ่มเทรดสำเร็จ",
@@ -869,6 +867,10 @@ class MainWindow:
         try:
             print("⏹️ Stopping trading")
             
+            # Stop real trading system
+            if self.trading_system and hasattr(self.trading_system, 'stop'):
+                self.trading_system.stop()
+            
             # Disable stop button, enable start button
             self.stop_btn.config(state='disabled')
             self.start_btn.config(state='normal')
@@ -890,6 +892,10 @@ class MainWindow:
                 "คุณแน่ใจหรือไม่ที่จะปิดออเดอร์ทั้งหมด?\n\nการกระทำนี้ไม่สามารถยกเลิกได้!"
             ):
                 print("🚨 Emergency close all positions")
+                
+                # Call emergency stop on trading system
+                if self.trading_system and hasattr(self.trading_system, 'emergency_stop'):
+                    self.trading_system.emergency_stop()
                 
                 messagebox.showinfo(
                     "🚨 ปิดทั้งหมด",
@@ -961,7 +967,7 @@ class MainWindow:
                 if hasattr(self, 'total_pnl_label'):
                     self.total_pnl_label.config(text="$0.00", fg='#a0aec0')
                 print("📊 Status: Disconnected - no real data available")
-            
+                
         except Exception as e:
             print(f"❌ Error updating real status: {e}")
             # Fallback to file data on error
