@@ -49,41 +49,47 @@ class GroupDashboard:
         print("✅ Debug: setup_ui completed")
     
     def create_header(self):
-        """สร้าง header - ปรับปรุงใหม่"""
-        header_frame = tk.Frame(self.main_frame, bg='#2d2d2d', height=60)
-        header_frame.pack(fill='x', pady=(0, 15))
+        """สร้าง header - ปรับปรุงให้สวยขึ้น"""
+        header_frame = tk.Frame(self.main_frame, bg='#1a1a1a', height=70)
+        header_frame.pack(fill='x', pady=(0, 20))
         header_frame.pack_propagate(False)
         
-        # Title
+        # Header content with gradient effect
+        header_content = tk.Frame(header_frame, bg='#2d2d2d', height=70)
+        header_content.pack(fill='x', padx=20, pady=10)
+        header_content.pack_propagate(False)
+        
+        # Title with better styling
         title_label = tk.Label(
-            header_frame,
+            header_content,
             text="📊 Trading Dashboard",
-            font=('Arial', 18, 'bold'),
+            font=('Segoe UI', 20, 'bold'),
             bg='#2d2d2d',
             fg='#FFD700'
         )
-        title_label.pack(side='left', padx=20, pady=15)
+        title_label.pack(side='left', pady=20)
         
         # Right side controls
-        controls_frame = tk.Frame(header_frame, bg='#2d2d2d')
-        controls_frame.pack(side='right', padx=20, pady=15)
+        controls_frame = tk.Frame(header_content, bg='#2d2d2d')
+        controls_frame.pack(side='right', pady=20)
         
-        # Refresh button
+        # Refresh button with better styling
         refresh_btn = tk.Button(
             controls_frame,
             text="🔄 Refresh",
             command=self.refresh_groups,
             bg='#4CAF50',
             fg='white',
-            font=('Arial', 10, 'bold'),
-            padx=15,
-            pady=8,
+            font=('Segoe UI', 11, 'bold'),
+            padx=20,
+            pady=10,
             relief='flat',
-            cursor='hand2'
+            cursor='hand2',
+            bd=0
         )
-        refresh_btn.pack(side='right', padx=5)
+        refresh_btn.pack(side='right', padx=(0, 10))
         
-        # Auto-refresh toggle
+        # Auto-refresh toggle with better styling
         self.auto_refresh_var = tk.BooleanVar(value=True)
         auto_refresh_btn = tk.Checkbutton(
             controls_frame,
@@ -91,47 +97,68 @@ class GroupDashboard:
             variable=self.auto_refresh_var,
             bg='#2d2d2d',
             fg='white',
-            font=('Arial', 10),
+            font=('Segoe UI', 11),
             selectcolor='#4CAF50',
-            activebackground='#2d2d2d'
+            activebackground='#2d2d2d',
+            activeforeground='white'
         )
         auto_refresh_btn.pack(side='right', padx=10)
     
     def create_stats_overview(self):
-        """สร้าง stats overview cards - ใหม่"""
+        """สร้าง stats overview cards - ปรับปรุงให้สวยขึ้น"""
         stats_frame = tk.Frame(self.main_frame, bg='#1a1a1a')
-        stats_frame.pack(fill='x', pady=(0, 15))
+        stats_frame.pack(fill='x', pady=(0, 20))
         
-        # Stats cards
+        # Stats cards - ปรับปรุงสีสันและขนาด
         stats_data = [
-            {"title": "Total P&L", "value": "$0.00", "color": "#4CAF50", "icon": "💰"},
-            {"title": "Active Groups", "value": "0/6", "color": "#2196F3", "icon": "🔺"},
-            {"title": "Today's Trades", "value": "0", "color": "#FF9800", "icon": "📈"},
-            {"title": "Win Rate", "value": "0%", "color": "#9C27B0", "icon": "🎯"}
+            {"title": "Total P&L", "value": "$0.00", "color": "#2E7D32", "icon": "💰", "gradient": "#4CAF50"},
+            {"title": "Active Groups", "value": "0/6", "color": "#1565C0", "icon": "🔺", "gradient": "#2196F3"},
+            {"title": "Today's Trades", "value": "0", "color": "#E65100", "icon": "📈", "gradient": "#FF9800"},
+            {"title": "Win Rate", "value": "0%", "color": "#4A148C", "icon": "🎯", "gradient": "#9C27B0"}
         ]
         
         self.stats_cards = {}
         for i, stat in enumerate(stats_data):
-            card = tk.Frame(
-                stats_frame,
-                bg=stat['color'],
-                relief='raised',
-                bd=2,
-                width=200,
-                height=80
+            # Main card with shadow effect
+            card_container = tk.Frame(stats_frame, bg='#1a1a1a')
+            card_container.pack(side='left', padx=8, fill='y')
+            
+            # Shadow frame
+            shadow_frame = tk.Frame(
+                card_container,
+                bg='#000000',
+                width=220,
+                height=100
             )
-            card.pack(side='left', padx=10, fill='y')
+            shadow_frame.pack(padx=(2, 0), pady=(2, 0))
+            shadow_frame.pack_propagate(False)
+            
+            # Main card
+            card = tk.Frame(
+                shadow_frame,
+                bg=stat['color'],
+                relief='flat',
+                bd=0,
+                width=218,
+                height=98
+            )
+            card.pack(padx=0, pady=0)
             card.pack_propagate(False)
             
-            # Icon and title
-            header_frame = tk.Frame(card, bg=stat['color'])
-            header_frame.pack(fill='x', padx=10, pady=5)
+            # Gradient effect (simulated with multiple frames)
+            gradient_frame = tk.Frame(card, bg=stat['gradient'], height=30)
+            gradient_frame.pack(fill='x', padx=0, pady=0)
+            gradient_frame.pack_propagate(False)
+            
+            # Header with icon and title
+            header_frame = tk.Frame(gradient_frame, bg=stat['gradient'])
+            header_frame.pack(fill='x', padx=15, pady=8)
             
             icon_label = tk.Label(
                 header_frame,
                 text=stat['icon'],
-                font=('Arial', 14),
-                bg=stat['color'],
+                font=('Segoe UI', 16),
+                bg=stat['gradient'],
                 fg='white'
             )
             icon_label.pack(side='left')
@@ -139,17 +166,20 @@ class GroupDashboard:
             title_label = tk.Label(
                 header_frame,
                 text=stat['title'],
-                font=('Arial', 10, 'bold'),
-                bg=stat['color'],
+                font=('Segoe UI', 11, 'bold'),
+                bg=stat['gradient'],
                 fg='white'
             )
             title_label.pack(side='right')
             
-            # Value
+            # Value section
+            value_frame = tk.Frame(card, bg=stat['color'])
+            value_frame.pack(fill='both', expand=True, padx=15, pady=10)
+            
             value_label = tk.Label(
-                card,
+                value_frame,
                 text=stat['value'],
-                font=('Arial', 16, 'bold'),
+                font=('Consolas', 18, 'bold'),
                 bg=stat['color'],
                 fg='white'
             )
@@ -207,49 +237,49 @@ class GroupDashboard:
         """สร้าง group cards ขนาดใหญ่เต็มหน้า"""
         print("🔍 Debug: create_full_size_group_cards called")
         
-        # Group configurations
+        # Group configurations - ปรับปรุงสีให้สวยขึ้น
         group_configs = [
             {
                 'id': 'triangle_1',
                 'name': 'Triangle 1',
                 'pairs': ['EURUSD', 'GBPUSD', 'EURGBP'],
                 'magic': 234001,
-                'color': '#FF6B6B'
+                'color': '#E53935'  # Red
             },
             {
                 'id': 'triangle_2',
                 'name': 'Triangle 2',
                 'pairs': ['USDJPY', 'EURUSD', 'EURJPY'],
                 'magic': 234002,
-                'color': '#4ECDC4'
+                'color': '#1E88E5'  # Blue
             },
             {
                 'id': 'triangle_3',
                 'name': 'Triangle 3',
                 'pairs': ['GBPUSD', 'USDJPY', 'GBPJPY'],
                 'magic': 234003,
-                'color': '#45B7D1'
+                'color': '#43A047'  # Green
             },
             {
                 'id': 'triangle_4',
                 'name': 'Triangle 4',
                 'pairs': ['AUDUSD', 'USDCAD', 'AUDCAD'],
                 'magic': 234004,
-                'color': '#96CEB4'
+                'color': '#FB8C00'  # Orange
             },
             {
                 'id': 'triangle_5',
                 'name': 'Triangle 5',
                 'pairs': ['NZDUSD', 'USDCHF', 'NZDCHF'],
                 'magic': 234005,
-                'color': '#FFEAA7'
+                'color': '#8E24AA'  # Purple
             },
             {
                 'id': 'triangle_6',
                 'name': 'Triangle 6',
                 'pairs': ['EURCHF', 'USDCHF', 'EURUSD'],
                 'magic': 234006,
-                'color': '#DDA0DD'
+                'color': '#00ACC1'  # Cyan
             }
         ]
         
@@ -272,107 +302,140 @@ class GroupDashboard:
         print("🔍 Debug: Frame updated after creating cards")
     
     def create_single_full_size_group_card(self, config, row):
-        """สร้าง group card ขนาดใหญ่เต็มแถว"""
+        """สร้าง group card ขนาดใหญ่เต็มแถว - ปรับปรุงให้สวยขึ้น"""
         print(f"🔍 Debug: Creating card for {config['name']} (row {row})")
+        
+        # Card container with shadow
+        card_container = tk.Frame(self.groups_frame, bg='#1a1a1a')
+        card_container.pack(fill='x', padx=15, pady=8)
+        
+        # Shadow frame
+        shadow_frame = tk.Frame(
+            card_container,
+            bg='#000000',
+            height=220
+        )
+        shadow_frame.pack(fill='x', padx=(3, 0), pady=(3, 0))
+        shadow_frame.pack_propagate(False)
         
         # Main card frame
         card_frame = tk.Frame(
-            self.groups_frame,
+            shadow_frame,
             bg='#2d2d2d',
-            relief='raised',
-            bd=2,
-            height=200
+            relief='flat',
+            bd=0,
+            height=217
         )
-        card_frame.pack(fill='x', padx=20, pady=10)
+        card_frame.pack(fill='x', padx=0, pady=0)
         card_frame.pack_propagate(False)
         print(f"🔍 Debug: Card frame created for {config['name']}")
         
-        # Header
-        header_frame = tk.Frame(card_frame, bg=config['color'], height=50)
+        # Header with gradient effect
+        header_frame = tk.Frame(card_frame, bg=config['color'], height=60)
         header_frame.pack(fill='x')
         header_frame.pack_propagate(False)
         
+        # Header content
+        header_content = tk.Frame(header_frame, bg=config['color'])
+        header_content.pack(fill='x', padx=20, pady=15)
+        
         # Group name and magic
         name_label = tk.Label(
-            header_frame,
-            text=f"{config['name']} (Magic: {config['magic']})",
-            font=('Arial', 14, 'bold'),
+            header_content,
+            text=f"{config['name']}",
+            font=('Segoe UI', 16, 'bold'),
             bg=config['color'],
             fg='white'
         )
-        name_label.pack(side='left', padx=20, pady=10)
+        name_label.pack(side='left')
+        
+        # Magic number
+        magic_label = tk.Label(
+            header_content,
+            text=f"Magic: {config['magic']}",
+            font=('Segoe UI', 10),
+            bg=config['color'],
+            fg='white'
+        )
+        magic_label.pack(side='left', padx=(10, 0))
         
         # Status indicator
         status_indicator = tk.Label(
-            header_frame,
+            header_content,
             text="🔴",
-            font=('Arial', 18),
+            font=('Segoe UI', 20),
             bg=config['color'],
             fg='white'
         )
-        status_indicator.pack(side='right', padx=20, pady=10)
+        status_indicator.pack(side='right')
         self.status_indicators[config['id']] = status_indicator
         
         # Content area
         content_frame = tk.Frame(card_frame, bg='#2d2d2d')
-        content_frame.pack(fill='both', expand=True, padx=20, pady=15)
+        content_frame.pack(fill='both', expand=True, padx=25, pady=20)
         
         # Left side - Basic info
-        left_frame = tk.Frame(content_frame, bg='#2d2d2d', width=300)
-        left_frame.pack(side='left', fill='y', padx=(0, 20))
+        left_frame = tk.Frame(content_frame, bg='#2d2d2d', width=350)
+        left_frame.pack(side='left', fill='y', padx=(0, 25))
         left_frame.pack_propagate(False)
         
-        # Pairs info
+        # Pairs info with better styling
+        pairs_section = tk.Frame(left_frame, bg='#2d2d2d')
+        pairs_section.pack(fill='x', pady=(0, 20))
+        
         pairs_label = tk.Label(
-            left_frame,
-            text="📊 Currency Pairs:",
-            font=('Arial', 11, 'bold'),
+            pairs_section,
+            text="📊 Currency Pairs",
+            font=('Segoe UI', 12, 'bold'),
             bg='#2d2d2d',
             fg='#FFD700'
         )
-        pairs_label.pack(anchor='w', pady=(0, 5))
+        pairs_label.pack(anchor='w', pady=(0, 8))
         
         pairs_text = tk.Label(
-            left_frame,
+            pairs_section,
             text=f"{' • '.join(config['pairs'])}",
-            font=('Arial', 12),
+            font=('Consolas', 13),
             bg='#2d2d2d',
-            fg='white'
+            fg='#E0E0E0'
         )
-        pairs_text.pack(anchor='w', pady=(0, 15))
+        pairs_text.pack(anchor='w')
         
-        # P&L Section
-        pnl_frame = tk.Frame(left_frame, bg='#2d2d2d')
-        pnl_frame.pack(fill='x', pady=(0, 15))
+        # P&L Section with better styling
+        pnl_section = tk.Frame(left_frame, bg='#2d2d2d')
+        pnl_section.pack(fill='x', pady=(0, 20))
         
         pnl_title = tk.Label(
-            pnl_frame,
-            text="💰 P&L Summary:",
-            font=('Arial', 11, 'bold'),
+            pnl_section,
+            text="💰 P&L Summary",
+            font=('Segoe UI', 12, 'bold'),
             bg='#2d2d2d',
             fg='#FFD700'
         )
-        pnl_title.pack(anchor='w', pady=(0, 5))
+        pnl_title.pack(anchor='w', pady=(0, 8))
         
-        # P&L values
+        # P&L values with better styling
         pnl_values = {
-            'arb': tk.Label(pnl_frame, text="Arbitrage: $0.00", font=('Arial', 10), bg='#2d2d2d', fg='white'),
-            'rec': tk.Label(pnl_frame, text="Recovery: $0.00", font=('Arial', 10), bg='#2d2d2d', fg='white'),
-            'net': tk.Label(pnl_frame, text="Net: $0.00", font=('Arial', 11, 'bold'), bg='#2d2d2d', fg='#4CAF50')
+            'arb': tk.Label(pnl_section, text="Arbitrage: $0.00", font=('Consolas', 11), bg='#2d2d2d', fg='#E0E0E0'),
+            'rec': tk.Label(pnl_section, text="Recovery: $0.00", font=('Consolas', 11), bg='#2d2d2d', fg='#E0E0E0'),
+            'net': tk.Label(pnl_section, text="Net: $0.00", font=('Consolas', 13, 'bold'), bg='#2d2d2d', fg='#4CAF50')
         }
         
         for label in pnl_values.values():
-            label.pack(anchor='w')
+            label.pack(anchor='w', pady=2)
         
         if not hasattr(self, 'pnl_labels'):
             self.pnl_labels = {}
         self.pnl_labels[config['id']] = pnl_values
         
-        # Status info
+        # Status info with better styling
+        status_section = tk.Frame(left_frame, bg='#2d2d2d')
+        status_section.pack(fill='x')
+        
         status_info = tk.Label(
-            left_frame,
+            status_section,
             text="📈 Status: No Active Positions",
-            font=('Arial', 10),
+            font=('Segoe UI', 11),
             bg='#2d2d2d',
             fg='#888888'
         )
@@ -382,19 +445,22 @@ class GroupDashboard:
         right_frame = tk.Frame(content_frame, bg='#2d2d2d')
         right_frame.pack(side='right', fill='both', expand=True)
         
-        # Quick actions
+        # Quick actions section
+        actions_section = tk.Frame(right_frame, bg='#2d2d2d')
+        actions_section.pack(fill='x', pady=(0, 25))
+        
         actions_label = tk.Label(
-            right_frame,
-            text="⚡ Quick Actions:",
-            font=('Arial', 11, 'bold'),
+            actions_section,
+            text="⚡ Quick Actions",
+            font=('Segoe UI', 12, 'bold'),
             bg='#2d2d2d',
             fg='#FFD700'
         )
-        actions_label.pack(anchor='w', pady=(0, 10))
+        actions_label.pack(anchor='w', pady=(0, 12))
         
-        # Action buttons
-        buttons_frame = tk.Frame(right_frame, bg='#2d2d2d')
-        buttons_frame.pack(fill='x', pady=(0, 20))
+        # Action buttons with better styling
+        buttons_frame = tk.Frame(actions_section, bg='#2d2d2d')
+        buttons_frame.pack(fill='x')
         
         # View Details button
         view_details_btn = tk.Button(
@@ -403,13 +469,14 @@ class GroupDashboard:
             command=lambda: self.show_group_details(config['id']),
             bg='#4CAF50',
             fg='white',
-            font=('Arial', 10, 'bold'),
-            padx=15,
-            pady=8,
+            font=('Segoe UI', 11, 'bold'),
+            padx=20,
+            pady=10,
             relief='flat',
-            cursor='hand2'
+            cursor='hand2',
+            bd=0
         )
-        view_details_btn.pack(side='left', padx=(0, 10))
+        view_details_btn.pack(side='left', padx=(0, 12))
         
         # Close All Positions button
         close_all_btn = tk.Button(
@@ -418,29 +485,33 @@ class GroupDashboard:
             command=lambda: self.close_all_positions(config['id']),
             bg='#F44336',
             fg='white',
-            font=('Arial', 10, 'bold'),
-            padx=15,
-            pady=8,
+            font=('Segoe UI', 11, 'bold'),
+            padx=20,
+            pady=10,
             relief='flat',
-            cursor='hand2'
+            cursor='hand2',
+            bd=0
         )
-        close_all_btn.pack(side='left', padx=(0, 10))
+        close_all_btn.pack(side='left')
         
         # Quick positions overview
+        positions_section = tk.Frame(right_frame, bg='#2d2d2d')
+        positions_section.pack(fill='x')
+        
         positions_label = tk.Label(
-            right_frame,
-            text="🎯 Active Positions:",
-            font=('Arial', 11, 'bold'),
+            positions_section,
+            text="🎯 Active Positions",
+            font=('Segoe UI', 12, 'bold'),
             bg='#2d2d2d',
             fg='#FFD700'
         )
-        positions_label.pack(anchor='w', pady=(0, 5))
+        positions_label.pack(anchor='w', pady=(0, 8))
         
         # Simple positions list
         positions_text = tk.Label(
-            right_frame,
+            positions_section,
             text="No active positions",
-            font=('Arial', 10),
+            font=('Segoe UI', 11),
             bg='#2d2d2d',
             fg='#888888',
             justify='left'
@@ -1047,59 +1118,64 @@ class GroupDashboard:
             print(f"Error updating group card {triangle_id}: {e}")
     
     def create_summary_panel(self):
-        """สร้าง summary panel ด้านล่าง"""
-        # Summary frame
-        summary_frame = tk.Frame(self.main_frame, bg='#2d2d2d', height=50)
-        summary_frame.pack(fill='x', pady=(10, 0))
+        """สร้าง summary panel ด้านล่าง - ปรับปรุงให้สวยขึ้น"""
+        # Summary frame with better styling
+        summary_frame = tk.Frame(self.main_frame, bg='#1a1a1a', height=60)
+        summary_frame.pack(fill='x', pady=(15, 0))
         summary_frame.pack_propagate(False)
+        
+        # Summary content with gradient effect
+        summary_content = tk.Frame(summary_frame, bg='#2d2d2d', height=60)
+        summary_content.pack(fill='x', padx=20, pady=10)
+        summary_content.pack_propagate(False)
         
         # Summary labels - make them instance variables for updating
         self.summary_labels = {}
         
         self.summary_labels['total_groups'] = tk.Label(
-            summary_frame,
+            summary_content,
             text="Total Groups: 6",
-            font=('Arial', 10, 'bold'),
+            font=('Segoe UI', 11, 'bold'),
             bg='#2d2d2d',
-            fg='white'
+            fg='#E0E0E0'
         )
-        self.summary_labels['total_groups'].pack(side='left', padx=20, pady=15)
+        self.summary_labels['total_groups'].pack(side='left', padx=25, pady=20)
         
         self.summary_labels['active'] = tk.Label(
-            summary_frame,
+            summary_content,
             text="Active: 0",
-            font=('Arial', 10, 'bold'),
+            font=('Segoe UI', 11, 'bold'),
             bg='#2d2d2d',
             fg='#4CAF50'
         )
-        self.summary_labels['active'].pack(side='left', padx=20, pady=15)
+        self.summary_labels['active'].pack(side='left', padx=25, pady=20)
         
         self.summary_labels['total_pnl'] = tk.Label(
-            summary_frame,
+            summary_content,
             text="Total Net PnL: $0.00",
-            font=('Arial', 10, 'bold'),
+            font=('Consolas', 12, 'bold'),
             bg='#2d2d2d',
             fg='#FFD700'
         )
-        self.summary_labels['total_pnl'].pack(side='left', padx=20, pady=15)
+        self.summary_labels['total_pnl'].pack(side='left', padx=25, pady=20)
         
         self.summary_labels['total_positions'] = tk.Label(
-            summary_frame,
+            summary_content,
             text="Total Positions: 0",
-            font=('Arial', 10, 'bold'),
+            font=('Segoe UI', 11, 'bold'),
             bg='#2d2d2d',
-            fg='white'
+            fg='#E0E0E0'
         )
-        self.summary_labels['total_positions'].pack(side='left', padx=20, pady=15)
+        self.summary_labels['total_positions'].pack(side='left', padx=25, pady=20)
         
         self.summary_labels['total_recovery'] = tk.Label(
-            summary_frame,
+            summary_content,
             text="Total Recovery: 0",
-            font=('Arial', 10, 'bold'),
+            font=('Segoe UI', 11, 'bold'),
             bg='#2d2d2d',
-            fg='white'
+            fg='#E0E0E0'
         )
-        self.summary_labels['total_recovery'].pack(side='left', padx=20, pady=15)
+        self.summary_labels['total_recovery'].pack(side='left', padx=25, pady=20)
     
     def refresh_groups(self):
         """รีเฟรชข้อมูล groups"""
