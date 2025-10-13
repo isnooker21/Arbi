@@ -13,7 +13,7 @@ class MainWindow:
     def __init__(self, trading_system=None):
         self.root = tk.Tk()
         self.root.title("🎯 ArbiTrader - Colorful & Beautiful")
-        self.root.geometry("1600x1000")
+        self.root.geometry("1400x700")
         self.root.configure(bg='#0a0a0a')
         self.root.resizable(True, True)
         
@@ -57,24 +57,23 @@ class MainWindow:
         """Setup the main UI"""
         # Main container
         self.main_frame = tk.Frame(self.root, bg='#0a0a0a')
-        self.main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        self.main_frame.pack(fill='both', expand=True, padx=5, pady=5)
         
         # Create sections
         self.create_header()
         self.create_mode_selection()
         self.create_status_display()
         self.create_action_buttons()
-        self.create_footer()
     
     def create_header(self):
         """Create header section"""
         # Header frame
         header_frame = tk.Frame(self.main_frame, bg='#2d3748', relief='flat', bd=0)
-        header_frame.pack(fill='x', pady=(0, 20))
+        header_frame.pack(fill='x', pady=(0, 10))
         
         # Title section
         title_frame = tk.Frame(header_frame, bg='#2d3748')
-        title_frame.pack(side='left', padx=20, pady=15)
+        title_frame.pack(side='left', padx=15, pady=10)
         
         title_label = tk.Label(
             title_frame,
@@ -96,7 +95,7 @@ class MainWindow:
         
         # Connection section
         connection_frame = tk.Frame(header_frame, bg='#2d3748')
-        connection_frame.pack(side='right', padx=20, pady=15)
+        connection_frame.pack(side='right', padx=15, pady=10)
         
         # Connection status
         self.connection_status_label = tk.Label(
@@ -137,11 +136,11 @@ class MainWindow:
         """Create mode selection section"""
         # Mode selection frame
         mode_frame = tk.Frame(self.main_frame, bg='#1a1a1a', relief='flat', bd=1)
-        mode_frame.pack(fill='x', pady=(0, 20))
+        mode_frame.pack(fill='x', pady=(0, 10))
         
         # Title
         title_frame = tk.Frame(mode_frame, bg='#1a1a1a')
-        title_frame.pack(fill='x', padx=20, pady=(15, 10))
+        title_frame.pack(fill='x', padx=15, pady=(10, 5))
         
         title_label = tk.Label(
             title_frame,
@@ -154,7 +153,7 @@ class MainWindow:
         
         # Mode buttons frame
         buttons_frame = tk.Frame(mode_frame, bg='#1a1a1a')
-        buttons_frame.pack(fill='x', padx=20, pady=(0, 20))
+        buttons_frame.pack(fill='x', padx=15, pady=(0, 10))
         
         # Mode configurations
         modes = [
@@ -334,7 +333,247 @@ class MainWindow:
     
     def open_custom_settings(self):
         """Open custom settings window"""
-        messagebox.showinfo("🔧 Custom Settings", "Custom settings window will be implemented here")
+        try:
+            # Create custom settings window
+            custom_window = tk.Toplevel(self.root)
+            custom_window.title("🔧 Custom Settings")
+            custom_window.geometry("500x400")
+            custom_window.configure(bg='#1a1a1a')
+            custom_window.resizable(False, False)
+            
+            # Center the window
+            custom_window.transient(self.root)
+            custom_window.grab_set()
+            
+            # Main frame
+            main_frame = tk.Frame(custom_window, bg='#1a1a1a')
+            main_frame.pack(fill='both', expand=True, padx=20, pady=20)
+            
+            # Title
+            title_label = tk.Label(
+                main_frame,
+                text="🔧 ปรับแต่งการตั้งค่า Custom",
+                font=('Segoe UI', 16, 'bold'),
+                bg='#1a1a1a',
+                fg='#ffffff'
+            )
+            title_label.pack(pady=(0, 20))
+            
+            # Settings frame
+            settings_frame = tk.Frame(main_frame, bg='#1a1a1a')
+            settings_frame.pack(fill='both', expand=True)
+            
+            # Min Threshold
+            threshold_frame = tk.Frame(settings_frame, bg='#1a1a1a')
+            threshold_frame.pack(fill='x', pady=(0, 15))
+            
+            tk.Label(
+                threshold_frame,
+                text="Min Threshold (pips):",
+                font=('Segoe UI', 12),
+                bg='#1a1a1a',
+                fg='#ffffff'
+            ).pack(side='left')
+            
+            self.threshold_var = tk.StringVar(value="0.00005")
+            threshold_entry = tk.Entry(
+                threshold_frame,
+                textvariable=self.threshold_var,
+                font=('Segoe UI', 12),
+                bg='#2d3748',
+                fg='#ffffff',
+                insertbackground='#ffffff',
+                width=15
+            )
+            threshold_entry.pack(side='right')
+            
+            # Commission Rate
+            commission_frame = tk.Frame(settings_frame, bg='#1a1a1a')
+            commission_frame.pack(fill='x', pady=(0, 15))
+            
+            tk.Label(
+                commission_frame,
+                text="Commission Rate (pips):",
+                font=('Segoe UI', 12),
+                bg='#1a1a1a',
+                fg='#ffffff'
+            ).pack(side='left')
+            
+            self.commission_var = tk.StringVar(value="0.00005")
+            commission_entry = tk.Entry(
+                commission_frame,
+                textvariable=self.commission_var,
+                font=('Segoe UI', 12),
+                bg='#2d3748',
+                fg='#ffffff',
+                insertbackground='#ffffff',
+                width=15
+            )
+            commission_entry.pack(side='right')
+            
+            # Max Active Triangles
+            triangles_frame = tk.Frame(settings_frame, bg='#1a1a1a')
+            triangles_frame.pack(fill='x', pady=(0, 15))
+            
+            tk.Label(
+                triangles_frame,
+                text="Max Active Triangles:",
+                font=('Segoe UI', 12),
+                bg='#1a1a1a',
+                fg='#ffffff'
+            ).pack(side='left')
+            
+            self.triangles_var = tk.StringVar(value="3")
+            triangles_entry = tk.Entry(
+                triangles_frame,
+                textvariable=self.triangles_var,
+                font=('Segoe UI', 12),
+                bg='#2d3748',
+                fg='#ffffff',
+                insertbackground='#ffffff',
+                width=15
+            )
+            triangles_entry.pack(side='right')
+            
+            # Trailing Stop Distance
+            stop_frame = tk.Frame(settings_frame, bg='#1a1a1a')
+            stop_frame.pack(fill='x', pady=(0, 20))
+            
+            tk.Label(
+                stop_frame,
+                text="Trailing Stop Distance ($):",
+                font=('Segoe UI', 12),
+                bg='#1a1a1a',
+                fg='#ffffff'
+            ).pack(side='left')
+            
+            self.stop_var = tk.StringVar(value="30.0")
+            stop_entry = tk.Entry(
+                stop_frame,
+                textvariable=self.stop_var,
+                font=('Segoe UI', 12),
+                bg='#2d3748',
+                fg='#ffffff',
+                insertbackground='#ffffff',
+                width=15
+            )
+            stop_entry.pack(side='right')
+            
+            # Buttons frame
+            buttons_frame = tk.Frame(main_frame, bg='#1a1a1a')
+            buttons_frame.pack(fill='x', pady=(20, 0))
+            
+            # Save button
+            save_btn = tk.Button(
+                buttons_frame,
+                text="💾 บันทึก",
+                font=('Segoe UI', 12, 'bold'),
+                bg='#38a169',
+                fg='white',
+                relief='flat',
+                bd=0,
+                padx=20,
+                pady=10,
+                command=lambda: self.save_custom_settings(custom_window)
+            )
+            save_btn.pack(side='left', padx=(0, 10))
+            
+            # Cancel button
+            cancel_btn = tk.Button(
+                buttons_frame,
+                text="❌ ยกเลิก",
+                font=('Segoe UI', 12, 'bold'),
+                bg='#e53e3e',
+                fg='white',
+                relief='flat',
+                bd=0,
+                padx=20,
+                pady=10,
+                command=custom_window.destroy
+            )
+            cancel_btn.pack(side='left')
+            
+            # Reset to default button
+            reset_btn = tk.Button(
+                buttons_frame,
+                text="🔄 ค่าเริ่มต้น",
+                font=('Segoe UI', 12, 'bold'),
+                bg='#dd6b20',
+                fg='white',
+                relief='flat',
+                bd=0,
+                padx=20,
+                pady=10,
+                command=self.reset_custom_settings
+            )
+            reset_btn.pack(side='right')
+            
+        except Exception as e:
+            print(f"❌ Error opening custom settings: {e}")
+            messagebox.showerror("❌ Error", f"ไม่สามารถเปิด Custom Settings ได้: {str(e)}")
+    
+    def save_custom_settings(self, window):
+        """Save custom settings"""
+        try:
+            # Get values from entries
+            min_threshold = float(self.threshold_var.get())
+            commission_rate = float(self.commission_var.get())
+            max_triangles = int(self.triangles_var.get())
+            trailing_stop = float(self.stop_var.get())
+            
+            # Validate values
+            if min_threshold <= 0 or commission_rate <= 0 or max_triangles <= 0 or trailing_stop <= 0:
+                messagebox.showerror("❌ Error", "กรุณากรอกค่าที่ถูกต้อง (มากกว่า 0)")
+                return
+            
+            if max_triangles > 10:
+                messagebox.showerror("❌ Error", "จำนวน Max Active Triangles ต้องไม่เกิน 10")
+                return
+            
+            # Save to config
+            config = {
+                "min_threshold": min_threshold,
+                "commission_rate": commission_rate,
+                "max_active_triangles": max_triangles,
+                "trailing_stop_distance": trailing_stop,
+                "description": "ปรับแต่งตามต้องการ"
+            }
+            
+            self.save_mode_to_config("custom", config)
+            
+            # Close window
+            window.destroy()
+            
+            # Show success message
+            messagebox.showinfo(
+                "✅ บันทึกสำเร็จ",
+                f"บันทึกการตั้งค่า Custom สำเร็จแล้ว!\n\n"
+                f"Min Threshold: {min_threshold}\n"
+                f"Commission Rate: {commission_rate}\n"
+                f"Max Active Triangles: {max_triangles}\n"
+                f"Trailing Stop: ${trailing_stop}"
+            )
+            
+            print(f"✅ Custom settings saved: {config}")
+            
+        except ValueError:
+            messagebox.showerror("❌ Error", "กรุณากรอกตัวเลขที่ถูกต้อง")
+        except Exception as e:
+            print(f"❌ Error saving custom settings: {e}")
+            messagebox.showerror("❌ Error", f"ไม่สามารถบันทึกการตั้งค่าได้: {str(e)}")
+    
+    def reset_custom_settings(self):
+        """Reset custom settings to default"""
+        try:
+            self.threshold_var.set("0.00005")
+            self.commission_var.set("0.00005")
+            self.triangles_var.set("3")
+            self.stop_var.set("30.0")
+            
+            messagebox.showinfo("🔄 ค่าเริ่มต้น", "รีเซ็ตค่าเริ่มต้นเรียบร้อยแล้ว")
+            
+        except Exception as e:
+            print(f"❌ Error resetting custom settings: {e}")
     
     def toggle_connection(self):
         """Toggle broker connection"""
@@ -462,11 +701,11 @@ class MainWindow:
         """Create status display section"""
         # Status frame
         status_frame = tk.Frame(self.main_frame, bg='#1a1a1a', relief='flat', bd=1)
-        status_frame.pack(fill='x', pady=(0, 20))
+        status_frame.pack(fill='x', pady=(0, 10))
         
         # Title
         title_frame = tk.Frame(status_frame, bg='#1a1a1a')
-        title_frame.pack(fill='x', padx=20, pady=(15, 10))
+        title_frame.pack(fill='x', padx=15, pady=(10, 5))
         
         title_label = tk.Label(
             title_frame,
@@ -479,7 +718,7 @@ class MainWindow:
         
         # Status content
         content_frame = tk.Frame(status_frame, bg='#1a1a1a')
-        content_frame.pack(fill='x', padx=20, pady=(0, 20))
+        content_frame.pack(fill='x', padx=15, pady=(0, 10))
         
         # Current mode
         mode_frame = tk.Frame(content_frame, bg='#1a1a1a')
@@ -548,11 +787,11 @@ class MainWindow:
         """Create action buttons section"""
         # Action frame
         action_frame = tk.Frame(self.main_frame, bg='#1a1a1a', relief='flat', bd=1)
-        action_frame.pack(fill='x', pady=(0, 20))
+        action_frame.pack(fill='x')
         
         # Title
         title_frame = tk.Frame(action_frame, bg='#1a1a1a')
-        title_frame.pack(fill='x', padx=20, pady=(15, 10))
+        title_frame.pack(fill='x', padx=15, pady=(10, 5))
         
         title_label = tk.Label(
             title_frame,
@@ -565,7 +804,7 @@ class MainWindow:
         
         # Buttons frame
         buttons_frame = tk.Frame(action_frame, bg='#1a1a1a')
-        buttons_frame.pack(fill='x', padx=20, pady=(0, 20))
+        buttons_frame.pack(fill='x', padx=15, pady=(0, 10))
         
         # Start button
         self.start_btn = tk.Button(
@@ -837,79 +1076,6 @@ class MainWindow:
         update_thread = threading.Thread(target=update_loop, daemon=True)
         update_thread.start()
         print("✅ Periodic updates started")
-    
-    def create_footer(self):
-        """Create footer section"""
-        # Footer frame
-        footer_frame = tk.Frame(self.main_frame, bg='#2d3748', relief='flat', bd=0)
-        footer_frame.pack(fill='x', side='bottom')
-        
-        # Left side - Auto refresh controls
-        left_frame = tk.Frame(footer_frame, bg='#2d3748')
-        left_frame.pack(side='left', padx=20, pady=10)
-        
-        # Auto refresh checkbox
-        self.auto_refresh_cb = tk.Checkbutton(
-            left_frame,
-            text="🔄 อัพเดทอัตโนมัติ",
-            font=('Segoe UI', 10),
-            bg='#2d3748',
-            fg='#ffffff',
-            selectcolor='#38a169',
-            activebackground='#2d3748',
-            activeforeground='#ffffff',
-            command=self.toggle_auto_refresh
-        )
-        self.auto_refresh_cb.pack(side='left', padx=(0, 10))
-        self.auto_refresh_cb.select()  # Default to selected
-        
-        # Manual refresh button
-        self.refresh_btn = tk.Button(
-            left_frame,
-            text="🔄 รีเฟรช",
-            font=('Segoe UI', 10),
-            bg='#3182ce',
-            fg='white',
-            relief='flat',
-            bd=0,
-            padx=15,
-            pady=5,
-            command=self.manual_refresh
-        )
-        self.refresh_btn.pack(side='left')
-        
-        # Right side - Version info
-        right_frame = tk.Frame(footer_frame, bg='#2d3748')
-        right_frame.pack(side='right', padx=20, pady=10)
-        
-        self.version_label = tk.Label(
-            right_frame,
-            text="v3.0 Colorful • ArbiTrader Professional",
-            font=('Segoe UI', 9),
-            bg='#2d3748',
-            fg='#a0aec0'
-        )
-        self.version_label.pack(side='right')
-    
-    def toggle_auto_refresh(self):
-        """Toggle auto refresh"""
-        try:
-            if self.auto_refresh_cb.instate(['selected']):
-                self.start_periodic_updates()
-                print("✅ Auto refresh enabled")
-            else:
-                # Stop periodic updates by not scheduling next update
-                print("⏸️ Auto refresh disabled")
-        except Exception as e:
-            print(f"❌ Error toggling auto refresh: {e}")
-    
-    def manual_refresh(self):
-        """Manual refresh"""
-        try:
-            self.update_status_display()
-            print("🔄 Manual refresh completed")
-        except Exception as e:
-            print(f"❌ Error in manual refresh: {e}")
     
     def run(self):
         """Run the main window"""
