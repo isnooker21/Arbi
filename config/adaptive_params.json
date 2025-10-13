@@ -251,5 +251,13 @@
       "queue_size": 100
     },
     "description": "System performance and threading settings"
+  },
+  "arbitrage": {
+    "min_threshold": 5e-05,
+    "commission_rate": 5e-05,
+    "max_active_triangles": 3
+  },
+  "risk": {
+    "trailing_stop_distance": 30.0
   }
 }
