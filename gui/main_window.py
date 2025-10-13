@@ -558,7 +558,7 @@ class MainWindow:
                         "เชื่อมต่อกับ Broker สำเร็จแล้ว!\n\nพร้อมเริ่มเทรดได้เลย"
                     )
                     print("✅ Connected to broker successfully")
-            else:
+                else:
                     raise Exception("Failed to initialize broker connection")
             else:
                 raise Exception("Trading system not available - cannot connect to broker")
