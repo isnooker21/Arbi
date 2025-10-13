@@ -18,40 +18,508 @@ class GroupDashboard:
         self.setup_ui()
     
     def setup_ui(self):
-        """สร้าง UI สำหรับ Group Dashboard"""
+        """สร้าง UI สำหรับ Group Dashboard - ปรับปรุงใหม่"""
         # Main container
-        self.main_frame = tk.Frame(self.parent, bg=TradingTheme.COLORS['secondary_bg'])
-        self.main_frame.pack(fill='both', expand=True)
+        self.main_frame = tk.Frame(self.parent, bg='#1a1a1a')
+        self.main_frame.pack(fill='both', expand=True, padx=10, pady=10)
         
         # Header
         self.create_header()
         
-        # Groups grid with horizontal scroll (2 columns × 3 rows)
-        self.create_groups_grid_horizontal()
+        # Stats Overview Cards
+        self.create_stats_overview()
+        
+        # Groups grid - ปรับปรุงใหม่
+        self.create_modern_groups_grid()
         
         # Summary panel
         self.create_summary_panel()
     
     def create_header(self):
-        """สร้าง header"""
-        header_frame = tk.Frame(self.main_frame, bg=TradingTheme.COLORS['secondary_bg'])
-        header_frame.pack(fill='x', padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['md'])
+        """สร้าง header - ปรับปรุงใหม่"""
+        header_frame = tk.Frame(self.main_frame, bg='#2d2d2d', height=60)
+        header_frame.pack(fill='x', pady=(0, 15))
+        header_frame.pack_propagate(False)
         
         # Title
         title_label = tk.Label(
             header_frame,
-            text="📊 Group Status Dashboard",
-            font=TradingTheme.FONTS['title'],
-            bg=TradingTheme.COLORS['secondary_bg'],
-            fg=TradingTheme.COLORS['text_primary']
+            text="📊 Trading Dashboard",
+            font=('Arial', 18, 'bold'),
+            bg='#2d2d2d',
+            fg='#FFD700'
         )
-        title_label.pack(side='left')
+        title_label.pack(side='left', padx=20, pady=15)
+        
+        # Right side controls
+        controls_frame = tk.Frame(header_frame, bg='#2d2d2d')
+        controls_frame.pack(side='right', padx=20, pady=15)
         
         # Refresh button
-        self.refresh_btn = TradingTheme.create_button_style(
-            header_frame, "🔄 Refresh", self.refresh_groups, "secondary"
+        refresh_btn = tk.Button(
+            controls_frame,
+            text="🔄 Refresh",
+            command=self.refresh_groups,
+            bg='#4CAF50',
+            fg='white',
+            font=('Arial', 10, 'bold'),
+            padx=15,
+            pady=8,
+            relief='flat',
+            cursor='hand2'
         )
-        self.refresh_btn.pack(side='right')
+        refresh_btn.pack(side='right', padx=5)
+        
+        # Auto-refresh toggle
+        self.auto_refresh_var = tk.BooleanVar(value=True)
+        auto_refresh_btn = tk.Checkbutton(
+            controls_frame,
+            text="Auto Refresh",
+            variable=self.auto_refresh_var,
+            bg='#2d2d2d',
+            fg='white',
+            font=('Arial', 10),
+            selectcolor='#4CAF50',
+            activebackground='#2d2d2d'
+        )
+        auto_refresh_btn.pack(side='right', padx=10)
+    
+    def create_stats_overview(self):
+        """สร้าง stats overview cards - ใหม่"""
+        stats_frame = tk.Frame(self.main_frame, bg='#1a1a1a')
+        stats_frame.pack(fill='x', pady=(0, 15))
+        
+        # Stats cards
+        stats_data = [
+            {"title": "Total P&L", "value": "$0.00", "color": "#4CAF50", "icon": "💰"},
+            {"title": "Active Groups", "value": "0/6", "color": "#2196F3", "icon": "🔺"},
+            {"title": "Today's Trades", "value": "0", "color": "#FF9800", "icon": "📈"},
+            {"title": "Win Rate", "value": "0%", "color": "#9C27B0", "icon": "🎯"}
+        ]
+        
+        self.stats_cards = {}
+        for i, stat in enumerate(stats_data):
+            card = tk.Frame(
+                stats_frame,
+                bg=stat['color'],
+                relief='raised',
+                bd=2,
+                width=200,
+                height=80
+            )
+            card.pack(side='left', padx=10, fill='y')
+            card.pack_propagate(False)
+            
+            # Icon and title
+            header_frame = tk.Frame(card, bg=stat['color'])
+            header_frame.pack(fill='x', padx=10, pady=5)
+            
+            icon_label = tk.Label(
+                header_frame,
+                text=stat['icon'],
+                font=('Arial', 14),
+                bg=stat['color'],
+                fg='white'
+            )
+            icon_label.pack(side='left')
+            
+            title_label = tk.Label(
+                header_frame,
+                text=stat['title'],
+                font=('Arial', 10, 'bold'),
+                bg=stat['color'],
+                fg='white'
+            )
+            title_label.pack(side='right')
+            
+            # Value
+            value_label = tk.Label(
+                card,
+                text=stat['value'],
+                font=('Arial', 16, 'bold'),
+                bg=stat['color'],
+                fg='white'
+            )
+            value_label.pack(expand=True)
+            
+            self.stats_cards[stat['title']] = value_label
+    
+    def create_modern_groups_grid(self):
+        """สร้าง groups grid แบบใหม่ - สวยและใช้งานง่าย"""
+        # Main container
+        container_frame = tk.Frame(self.main_frame, bg='#1a1a1a')
+        container_frame.pack(fill='both', expand=True)
+        
+        # Create canvas for scrolling
+        self.canvas = tk.Canvas(
+            container_frame,
+            bg='#1a1a1a',
+            highlightthickness=0
+        )
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(container_frame, orient='vertical', command=self.canvas.yview)
+        scrollbar.pack(side='right', fill='y')
+        
+        self.canvas.pack(side='left', fill='both', expand=True)
+        self.canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Groups container
+        self.groups_container = tk.Frame(self.canvas, bg='#1a1a1a')
+        self.canvas_frame = self.canvas.create_window((0, 0), window=self.groups_container, anchor='nw')
+        
+        # Bind events
+        self.groups_container.bind('<Configure>', lambda e: self.canvas.configure(scrollregion=self.canvas.bbox('all')))
+        self.canvas.bind_all('<MouseWheel>', lambda e: self.canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
+        
+        # Create group cards
+        self.create_group_cards()
+    
+    def create_group_cards(self):
+        """สร้าง group cards แบบใหม่ - สวยและใช้งานง่าย"""
+        # Group configurations
+        group_configs = [
+            {
+                'id': 'triangle_1',
+                'name': 'Triangle 1',
+                'pairs': ['EURUSD', 'GBPUSD', 'EURGBP'],
+                'magic': 234001,
+                'color': '#FF6B6B'
+            },
+            {
+                'id': 'triangle_2',
+                'name': 'Triangle 2',
+                'pairs': ['USDJPY', 'EURUSD', 'EURJPY'],
+                'magic': 234002,
+                'color': '#4ECDC4'
+            },
+            {
+                'id': 'triangle_3',
+                'name': 'Triangle 3',
+                'pairs': ['GBPUSD', 'USDJPY', 'GBPJPY'],
+                'magic': 234003,
+                'color': '#45B7D1'
+            },
+            {
+                'id': 'triangle_4',
+                'name': 'Triangle 4',
+                'pairs': ['AUDUSD', 'USDCAD', 'AUDCAD'],
+                'magic': 234004,
+                'color': '#96CEB4'
+            },
+            {
+                'id': 'triangle_5',
+                'name': 'Triangle 5',
+                'pairs': ['NZDUSD', 'USDCHF', 'NZDCHF'],
+                'magic': 234005,
+                'color': '#FFEAA7'
+            },
+            {
+                'id': 'triangle_6',
+                'name': 'Triangle 6',
+                'pairs': ['EURCHF', 'USDCHF', 'EURUSD'],
+                'magic': 234006,
+                'color': '#DDA0DD'
+            }
+        ]
+        
+        self.group_cards = {}
+        self.status_indicators = {}
+        self.pnl_labels = {}
+        
+        # Create cards in 2 columns
+        for i, config in enumerate(group_configs):
+            row = i // 2
+            col = i % 2
+            
+            self.create_single_group_card(config, row, col)
+    
+    def create_single_group_card(self, config, row, col):
+        """สร้าง group card เดียว - ใหม่"""
+        # Main card frame
+        card_frame = tk.Frame(
+            self.groups_container,
+            bg='#2d2d2d',
+            relief='raised',
+            bd=2,
+            width=350,
+            height=280
+        )
+        card_frame.grid(row=row, column=col, padx=15, pady=10, sticky='nsew')
+        card_frame.grid_propagate(False)
+        
+        # Configure grid weights
+        self.groups_container.grid_rowconfigure(row, weight=1)
+        self.groups_container.grid_columnconfigure(col, weight=1)
+        
+        # Header
+        header_frame = tk.Frame(card_frame, bg=config['color'], height=50)
+        header_frame.pack(fill='x')
+        header_frame.pack_propagate(False)
+        
+        # Group name and magic
+        name_label = tk.Label(
+            header_frame,
+            text=f"{config['name']} (Magic: {config['magic']})",
+            font=('Arial', 12, 'bold'),
+            bg=config['color'],
+            fg='white'
+        )
+        name_label.pack(side='left', padx=15, pady=10)
+        
+        # Status indicator
+        status_indicator = tk.Label(
+            header_frame,
+            text="🔴",
+            font=('Arial', 16),
+            bg=config['color'],
+            fg='white'
+        )
+        status_indicator.pack(side='right', padx=15, pady=10)
+        self.status_indicators[config['id']] = status_indicator
+        
+        # Content area
+        content_frame = tk.Frame(card_frame, bg='#2d2d2d')
+        content_frame.pack(fill='both', expand=True, padx=15, pady=15)
+        
+        # Pairs info
+        pairs_frame = tk.Frame(content_frame, bg='#2d2d2d')
+        pairs_frame.pack(fill='x', pady=(0, 10))
+        
+        pairs_label = tk.Label(
+            pairs_frame,
+            text="📊 Pairs:",
+            font=('Arial', 10, 'bold'),
+            bg='#2d2d2d',
+            fg='#FFD700'
+        )
+        pairs_label.pack(anchor='w')
+        
+        pairs_text = tk.Label(
+            pairs_frame,
+            text=f"{' • '.join(config['pairs'])}",
+            font=('Arial', 10),
+            bg='#2d2d2d',
+            fg='white'
+        )
+        pairs_text.pack(anchor='w')
+        
+        # P&L Section
+        pnl_frame = tk.Frame(content_frame, bg='#2d2d2d')
+        pnl_frame.pack(fill='x', pady=(0, 10))
+        
+        pnl_title = tk.Label(
+            pnl_frame,
+            text="💰 P&L:",
+            font=('Arial', 10, 'bold'),
+            bg='#2d2d2d',
+            fg='#FFD700'
+        )
+        pnl_title.pack(anchor='w')
+        
+        # P&L values
+        pnl_values = {
+            'arb': tk.Label(pnl_frame, text="Arbitrage: $0.00", font=('Arial', 9), bg='#2d2d2d', fg='white'),
+            'rec': tk.Label(pnl_frame, text="Recovery: $0.00", font=('Arial', 9), bg='#2d2d2d', fg='white'),
+            'net': tk.Label(pnl_frame, text="Net: $0.00", font=('Arial', 9, 'bold'), bg='#2d2d2d', fg='#4CAF50')
+        }
+        
+        for label in pnl_values.values():
+            label.pack(anchor='w')
+        
+        if not hasattr(self, 'pnl_labels'):
+            self.pnl_labels = {}
+        self.pnl_labels[config['id']] = pnl_values
+        
+        # Status section
+        status_frame = tk.Frame(content_frame, bg='#2d2d2d')
+        status_frame.pack(fill='x')
+        
+        status_title = tk.Label(
+            status_frame,
+            text="📈 Status:",
+            font=('Arial', 10, 'bold'),
+            bg='#2d2d2d',
+            fg='#FFD700'
+        )
+        status_title.pack(anchor='w')
+        
+        status_info = tk.Label(
+            status_frame,
+            text="No Active Positions",
+            font=('Arial', 9),
+            bg='#2d2d2d',
+            fg='#888888'
+        )
+        status_info.pack(anchor='w')
+        
+        self.group_cards[config['id']] = {
+            'frame': card_frame,
+            'status_info': status_info,
+            'config': config
+        }
+    
+    def update_group_dashboard(self, groups_data=None):
+        """อัปเดต dashboard ทั้งหมด - ใหม่"""
+        try:
+            if groups_data is None:
+                groups_data = {}
+            
+            # Update stats overview
+            self.update_stats_overview(groups_data)
+            
+            # Update group cards
+            for triangle_id in self.group_cards.keys():
+                group_data = groups_data.get(triangle_id, {})
+                self.update_single_group_card(triangle_id, group_data)
+                
+        except Exception as e:
+            print(f"Error updating dashboard: {e}")
+    
+    def update_stats_overview(self, groups_data):
+        """อัปเดต stats overview cards"""
+        try:
+            if not hasattr(self, 'stats_cards'):
+                return
+            
+            # Calculate totals
+            total_pnl = sum(g.get('net_pnl', 0.0) for g in groups_data.values())
+            active_groups = sum(1 for g in groups_data.values() if g.get('status') == 'active')
+            total_groups = len(groups_data) or 6
+            today_trades = sum(g.get('total_trades', 0) for g in groups_data.values())
+            
+            # Calculate win rate
+            total_trades = today_trades
+            winning_trades = sum(1 for g in groups_data.values() if g.get('net_pnl', 0) > 0)
+            win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
+            
+            # Update cards
+            if 'Total P&L' in self.stats_cards:
+                color = '#4CAF50' if total_pnl >= 0 else '#F44336'
+                self.stats_cards['Total P&L'].config(
+                    text=f"${total_pnl:.2f}",
+                    bg=color
+                )
+            
+            if 'Active Groups' in self.stats_cards:
+                self.stats_cards['Active Groups'].config(text=f"{active_groups}/{total_groups}")
+            
+            if 'Today\'s Trades' in self.stats_cards:
+                self.stats_cards['Today\'s Trades'].config(text=str(today_trades))
+            
+            if 'Win Rate' in self.stats_cards:
+                self.stats_cards['Win Rate'].config(text=f"{win_rate:.1f}%")
+                
+        except Exception as e:
+            print(f"Error updating stats overview: {e}")
+    
+    def update_single_group_card(self, triangle_id, group_data):
+        """อัปเดต group card เดียว"""
+        try:
+            if triangle_id not in self.group_cards:
+                return
+            
+            # Update status indicator
+            net_pnl = group_data.get('net_pnl', 0.0)
+            if triangle_id in self.status_indicators:
+                if net_pnl > 0:
+                    self.status_indicators[triangle_id].config(text="🟢")
+                elif net_pnl < 0:
+                    self.status_indicators[triangle_id].config(text="🔴")
+                else:
+                    self.status_indicators[triangle_id].config(text="⚪")
+            
+            # Update P&L
+            if triangle_id in self.pnl_labels:
+                pnl_labels = self.pnl_labels[triangle_id]
+                
+                arb_pnl = group_data.get('arbitrage_pnl', 0.0)
+                rec_pnl = group_data.get('recovery_pnl', 0.0)
+                
+                pnl_labels['arb'].config(text=f"Arbitrage: ${arb_pnl:.2f}")
+                pnl_labels['rec'].config(text=f"Recovery: ${rec_pnl:.2f}")
+                
+                # Color code net P&L
+                net_color = '#4CAF50' if net_pnl >= 0 else '#F44336'
+                pnl_labels['net'].config(
+                    text=f"Net: ${net_pnl:.2f}",
+                    fg=net_color
+                )
+            
+            # Update status info
+            card = self.group_cards[triangle_id]
+            status = group_data.get('status', 'inactive')
+            positions = group_data.get('total_positions', 0)
+            
+            if status == 'active':
+                status_text = f"Active - {positions} positions"
+                card['status_info'].config(text=status_text, fg='#4CAF50')
+            else:
+                card['status_info'].config(text="No Active Positions", fg='#888888')
+                
+        except Exception as e:
+            print(f"Error updating group card {triangle_id}: {e}")
+    
+    def refresh_groups(self):
+        """รีเฟรชข้อมูล groups"""
+        try:
+            # Simulate data update (ในระบบจริงจะดึงจาก trading system)
+            sample_data = {
+                'triangle_1': {
+                    'net_pnl': 15.50,
+                    'arbitrage_pnl': 12.30,
+                    'recovery_pnl': 3.20,
+                    'status': 'active',
+                    'total_positions': 3,
+                    'total_trades': 5
+                },
+                'triangle_2': {
+                    'net_pnl': -8.75,
+                    'arbitrage_pnl': -5.20,
+                    'recovery_pnl': -3.55,
+                    'status': 'active',
+                    'total_positions': 2,
+                    'total_trades': 3
+                },
+                'triangle_3': {
+                    'net_pnl': 0.00,
+                    'arbitrage_pnl': 0.00,
+                    'recovery_pnl': 0.00,
+                    'status': 'inactive',
+                    'total_positions': 0,
+                    'total_trades': 0
+                },
+                'triangle_4': {
+                    'net_pnl': 22.80,
+                    'arbitrage_pnl': 18.50,
+                    'recovery_pnl': 4.30,
+                    'status': 'active',
+                    'total_positions': 4,
+                    'total_trades': 7
+                },
+                'triangle_5': {
+                    'net_pnl': 0.00,
+                    'arbitrage_pnl': 0.00,
+                    'recovery_pnl': 0.00,
+                    'status': 'inactive',
+                    'total_positions': 0,
+                    'total_trades': 0
+                },
+                'triangle_6': {
+                    'net_pnl': 0.00,
+                    'arbitrage_pnl': 0.00,
+                    'recovery_pnl': 0.00,
+                    'status': 'inactive',
+                    'total_positions': 0,
+                    'total_trades': 0
+                }
+            }
+            
+            # Update dashboard with sample data
+            self.update_group_dashboard(sample_data)
+            
+        except Exception as e:
+            print(f"Error refreshing groups: {e}")
     
     def create_groups_grid_horizontal(self):
         """สร้าง grid แบบ vertical scroll (3 columns × 2 rows = 6 groups)"""

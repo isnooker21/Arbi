@@ -19,8 +19,9 @@ class MainWindow:
     def __init__(self, trading_system=None):
         self.root = tk.Tk()
         self.root.title("🎯 Forex Arbitrage AI Trading System")
-        self.root.geometry("1400x800")
-        self.root.minsize(1200, 700)
+        self.root.geometry("1600x900")
+        self.root.minsize(1400, 800)
+        self.root.state('zoomed')  # Maximize window on Windows
         
         # Initialize variables
         self.trading_system = trading_system
