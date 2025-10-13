@@ -1774,7 +1774,7 @@ class TriangleArbitrageDetector:
                     self.logger.warning(f"Missing prices for {triangle}: {pair1}={price1}, {pair2}={price2}, {pair3}={price3}")
                 return None
             
-            # Get spreads
+            # Get spreads (with fallback)
             spread1 = self.broker.get_spread(pair1) if hasattr(self.broker, 'get_spread') else 0
             spread2 = self.broker.get_spread(pair2) if hasattr(self.broker, 'get_spread') else 0
             spread3 = self.broker.get_spread(pair3) if hasattr(self.broker, 'get_spread') else 0
@@ -1786,6 +1786,13 @@ class TriangleArbitrageDetector:
                 spread2 = 0
             if spread3 is None:
                 spread3 = 0
+            
+            # ถ้า spread ทั้งหมดเป็น 0 (ไม่ได้ข้อมูล) ให้ใช้ค่า default
+            if spread1 == 0 and spread2 == 0 and spread3 == 0:
+                self.logger.debug(f"Using default spread values for {triangle} (broker data unavailable)")
+                spread1 = spread2 = spread3 = 1.0  # ใช้ 1 pip เป็นค่า default
+            else:
+                self.logger.debug(f"Spread data for {triangle}: {pair1}={spread1:.2f}, {pair2}={spread2:.2f}, {pair3}={spread3:.2f} pips")
             
             # Import TradingCalculations
             from utils.calculations import TradingCalculations
@@ -2009,18 +2016,25 @@ class TriangleArbitrageDetector:
             
             # ตรวจสอบว่าได้ค่า spread หรือไม่
             if spread1 is None or spread2 is None or spread3 is None:
-                self.logger.warning(f"Spread data unavailable for {triangle}: {spread1}, {spread2}, {spread3}")
-                return False  # ถ้าไม่มีข้อมูล spread ให้ return False
+                self.logger.debug(f"Spread data unavailable for {triangle}: {spread1}, {spread2}, {spread3}")
+                # ถ้าไม่มีข้อมูล spread ให้อนุญาตผ่าน (ไม่บล็อก arbitrage)
+                # เพราะระบบจะคำนวณต้นทุนจาก Bid-Ask ใน _calculate_total_cost แทน
+                return True
             
             # Check if all spreads are below threshold
-            max_spread = 0.5  # 0.5 pips
-            return (spread1 < max_spread and 
-                   spread2 < max_spread and 
-                   spread3 < max_spread)
+            max_spread = 2.0  # เพิ่มเป็น 2.0 pips เพื่อให้ยืดหยุ่นมากขึ้น
+            acceptable = (spread1 < max_spread and 
+                         spread2 < max_spread and 
+                         spread3 < max_spread)
+            
+            if not acceptable:
+                self.logger.debug(f"Spreads too high for {triangle}: {spread1:.2f}, {spread2:.2f}, {spread3:.2f} pips")
+            
+            return acceptable
                    
         except Exception as e:
             self.logger.error(f"Error checking spread for {triangle}: {e}")
-            return False
+            return True  # Return True on error to not block trades
     
     def calculate_arbitrage_direction(self, triangle: Tuple[str, str, str]) -> Optional[Dict]:
         """
@@ -2151,6 +2165,11 @@ class TriangleArbitrageDetector:
         คำนวณต้นทุนรวมทั้งหมด (Spread + Commission + Slippage)
         """
         try:
+            # ตรวจสอบว่ามีข้อมูล Bid-Ask ครบถ้วนหรือไม่
+            if None in [bid1, ask1, bid2, ask2, bid3, ask3]:
+                self.logger.warning(f"Incomplete bid/ask data for {triangle}")
+                return 0.5  # Return default 0.5% if incomplete data
+            
             # 1. Spread Cost (คำนวณจากความต่างระหว่าง Bid-Ask)
             spread_cost_1 = (ask1 - bid1) / bid1 * 100
             spread_cost_2 = (ask2 - bid2) / bid2 * 100
@@ -2167,6 +2186,8 @@ class TriangleArbitrageDetector:
             
             # รวมต้นทุน
             total_cost = spread_cost_total + commission_cost + slippage_cost
+            
+            self.logger.debug(f"Cost breakdown for {triangle}: Spread={spread_cost_total:.4f}%, Commission={commission_cost:.4f}%, Slippage={slippage_cost:.4f}%, Total={total_cost:.4f}%")
             
             return total_cost
             

@@ -429,15 +429,40 @@ class BrokerAPI:
             return None
     
     def get_spread(self, symbol: str) -> Optional[float]:
-        """Get current spread for a symbol"""
+        """Get current spread for a symbol in pips"""
         try:
             if not self._connected:
+                self.logger.warning(f"Not connected to broker - cannot get spread for {symbol}")
                 return None
             
             if self.broker_type == "MetaTrader5":
+                # ดึงข้อมูล symbol info เพื่อรู้ digits
+                symbol_info = mt5.symbol_info(symbol)
+                if not symbol_info:
+                    self.logger.warning(f"Symbol info not found for {symbol}")
+                    return None
+                
+                # ดึงราคา tick
                 tick = mt5.symbol_info_tick(symbol)
-                if tick:
-                    return tick.ask - tick.bid
+                if not tick or tick.bid is None or tick.ask is None:
+                    self.logger.warning(f"Tick data unavailable for {symbol}: bid={tick.bid if tick else None}, ask={tick.ask if tick else None}")
+                    return None
+                
+                # คำนวณ spread ใน pips
+                spread_price = tick.ask - tick.bid
+                
+                # แปลงเป็น pips ตาม digits
+                digits = symbol_info.digits
+                if digits == 5 or digits == 3:  # 5-digit broker
+                    spread_pips = spread_price * 10000
+                elif digits == 4 or digits == 2:  # 4-digit broker
+                    spread_pips = spread_price * 10000
+                else:
+                    # Default fallback
+                    spread_pips = spread_price * 10000
+                
+                self.logger.debug(f"Spread for {symbol}: {spread_pips:.2f} pips (price diff: {spread_price:.5f})")
+                return round(spread_pips, 2)
             
             return None
             
