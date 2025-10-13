@@ -792,7 +792,7 @@ def main():
                 # Run without auto setup
                 print("เริ่มต้นระบบโดยไม่ทำ Auto Setup...")
                 trading_system = TradingSystem(auto_setup=False)
-                app = MainWindow(trading_system=trading_system)
+                app = MainWindow(trading_system)
                 app.run()
             else:
                 print(f"ไม่รู้จักคำสั่ง: {sys.argv[1]}")

@@ -534,7 +534,7 @@ class MainWindow:
             )
             self.root.update()
             
-            # Try to connect using trading system
+            # Connect using real trading system
             if self.trading_system and hasattr(self.trading_system, 'broker_api'):
                 success = self.trading_system.broker_api.initialize()
                 if success:
@@ -558,33 +558,10 @@ class MainWindow:
                         "เชื่อมต่อกับ Broker สำเร็จแล้ว!\n\nพร้อมเริ่มเทรดได้เลย"
                     )
                     print("✅ Connected to broker successfully")
-                else:
+            else:
                     raise Exception("Failed to initialize broker connection")
             else:
-                # Simulate connection for testing
-                import time
-                time.sleep(1)  # Simulate connection delay
-                
-                self.is_connected = True
-                self.connect_btn.config(
-                    text="🔌 ตัดการเชื่อมต่อ",
-                    state='normal',
-                    bg='#e53e3e'
-                )
-                self.connection_status_label.config(
-                    text="🟢 เชื่อมต่อแล้ว (Demo)",
-                    fg='#38a169'
-                )
-                
-                # Enable trading buttons
-                if hasattr(self, 'start_btn'):
-                    self.start_btn.config(state='normal')
-                
-                messagebox.showinfo(
-                    "✅ เชื่อมต่อสำเร็จ (Demo)",
-                    "เชื่อมต่อกับ Broker สำเร็จแล้ว! (Demo Mode)\n\nพร้อมเริ่มเทรดได้เลย"
-                )
-                print("✅ Connected to broker successfully (Demo Mode)")
+                raise Exception("Trading system not available - cannot connect to broker")
                 
         except Exception as e:
             print(f"❌ Failed to connect to broker: {e}")
@@ -857,7 +834,7 @@ class MainWindow:
                 fg='white'
             )
             
-            # Start actual trading if trading system is available
+            # Start real trading system
             if self.trading_system and hasattr(self.trading_system, 'start_trading'):
                 success = self.trading_system.start_trading()
                 if success:
@@ -869,12 +846,7 @@ class MainWindow:
                 else:
                     raise Exception("Failed to start trading system")
             else:
-                # Simulate trading start
-                messagebox.showinfo(
-                    "🚀 เริ่มเทรด (Demo)",
-                    f"เริ่มเทรดในโหมด: {self.current_mode}\n\nระบบจะเริ่มทำงานทันที! (Demo Mode)"
-                )
-                print("✅ Trading started successfully (Demo Mode)")
+                raise Exception("Trading system not available - cannot start trading")
             
         except Exception as e:
             print(f"❌ Error starting trading: {e}")
@@ -925,7 +897,7 @@ class MainWindow:
                     "ปิดออเดอร์ทั้งหมดเรียบร้อยแล้ว!"
                 )
                 
-        except Exception as e:
+            except Exception as e:
             print(f"❌ Error emergency close: {e}")
             messagebox.showerror("❌ Error", f"ไม่สามารถปิดออเดอร์ได้: {str(e)}")
     
@@ -948,9 +920,55 @@ class MainWindow:
             print(f"❌ Error loading current mode: {e}")
     
     def update_status_display(self):
-        """Update status display with real data"""
+        """Update status display with real data from broker"""
         try:
-            # Load active groups data
+            # Get real data from trading system
+            if self.trading_system and self.is_connected:
+                # Get real active groups from trading system
+                if hasattr(self.trading_system, 'arbitrage_detector'):
+                    active_groups = self.trading_system.arbitrage_detector.get_active_groups()
+                    active_count = len([g for g in active_groups.values() if g.get('status') == 'active'])
+                    total_count = len(active_groups)
+                    
+                    if hasattr(self, 'active_groups_label'):
+                        self.active_groups_label.config(text=f"{active_count}/{total_count}")
+                    
+                    # Get real P&L from broker
+                    total_pnl = 0.0
+                    if hasattr(self.trading_system, 'broker_api'):
+                        positions = self.trading_system.broker_api.get_positions()
+                        if positions:
+                            for position in positions:
+                                if hasattr(position, 'profit'):
+                                    total_pnl += float(position.profit)
+                    
+                    if hasattr(self, 'total_pnl_label'):
+                        color = '#38a169' if total_pnl >= 0 else '#e53e3e'
+                        self.total_pnl_label.config(
+                            text=f"${total_pnl:.2f}",
+                            fg=color
+                        )
+                    
+                    print(f"📊 Real status updated: {active_count}/{total_count} groups, P&L: ${total_pnl:.2f}")
+                else:
+                    # Fallback to file data if trading system not fully available
+                    self.update_status_from_file()
+            else:
+                # Not connected - show disconnected state
+                if hasattr(self, 'active_groups_label'):
+                    self.active_groups_label.config(text="0/0")
+                if hasattr(self, 'total_pnl_label'):
+                    self.total_pnl_label.config(text="$0.00", fg='#a0aec0')
+                print("📊 Status: Disconnected - no real data available")
+            
+        except Exception as e:
+            print(f"❌ Error updating real status: {e}")
+            # Fallback to file data on error
+            self.update_status_from_file()
+    
+    def update_status_from_file(self):
+        """Fallback: Update status from file data"""
+        try:
             import os
             import json
             
@@ -977,7 +995,7 @@ class MainWindow:
                 if hasattr(self, 'active_groups_label'):
                     self.active_groups_label.config(text=f"{active_count}/{total_count}")
                 
-                # Calculate total P&L (simulated)
+                # Calculate total P&L from file data
                 total_pnl = 0.0
                 for g in active_groups.values():
                     if isinstance(g, dict):
@@ -992,10 +1010,10 @@ class MainWindow:
                         fg=color
                     )
                 
-                print(f"📊 Status updated: {active_count}/{total_count} groups, P&L: ${total_pnl:.2f}")
+                print(f"📊 File status updated: {active_count}/{total_count} groups, P&L: ${total_pnl:.2f}")
             
         except Exception as e:
-            print(f"❌ Error updating status: {e}")
+            print(f"❌ Error updating status from file: {e}")
             import traceback
             traceback.print_exc()
     
@@ -1077,7 +1095,7 @@ class MainWindow:
             if self.auto_refresh_cb.instate(['selected']):
                 self.start_periodic_updates()
                 print("✅ Auto refresh enabled")
-            else:
+                        else:
                 # Stop periodic updates by not scheduling next update
                 print("⏸️ Auto refresh disabled")
         except Exception as e:
@@ -1103,7 +1121,7 @@ class MainWindow:
             
             print("✅ Dashboard opened")
             
-        except Exception as e:
+                except Exception as e:
             print(f"❌ Error opening dashboard: {e}")
             import tkinter.messagebox as messagebox
             messagebox.showerror("❌ Error", f"ไม่สามารถเปิด Dashboard ได้: {str(e)}")
@@ -1202,7 +1220,7 @@ class MainWindow:
         """Run the main window"""
         print("🚀 Starting ArbiTrader Professional Main Window...")
         self.root.mainloop()
-    
+            
     def close(self):
         """Close the main window"""
         if hasattr(self, 'simple_dashboard') and self.simple_dashboard:
