@@ -33,7 +33,7 @@
     "lot_calculation": {
       "use_simple_mode": false,
       "use_risk_based_sizing": true,
-      "risk_per_trade_percent": 0.3,
+      "risk_per_trade_percent": 1.0,
       "max_loss_pips": 50.0,
       "description": "⭐ UPGRADED: Risk 0.3% per trade (was 0.5%), Max loss 50 pips = more conservative"
     },
@@ -53,12 +53,12 @@
       "optimal_correlation": 0.88,
       "min_1h_correlation": 0.85,
       "min_4h_correlation": 0.82,
-      "min_1d_correlation": 0.80,
+      "min_1d_correlation": 0.8,
       "correlation_stability_max": 0.05,
       "description": "⭐ UPGRADED: Multi-timeframe correlation 82%+ (was 65%) for 33% better hedge quality"
     },
     "loss_thresholds": {
-      "min_loss_percent": 3.0,
+      "min_loss_percent": -2.0,
       "min_price_distance_pips": 30.0,
       "recovery_target": 0.0,
       "use_percentage_based": true,
@@ -98,7 +98,7 @@
     "chain_recovery": {
       "enabled": true,
       "mode": "strict",
-      "max_chain_depth": 2,
+      "max_chain_depth": 1,
       "min_loss_percent_for_chain": 5.0,
       "only_when_trend_uncertain": false,
       "max_positions_per_group": 8,
@@ -134,7 +134,7 @@
       "priority_queue_enabled": true,
       "max_priority_queue_size": 50,
       "smart_cooldown_seconds": 5,
-      "description": "Smart Recovery Flow: 3-Stage Process (Arbitrage \u2192 Correlation \u2192 Chain)"
+      "description": "Smart Recovery Flow: 3-Stage Process (Arbitrage → Correlation → Chain)"
     },
     "description": "Smart recovery with trend analysis, conditional chain recovery, ML-ready logging, and Smart Recovery Flow"
   },
@@ -148,15 +148,15 @@
       "description": "⭐ UPGRADED: Min 3 pips (was 1.5 pips), 30% spread tolerance = realistic edge"
     },
     "execution": {
-      "commission_rate": 0.0001,
       "max_slippage": 0.0005,
-      "description": "Commission 0.01% per leg, Max slippage 0.05%"
+      "commission_rate": 0.0001,
+      "min_profit_threshold": 0.0001
     },
     "triangles": {
       "max_active_triangles": 2,
       "triangle_hold_time_minutes": 720.0,
       "correlation_check_interval": 60.0,
-      "balance_tolerance_percent": 25.0,
+      "balance_tolerance_percent": 15.0,
       "description": "⭐ UPGRADED: Max 2 triangles (was 3), hold 12 hours = quality over quantity"
     },
     "closing": {
@@ -170,11 +170,6 @@
       "max_loss_per_group": -500,
       "auto_close_losing_groups": true,
       "description": "⭐ UPGRADED: Min profit $20 (was $5), Trailing $30, Max loss -$500/group = realistic targets"
-    },
-    "execution": {
-      "max_slippage": 0.0005,
-      "commission_rate": 0.0001,
-      "min_profit_threshold": 0.0001
     },
     "description": "Arbitrage detection and execution parameters"
   },

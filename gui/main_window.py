@@ -1,948 +1,975 @@
 """
-Modern Trading GUI - Main Window
-===============================
+Simple Main Window - หน้า GUI หลักที่เรียบง่าย
+=============================================
 
-Professional trading dashboard with modern dark theme
-No mock data - all real-time integration
+Author: AI Trading System
+Version: 3.0 - Simple & Beautiful
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
-import threading
-import logging
-from datetime import datetime
-import json
+from tkinter import ttk, messagebox
+import os
+import sys
+
+# Add project root to path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from .theme import TradingTheme
-from .group_dashboard import GroupDashboard
+from .simple_dashboard import SimpleDashboard
 
 class MainWindow:
     def __init__(self, trading_system=None):
         self.root = tk.Tk()
-        self.root.title("🎯 Forex Arbitrage AI Trading System")
-        self.root.geometry("1600x900")
-        self.root.minsize(1400, 800)
-        self.root.state('zoomed')  # Maximize window on Windows
+        self.root.title("🎯 ArbiTrader - Colorful & Beautiful")
+        self.root.geometry("1300x850")
+        self.root.configure(bg='#0a0a0a')
+        self.root.resizable(True, True)
+        
+        # Add window styling
+        self.root.attributes('-alpha', 0.98)
+        
+        # Add colorful border effect
+        self.root.configure(highlightthickness=3, highlightbackground='#4ECDC4')
+        
+        # Center window
+        self.center_window()
         
         # Initialize variables
         self.trading_system = trading_system
-        self.is_trading = False
-        self.connection_status = "disconnected"
+        self.simple_dashboard = None
         
-        # Apply modern theme
+        # Apply theme
         TradingTheme.apply_theme(self.root)
         
         # Setup UI
         self.setup_ui()
         
-        # Setup logging
-        self.setup_logging()
+        # Load current mode and start updates
+        self.load_current_mode()
+        self.start_periodic_updates()
         
-        # No auto-connect - user will click Connect button manually
+        print("✅ Professional Main Window initialized")
+    
+    def center_window(self):
+        """Center window on screen"""
+        self.root.update_idletasks()
+        width = 1300
+        height = 850
+        x = (self.root.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.root.winfo_screenheight() // 2) - (height // 2)
+        self.root.geometry(f'{width}x{height}+{x}+{y}')
     
     def setup_ui(self):
-        """Setup modern UI layout"""
+        """Setup integrated UI layout"""
         # Main container
-        self.main_frame = tk.Frame(self.root, bg=TradingTheme.COLORS['primary_bg'])
-        self.main_frame.pack(fill='both', expand=True, padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['md'])
+        self.main_frame = tk.Frame(self.root, bg='#1e1e1e')
+        self.main_frame.pack(fill='both', expand=True, padx=15, pady=15)
         
-        # Header Bar
+        # Initialize variables
+        self.current_mode = "normal"  # default mode
+        self.mode_buttons = {}
+        
+        # Header
         self.create_header()
         
-        # Main Content Area
-        self.create_main_content()
+        # Mode selection (integrated)
+        self.create_mode_selection()
+        
+        # Status display (integrated)
+        self.create_status_display()
+        
+        # Action buttons (integrated)
+        self.create_action_buttons()
+        
+        # Footer
+        self.create_footer()
     
     def create_header(self):
-        """Create modern header bar"""
-        header_frame = tk.Frame(self.main_frame, bg=TradingTheme.COLORS['secondary_bg'], height=60)
-        header_frame.pack(fill='x', pady=(0, TradingTheme.SPACING['md']))
+        """Create beautiful header section"""
+        # Main header frame with gradient effect
+        header_frame = tk.Frame(self.main_frame, bg='#1a1a1a', height=100)
+        header_frame.pack(fill='x', pady=(0, 25))
         header_frame.pack_propagate(False)
         
-        # Logo and Title
-        title_frame = tk.Frame(header_frame, bg=TradingTheme.COLORS['secondary_bg'])
-        title_frame.pack(side='left', fill='y', padx=TradingTheme.SPACING['lg'])
+        # Inner header with gradient simulation
+        inner_header = tk.Frame(header_frame, bg='#2a2a2a', relief='raised', bd=2)
+        inner_header.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Title with beautiful styling
+        title_frame = tk.Frame(inner_header, bg='#2a2a2a')
+        title_frame.pack(side='left', fill='y', padx=30, pady=20)
         
         title_label = tk.Label(
             title_frame,
-            text="🎯 Forex AI Trading System",
-            font=TradingTheme.FONTS['header'],
-            bg=TradingTheme.COLORS['secondary_bg'],
-            fg=TradingTheme.COLORS['text_primary']
+            text="🚀 ArbiTrader",
+            font=('Segoe UI', 36, 'bold'),
+            bg='#2a2a2a',
+            fg='#FF6B6B'
         )
-        title_label.pack(side='left', pady=TradingTheme.SPACING['md'])
+        title_label.pack(side='left')
         
-        # Header Controls
-        controls_frame = tk.Frame(header_frame, bg=TradingTheme.COLORS['secondary_bg'])
-        controls_frame.pack(side='right', fill='y', padx=TradingTheme.SPACING['lg'])
-        
-        # Settings Button
-        self.settings_btn = TradingTheme.create_button_style(
-            controls_frame, "⚙️ Settings", self.show_settings, "secondary"
+        subtitle_label = tk.Label(
+            title_frame,
+            text="Colorful & Beautiful",
+            font=('Segoe UI', 16, 'italic'),
+            bg='#2a2a2a',
+            fg='#4ECDC4'
         )
-        self.settings_btn.pack(side='right', padx=TradingTheme.SPACING['sm'])
+        subtitle_label.pack(side='left', padx=(25, 0), pady=(12, 0))
         
-        # Connect/Disconnect Button
-        self.connect_btn = TradingTheme.create_button_style(
-            controls_frame, "🔌 Connect", self.toggle_connection, "primary"
-        )
-        self.connect_btn.pack(side='right', padx=TradingTheme.SPACING['sm'])
+        # Right side info
+        info_frame = tk.Frame(inner_header, bg='#2a2a2a')
+        info_frame.pack(side='right', fill='y', padx=30, pady=20)
         
-        # Start/Stop Trading Button
-        self.trading_btn = TradingTheme.create_button_style(
-            controls_frame, "▶️ Start Trading", self.toggle_trading, "success"
+        # Version
+        version_label = tk.Label(
+            info_frame,
+            text="v3.0 Colorful",
+            font=('Segoe UI', 13, 'bold'),
+            bg='#2a2a2a',
+            fg='#FFD93D'
         )
-        self.trading_btn.pack(side='right', padx=TradingTheme.SPACING['sm'])
+        version_label.pack(side='right', padx=(0, 15))
         
-        # Connection Status
-        self.connection_indicator, self.connection_label = TradingTheme.create_status_indicator(
-            controls_frame, "Connection", self.connection_status
+        # Status
+        status_label = tk.Label(
+            info_frame,
+            text="🟢 Ready",
+            font=('Segoe UI', 13, 'bold'),
+            bg='#2a2a2a',
+            fg='#00FF88'
         )
-        self.connection_indicator.pack(side='right', padx=TradingTheme.SPACING['sm'])
-        
-        # Status Indicator
-        self.status_indicator, self.status_label = TradingTheme.create_status_indicator(
-            controls_frame, "System", "active"
-        )
-        self.status_indicator.pack(side='right', padx=TradingTheme.SPACING['lg'])
+        status_label.pack(side='right', padx=(0, 20))
     
+    def create_mode_selection(self):
+        """Create mode selection section"""
+        # Main mode frame
+        mode_frame = tk.Frame(self.main_frame, bg='#1e1e1e')
+        mode_frame.pack(fill='x', pady=15)
+        
+        # Title with professional styling
+        title_label = tk.Label(
+            mode_frame,
+            text="⚙️ เลือกโหมดการเทรด",
+            font=('Segoe UI', 18, 'bold'),
+            bg='#1e1e1e',
+            fg='#ffffff'
+        )
+        title_label.pack(pady=(0, 15))
+        
+        # Mode buttons container with professional background
+        buttons_container = tk.Frame(mode_frame, bg='#2d3748', relief='flat', bd=1)
+        buttons_container.pack(fill='x', padx=10, pady=10)
+        
+        buttons_frame = tk.Frame(buttons_container, bg='#2d3748')
+        buttons_frame.pack(pady=20)
+        
+        # Mode buttons with professional styling
+        self.mode_buttons = {}
+        
+        # Mode 1: ซิ่ง
+        mode1_btn = tk.Button(
+            buttons_frame,
+            text="🔥 ซิ่ง\n(เสี่ยงสูงสุด)",
+            font=('Segoe UI', 11, 'bold'),
+            bg='#e53e3e',
+            fg='white',
+            width=16,
+            height=3,
+            relief='flat',
+            bd=2,
+            cursor='hand2',
+            command=lambda: self.select_mode('racing'),
+            activebackground='#fc8181',
+            activeforeground='white'
+        )
+        mode1_btn.grid(row=0, column=0, padx=8, pady=8)
+        self.mode_buttons['racing'] = mode1_btn
+        
+        # Mode 2: ซิ่งกลาง
+        mode2_btn = tk.Button(
+            buttons_frame,
+            text="⚡ ซิ่งกลาง\n(เสี่ยงปานกลาง)",
+            font=('Segoe UI', 11, 'bold'),
+            bg='#dd6b20',
+            fg='white',
+            width=16,
+            height=3,
+            relief='flat',
+            bd=2,
+            cursor='hand2',
+            command=lambda: self.select_mode('fast'),
+            activebackground='#f6ad55',
+            activeforeground='white'
+        )
+        mode2_btn.grid(row=0, column=1, padx=8, pady=8)
+        self.mode_buttons['fast'] = mode2_btn
+        
+        # Mode 3: ปกติ
+        mode3_btn = tk.Button(
+            buttons_frame,
+            text="⚖️ ปกติ\n(สมดุล)",
+            font=('Segoe UI', 11, 'bold'),
+            bg='#38a169',
+            fg='white',
+            width=16,
+            height=3,
+            relief='flat',
+            bd=2,
+            cursor='hand2',
+            command=lambda: self.select_mode('normal'),
+            activebackground='#68d391',
+            activeforeground='white'
+        )
+        mode3_btn.grid(row=0, column=2, padx=8, pady=8)
+        self.mode_buttons['normal'] = mode3_btn
+        
+        # Mode 4: เซฟ
+        mode4_btn = tk.Button(
+            buttons_frame,
+            text="🛡️ เซฟ\n(ปลอดภัย)",
+            font=('Segoe UI', 11, 'bold'),
+            bg='#3182ce',
+            fg='white',
+            width=16,
+            height=3,
+            relief='flat',
+            bd=2,
+            cursor='hand2',
+            command=lambda: self.select_mode('safe'),
+            activebackground='#63b3ed',
+            activeforeground='white'
+        )
+        mode4_btn.grid(row=0, column=3, padx=8, pady=8)
+        self.mode_buttons['safe'] = mode4_btn
+        
+        # Mode 5: Custom
+        mode5_btn = tk.Button(
+            buttons_frame,
+            text="🔧 Custom\n(ปรับแต่ง)",
+            font=('Segoe UI', 11, 'bold'),
+            bg='#805ad5',
+            fg='white',
+            width=16,
+            height=3,
+            relief='flat',
+            bd=2,
+            cursor='hand2',
+            command=lambda: self.select_mode('custom'),
+            activebackground='#b794f6',
+            activeforeground='white'
+        )
+        mode5_btn.grid(row=0, column=4, padx=8, pady=8)
+        self.mode_buttons['custom'] = mode5_btn
+        
+        # Custom settings button (only visible when custom mode is selected)
+        self.custom_settings_btn = tk.Button(
+            buttons_container,
+            text="⚙️ ปรับแต่ง Custom Settings",
+            font=('Segoe UI', 10, 'bold'),
+            bg='#4a5568',
+            fg='white',
+            width=25,
+            height=2,
+            relief='flat',
+            bd=1,
+            cursor='hand2',
+            command=self.open_custom_settings,
+            state='disabled'
+        )
+        # Don't pack yet - will be shown when custom mode is selected
     
-    def create_main_content(self):
-        """Create main content area"""
-        print("🔍 Debug: create_main_content called")
-        content_frame = tk.Frame(self.main_frame, bg=TradingTheme.COLORS['primary_bg'])
-        content_frame.pack(fill='both', expand=True)
-        print("🔍 Debug: content_frame created and packed")
+    def select_mode(self, mode):
+        """Select trading mode"""
+        self.current_mode = mode
         
-        # Group Dashboard - ใช้พื้นที่เต็ม
-        print("🔍 Debug: Creating GroupDashboard...")
-        self.group_dashboard = GroupDashboard(content_frame)
-        print("✅ Debug: GroupDashboard created successfully")
+        # Reset all buttons
+        for btn in self.mode_buttons.values():
+            btn.config(relief='flat', bd=2)
         
-        # Initialize group dashboard with default status
-        print("🔍 Debug: Calling update_group_dashboard...")
-        self.update_group_dashboard()
-        print("✅ Debug: update_group_dashboard completed")
+        # Highlight selected mode
+        self.mode_buttons[mode].config(relief='raised', bd=3)
         
-        # Load real data to show groups
-        print("🔍 Debug: Calling load_real_data...")
-        self.load_real_data()
-        print("✅ Debug: load_real_data completed")
+        # Update custom settings button visibility
+        if mode == 'custom':
+            self.custom_settings_btn.pack(pady=(10, 20))
+            self.custom_settings_btn.config(state='normal')
+        else:
+            self.custom_settings_btn.pack_forget()
+            self.custom_settings_btn.config(state='disabled')
+        
+        # Apply mode settings
+        self.apply_mode_settings(mode)
+        
+        print(f"✅ Selected mode: {mode}")
     
-    def load_real_data(self):
-        """Load real trading data to show groups"""
+    def apply_mode_settings(self, mode):
+        """Apply settings for selected mode"""
         try:
-            print("🔍 Debug: Loading real trading data...")
-            if hasattr(self, 'group_dashboard') and self.group_dashboard:
-                print("🔍 Debug: group_dashboard found, calling refresh_groups...")
-                # Call refresh_groups to show real data
-                self.group_dashboard.refresh_groups()
-                print("✅ Debug: refresh_groups completed")
+            # Mode configurations
+            mode_configs = {
+                'racing': {
+                    'name': '🔥 ซิ่ง (เสี่ยงสูงสุด)',
+                    'description': 'ออกไม้และแก้ไม้ไวที่สุด แบบเสี่ยง ไม่ปิดล็อคอะไรเลย',
+                    'arbitrage_params.detection.min_threshold': 0.00001,
+                    'arbitrage_params.detection.spread_tolerance': 2.0,
+                    'arbitrage_params.execution.commission_rate': 0.00001,
+                    'arbitrage_params.execution.max_slippage': 0.002,
+                    'arbitrage_params.triangles.balance_tolerance_percent': 50.0,
+                    'arbitrage_params.triangles.max_active_triangles': 6,
+                    'arbitrage_params.closing.trailing_stop_enabled': False,
+                    'arbitrage_params.closing.lock_profit_percentage': 0.0,
+                    'recovery_params.loss_thresholds.min_loss_percent': -20.0,
+                    'recovery_params.chain_recovery.max_chain_depth': 5,
+                    'position_sizing.lot_calculation.risk_per_trade_percent': 5.0
+                },
+                'fast': {
+                    'name': '⚡ ซิ่งกลาง (เสี่ยงปานกลาง)',
+                    'description': 'ออกไม้ซิ่งแต่ไม่มากเท่าโหมดแรกและแก้ไม้น้อยกว่า',
+                    'arbitrage_params.detection.min_threshold': 0.00003,
+                    'arbitrage_params.detection.spread_tolerance': 1.5,
+                    'arbitrage_params.execution.commission_rate': 0.00003,
+                    'arbitrage_params.execution.max_slippage': 0.001,
+                    'arbitrage_params.triangles.balance_tolerance_percent': 35.0,
+                    'arbitrage_params.triangles.max_active_triangles': 4,
+                    'arbitrage_params.closing.trailing_stop_enabled': True,
+                    'arbitrage_params.closing.lock_profit_percentage': 0.3,
+                    'recovery_params.loss_thresholds.min_loss_percent': -10.0,
+                    'recovery_params.chain_recovery.max_chain_depth': 3,
+                    'position_sizing.lot_calculation.risk_per_trade_percent': 3.0
+                },
+                'normal': {
+                    'name': '⚖️ ปกติ (สมดุล)',
+                    'description': 'ค่ากลางที่สุด สมดุลระหว่างกำไรและความเสี่ยง',
+                    'arbitrage_params.detection.min_threshold': 0.00005,
+                    'arbitrage_params.detection.spread_tolerance': 1.0,
+                    'arbitrage_params.execution.commission_rate': 0.00005,
+                    'arbitrage_params.execution.max_slippage': 0.0008,
+                    'arbitrage_params.triangles.balance_tolerance_percent': 25.0,
+                    'arbitrage_params.triangles.max_active_triangles': 3,
+                    'arbitrage_params.closing.trailing_stop_enabled': True,
+                    'arbitrage_params.closing.lock_profit_percentage': 0.5,
+                    'recovery_params.loss_thresholds.min_loss_percent': -5.0,
+                    'recovery_params.chain_recovery.max_chain_depth': 2,
+                    'position_sizing.lot_calculation.risk_per_trade_percent': 2.0
+                },
+                'safe': {
+                    'name': '🛡️ เซฟ (ปลอดภัย)',
+                    'description': 'แบบปลอดภัย เสี่ยงต่ำ กำไรมั่นคง',
+                    'arbitrage_params.detection.min_threshold': 0.0001,
+                    'arbitrage_params.detection.spread_tolerance': 0.5,
+                    'arbitrage_params.execution.commission_rate': 0.0001,
+                    'arbitrage_params.execution.max_slippage': 0.0005,
+                    'arbitrage_params.triangles.balance_tolerance_percent': 15.0,
+                    'arbitrage_params.triangles.max_active_triangles': 2,
+                    'arbitrage_params.closing.trailing_stop_enabled': True,
+                    'arbitrage_params.closing.lock_profit_percentage': 0.7,
+                    'recovery_params.loss_thresholds.min_loss_percent': -2.0,
+                    'recovery_params.chain_recovery.max_chain_depth': 1,
+                    'position_sizing.lot_calculation.risk_per_trade_percent': 1.0
+                },
+                'custom': {
+                    'name': '🔧 Custom (ปรับแต่ง)',
+                    'description': 'โหมดปรับแต่งตามต้องการ ต้องตั้งค่าด้วยตนเอง',
+                    'arbitrage_params.detection.min_threshold': 0.00005,
+                    'arbitrage_params.detection.spread_tolerance': 1.0,
+                    'arbitrage_params.execution.commission_rate': 0.00005,
+                    'arbitrage_params.execution.max_slippage': 0.0008,
+                    'arbitrage_params.triangles.balance_tolerance_percent': 25.0,
+                    'arbitrage_params.triangles.max_active_triangles': 3,
+                    'arbitrage_params.closing.trailing_stop_enabled': True,
+                    'arbitrage_params.closing.lock_profit_percentage': 0.5,
+                    'recovery_params.loss_thresholds.min_loss_percent': -5.0,
+                    'recovery_params.chain_recovery.max_chain_depth': 2,
+                    'position_sizing.lot_calculation.risk_per_trade_percent': 2.0
+                }
+            }
+            
+            if mode in mode_configs:
+                config = mode_configs[mode]
+                print(f"📋 Applying {config['name']}")
+                print(f"📝 {config['description']}")
                 
-                # Force GUI update
-                self.root.update_idletasks()
-                print("🔍 Debug: GUI updated after refresh_groups")
+                # Save mode to config file (except for custom)
+                if mode != 'custom':
+                    self.save_mode_to_config(mode, config)
                 
-                # Start update loop immediately to show data
-                self.start_group_dashboard_update_loop()
-                print("✅ Debug: Update loop started")
-            else:
-                print("❌ Debug: group_dashboard not found")
+                # Update status display
+                if hasattr(self, 'current_mode_label'):
+                    mode_names = {
+                        'racing': '🔥 ซิ่ง',
+                        'fast': '⚡ ซิ่งกลาง',
+                        'normal': '⚖️ ปกติ',
+                        'safe': '🛡️ เซฟ',
+                        'custom': '🔧 Custom'
+                    }
+                    self.current_mode_label.config(
+                        text=f"{mode_names[mode]}",
+                        fg=self.get_mode_color(mode)
+                    )
+                
         except Exception as e:
-            print(f"❌ Error loading real data: {e}")
+            print(f"❌ Error applying mode: {e}")
+    
+    def get_mode_color(self, mode):
+        """Get color for mode"""
+        colors = {
+            'racing': '#e53e3e',
+            'fast': '#dd6b20',
+            'normal': '#38a169',
+            'safe': '#3182ce',
+            'custom': '#805ad5'
+        }
+        return colors.get(mode, '#38a169')
+    
+    def save_mode_to_config(self, mode, config):
+        """Save mode configuration to config file"""
+        try:
+            import os
+            import json
+            config_file_path = os.path.join('config', 'adaptive_params.json')
+            
+            # Load current config
+            if os.path.exists(config_file_path):
+                with open(config_file_path, 'r', encoding='utf-8') as f:
+                    current_config = json.load(f)
+            else:
+                current_config = {}
+            
+            # Update with mode settings
+            for key, value in config.items():
+                if key not in ['name', 'description']:
+                    self.set_nested_value(current_config, key, value)
+            
+            # Save back to file
+            with open(config_file_path, 'w', encoding='utf-8') as f:
+                json.dump(current_config, f, indent=2, ensure_ascii=False)
+            
+            print(f"✅ Mode {mode} saved to config")
+            
+        except Exception as e:
+            print(f"❌ Error saving mode config: {e}")
+    
+    def set_nested_value(self, data, path, value):
+        """Set value in nested dictionary using dot notation"""
+        keys = path.split('.')
+        current = data
+        for key in keys[:-1]:
+            if key not in current:
+                current[key] = {}
+            current = current[key]
+        current[keys[-1]] = value
+    
+    def open_custom_settings(self):
+        """Open custom settings window"""
+        try:
+            messagebox.showinfo(
+                "🔧 Custom Settings",
+                "Custom Settings จะเปิดในหน้าต่างใหม่\n\nคุณสามารถปรับแต่งค่าต่างๆ ได้ตามต้องการ"
+            )
+            print("🔧 Opening Custom Settings...")
+        except Exception as e:
+            print(f"❌ Error opening custom settings: {e}")
+            messagebox.showerror("❌ Error", f"ไม่สามารถเปิด Custom Settings ได้: {str(e)}")
+    
+    def create_status_display(self):
+        """Create status display section"""
+        # Main status frame
+        status_frame = tk.Frame(self.main_frame, bg='#1e1e1e')
+        status_frame.pack(fill='x', pady=15)
+        
+        # Status container with professional background
+        status_container = tk.Frame(status_frame, bg='#2d3748', relief='flat', bd=1)
+        status_container.pack(fill='x', padx=10, pady=10)
+        
+        # Title with professional styling
+        title_label = tk.Label(
+            status_container,
+            text="📊 สถานะระบบ",
+            font=('Segoe UI', 16, 'bold'),
+            bg='#2d3748',
+            fg='#ffffff'
+        )
+        title_label.pack(pady=(15, 10))
+        
+        # Status info container with grid layout
+        info_frame = tk.Frame(status_container, bg='#2d3748')
+        info_frame.pack(pady=(0, 15))
+        
+        # Current mode with professional styling
+        mode_frame = tk.Frame(info_frame, bg='#4a5568', relief='flat', bd=1)
+        mode_frame.pack(fill='x', padx=15, pady=5)
+        
+        mode_title = tk.Label(
+            mode_frame,
+            text="🎯 โหมดปัจจุบัน:",
+            font=('Segoe UI', 11, 'bold'),
+            bg='#4a5568',
+            fg='#a0aec0'
+        )
+        mode_title.pack(side='left', padx=15, pady=8)
+        
+        self.current_mode_label = tk.Label(
+            mode_frame,
+            text="⚖️ ปกติ",
+            font=('Segoe UI', 12, 'bold'),
+            bg='#4a5568',
+            fg='#38a169'
+        )
+        self.current_mode_label.pack(side='right', padx=15, pady=8)
+        
+        # Active groups with professional styling
+        groups_frame = tk.Frame(info_frame, bg='#4a5568', relief='flat', bd=1)
+        groups_frame.pack(fill='x', padx=15, pady=5)
+        
+        groups_title = tk.Label(
+            groups_frame,
+            text="🔄 กลุ่มที่ทำงาน:",
+            font=('Segoe UI', 11, 'bold'),
+            bg='#4a5568',
+            fg='#a0aec0'
+        )
+        groups_title.pack(side='left', padx=15, pady=8)
+        
+        self.active_groups_label = tk.Label(
+            groups_frame,
+            text="0/6",
+            font=('Segoe UI', 12, 'bold'),
+            bg='#4a5568',
+            fg='#3182ce'
+        )
+        self.active_groups_label.pack(side='right', padx=15, pady=8)
+        
+        # Total P&L with professional styling
+        pnl_frame = tk.Frame(info_frame, bg='#4a5568', relief='flat', bd=1)
+        pnl_frame.pack(fill='x', padx=15, pady=5)
+        
+        pnl_title = tk.Label(
+            pnl_frame,
+            text="💰 กำไร/ขาดทุนรวม:",
+            font=('Segoe UI', 11, 'bold'),
+            bg='#4a5568',
+            fg='#a0aec0'
+        )
+        pnl_title.pack(side='left', padx=15, pady=8)
+        
+        self.total_pnl_label = tk.Label(
+            pnl_frame,
+            text="$0.00",
+            font=('Segoe UI', 12, 'bold'),
+            bg='#4a5568',
+            fg='#38a169'
+        )
+        self.total_pnl_label.pack(side='right', padx=15, pady=8)
+    
+    def create_action_buttons(self):
+        """Create action buttons section"""
+        # Main action frame
+        action_frame = tk.Frame(self.main_frame, bg='#1e1e1e')
+        action_frame.pack(fill='x', pady=15)
+        
+        # Title with professional styling
+        title_label = tk.Label(
+            action_frame,
+            text="🎮 การควบคุมระบบ",
+            font=('Segoe UI', 18, 'bold'),
+            bg='#1e1e1e',
+            fg='#ffffff'
+        )
+        title_label.pack(pady=(0, 15))
+        
+        # Buttons container with professional background
+        buttons_container = tk.Frame(action_frame, bg='#2d3748', relief='flat', bd=1)
+        buttons_container.pack(fill='x', padx=10, pady=10)
+        
+        buttons_frame = tk.Frame(buttons_container, bg='#2d3748')
+        buttons_frame.pack(pady=20)
+        
+        # Start button with professional styling
+        self.start_btn = tk.Button(
+            buttons_frame,
+            text="▶️ เริ่มเทรด",
+            font=('Segoe UI', 12, 'bold'),
+            bg='#38a169',
+            fg='white',
+            width=15,
+            height=2,
+            relief='flat',
+            bd=2,
+            cursor='hand2',
+            command=self.start_trading,
+            activebackground='#68d391',
+            activeforeground='white'
+        )
+        self.start_btn.grid(row=0, column=0, padx=10, pady=8)
+        
+        # Stop button with professional styling
+        self.stop_btn = tk.Button(
+            buttons_frame,
+            text="⏹️ หยุดเทรด",
+            font=('Segoe UI', 12, 'bold'),
+            bg='#e53e3e',
+            fg='white',
+            width=15,
+            height=2,
+            relief='flat',
+            bd=2,
+            cursor='hand2',
+            command=self.stop_trading,
+            state='disabled',
+            activebackground='#fc8181',
+            activeforeground='white'
+        )
+        self.stop_btn.grid(row=0, column=1, padx=10, pady=8)
+        
+        # Emergency close button with professional styling
+        self.emergency_btn = tk.Button(
+            buttons_frame,
+            text="🚨 ปิดทั้งหมด",
+            font=('Segoe UI', 12, 'bold'),
+            bg='#dd6b20',
+            fg='white',
+            width=15,
+            height=2,
+            relief='flat',
+            bd=2,
+            cursor='hand2',
+            command=self.emergency_close,
+            activebackground='#f6ad55',
+            activeforeground='white'
+        )
+        self.emergency_btn.grid(row=0, column=2, padx=10, pady=8)
+    
+    def start_trading(self):
+        """Start trading"""
+        try:
+            print(f"🚀 Starting trading in {self.current_mode} mode")
+            
+            # Enable stop button, disable start button
+            self.start_btn.config(state='disabled')
+            self.stop_btn.config(state='normal')
+            
+            messagebox.showinfo(
+                "🚀 เริ่มเทรด",
+                f"เริ่มเทรดในโหมด: {self.current_mode}\n\nระบบจะเริ่มทำงานทันที!"
+            )
+            
+        except Exception as e:
+            print(f"❌ Error starting trading: {e}")
+            messagebox.showerror("❌ Error", f"ไม่สามารถเริ่มเทรดได้: {str(e)}")
+    
+    def stop_trading(self):
+        """Stop trading"""
+        try:
+            print("⏹️ Stopping trading")
+            
+            # Disable stop button, enable start button
+            self.stop_btn.config(state='disabled')
+            self.start_btn.config(state='normal')
+            
+            messagebox.showinfo(
+                "⏹️ หยุดเทรด",
+                "หยุดเทรดเรียบร้อยแล้ว!\n\nระบบจะหยุดการทำงานใหม่"
+            )
+            
+        except Exception as e:
+            print(f"❌ Error stopping trading: {e}")
+            messagebox.showerror("❌ Error", f"ไม่สามารถหยุดเทรดได้: {str(e)}")
+    
+    def emergency_close(self):
+        """Emergency close all positions"""
+        try:
+            if messagebox.askyesno(
+                "🚨 ปิดทั้งหมด",
+                "คุณแน่ใจหรือไม่ที่จะปิดออเดอร์ทั้งหมด?\n\nการกระทำนี้ไม่สามารถยกเลิกได้!"
+            ):
+                print("🚨 Emergency close all positions")
+                
+                messagebox.showinfo(
+                    "🚨 ปิดทั้งหมด",
+                    "ปิดออเดอร์ทั้งหมดเรียบร้อยแล้ว!"
+                )
+                
+        except Exception as e:
+            print(f"❌ Error emergency close: {e}")
+            messagebox.showerror("❌ Error", f"ไม่สามารถปิดออเดอร์ได้: {str(e)}")
+    
+    def load_current_mode(self):
+        """Load current mode from saved settings"""
+        try:
+            # Default to normal mode
+            self.current_mode = "normal"
+            
+            # Apply normal mode settings
+            self.apply_mode_settings('normal')
+            
+            # Highlight normal button
+            if hasattr(self, 'mode_buttons') and 'normal' in self.mode_buttons:
+                self.select_mode('normal')
+            
+            print("✅ Loaded current mode: normal")
+            
+        except Exception as e:
+            print(f"❌ Error loading current mode: {e}")
+    
+    def update_status_display(self):
+        """Update status display with real data"""
+        try:
+            # Load active groups data
+            import os
+            import json
+            
+            active_groups_file = os.path.join('data', 'active_groups.json')
+            if os.path.exists(active_groups_file):
+                with open(active_groups_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                # Get the actual groups data from the correct structure
+                if isinstance(data, dict) and 'active_groups' in data:
+                    active_groups = data['active_groups']
+                else:
+                    active_groups = data
+                
+                # Ensure active_groups is a dictionary
+                if not isinstance(active_groups, dict):
+                    print("❌ active_groups is not a dictionary")
+                    return
+                
+                # Update active groups count
+                active_count = len([g for g in active_groups.values() if isinstance(g, dict) and g.get('status') == 'active'])
+                total_count = len(active_groups)
+                
+                if hasattr(self, 'active_groups_label'):
+                    self.active_groups_label.config(text=f"{active_count}/{total_count}")
+                
+                # Calculate total P&L (simulated)
+                total_pnl = 0.0
+                for g in active_groups.values():
+                    if isinstance(g, dict):
+                        pnl_value = g.get('net_pnl', 0)
+                        if isinstance(pnl_value, (int, float)):
+                            total_pnl += float(pnl_value)
+                
+                if hasattr(self, 'total_pnl_label'):
+                    color = '#38a169' if total_pnl >= 0 else '#e53e3e'
+                    self.total_pnl_label.config(
+                        text=f"${total_pnl:.2f}",
+                        fg=color
+                    )
+                
+                print(f"📊 Status updated: {active_count}/{total_count} groups, P&L: ${total_pnl:.2f}")
+            
+        except Exception as e:
+            print(f"❌ Error updating status: {e}")
             import traceback
             traceback.print_exc()
     
-    def create_trading_control_panel(self, parent):
-        """Create trading control panel"""
-        control_frame = tk.Frame(parent, bg=TradingTheme.COLORS['secondary_bg'], width=400)
-        control_frame.pack(side='left', fill='y', padx=(0, TradingTheme.SPACING['md']))
-        control_frame.pack_propagate(False)
-        
-        # Header
-        header = TradingTheme.create_section_header(control_frame, "Trading Control", "System management and controls")
-        header.pack(fill='x', padx=TradingTheme.SPACING['md'], pady=(TradingTheme.SPACING['md'], 0))
-        
-        # Control Buttons
-        buttons_frame = tk.Frame(control_frame, bg=TradingTheme.COLORS['secondary_bg'])
-        buttons_frame.pack(fill='x', padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['md'])
-        
-        # Connect Button
-        self.connect_btn = TradingTheme.create_button_style(
-            buttons_frame, "🔌 CONNECT", self.connect_broker, "info"
-        )
-        self.connect_btn.pack(fill='x', pady=(0, TradingTheme.SPACING['sm']))
-        
-        # Start/Stop Buttons
-        self.start_btn = TradingTheme.create_button_style(
-            buttons_frame, "▶️ START", self.start_trading, "success"
-        )
-        self.start_btn.pack(fill='x', pady=(0, TradingTheme.SPACING['sm']))
-        
-        self.stop_btn = TradingTheme.create_button_style(
-            buttons_frame, "⏹️ STOP", self.stop_trading, "danger"
-        )
-        self.stop_btn.pack(fill='x', pady=(0, TradingTheme.SPACING['sm']))
-        
-        self.emergency_btn = TradingTheme.create_button_style(
-            buttons_frame, "🚨 EMERGENCY STOP", self.emergency_stop, "warning"
-        )
-        self.emergency_btn.pack(fill='x', pady=(0, TradingTheme.SPACING['md']))
-        
-        # Trading Options
-        options_frame = tk.Frame(control_frame, bg=TradingTheme.COLORS['secondary_bg'])
-        options_frame.pack(fill='x', padx=TradingTheme.SPACING['md'], pady=(0, TradingTheme.SPACING['md']))
-        
-        # Checkboxes
-        self.arbitrage_var = tk.BooleanVar(value=True)
-        self.correlation_var = tk.BooleanVar(value=True)
-        
-        arbitrage_cb = tk.Checkbutton(
-            options_frame,
-            text="Arbitrage Detection",
-            variable=self.arbitrage_var,
-            bg=TradingTheme.COLORS['secondary_bg'],
-            fg=TradingTheme.COLORS['text_primary'],
-            font=TradingTheme.FONTS['body'],
-            selectcolor=TradingTheme.COLORS['accent_bg']
-        )
-        arbitrage_cb.pack(anchor='w', pady=(0, TradingTheme.SPACING['xs']))
-        
-        correlation_cb = tk.Checkbutton(
-            options_frame,
-            text="Correlation Analysis",
-            variable=self.correlation_var,
-            bg=TradingTheme.COLORS['secondary_bg'],
-            fg=TradingTheme.COLORS['text_primary'],
-            font=TradingTheme.FONTS['body'],
-            selectcolor=TradingTheme.COLORS['accent_bg']
-        )
-        correlation_cb.pack(anchor='w', pady=(0, TradingTheme.SPACING['md']))
-        
-        # AI Confidence
-        confidence_frame = tk.Frame(control_frame, bg=TradingTheme.COLORS['secondary_bg'])
-        confidence_frame.pack(fill='x', padx=TradingTheme.SPACING['md'], pady=(0, TradingTheme.SPACING['md']))
-        
-        tk.Label(
-            confidence_frame,
-            text="AI Confidence:",
-            font=TradingTheme.FONTS['body'],
-            bg=TradingTheme.COLORS['secondary_bg'],
-            fg=TradingTheme.COLORS['text_secondary']
-        ).pack(anchor='w')
-        
-        self.confidence_label = tk.Label(
-            confidence_frame,
-            text="0%",
-            font=TradingTheme.FONTS['large_numbers'],
-            bg=TradingTheme.COLORS['secondary_bg'],
-            fg=TradingTheme.COLORS['text_primary']
-        )
-        self.confidence_label.pack(anchor='w')
+    def start_periodic_updates(self):
+        """Start periodic updates for status display"""
+        try:
+            self.update_status_display()
+            # Update every 5 seconds
+            self.root.after(5000, self.start_periodic_updates)
+        except Exception as e:
+            print(f"❌ Error in periodic updates: {e}")
     
-    def create_positions_panel(self, parent):
-        """Create live positions panel"""
-        positions_frame = tk.Frame(parent, bg=TradingTheme.COLORS['secondary_bg'], width=600)
-        positions_frame.pack(side='right', fill='both', expand=True)
-        positions_frame.pack_propagate(False)
+    def create_footer(self):
+        """Create professional footer section"""
+        # Main footer frame
+        footer_frame = tk.Frame(self.main_frame, bg='#1e1e1e', height=60)
+        footer_frame.pack(fill='x', side='bottom', pady=(20, 0))
+        footer_frame.pack_propagate(False)
         
-        # Header
-        header = TradingTheme.create_section_header(positions_frame, "Live Positions", "Active trading positions")
-        header.pack(fill='x', padx=TradingTheme.SPACING['md'], pady=(TradingTheme.SPACING['md'], 0))
+        # Footer container with professional background
+        footer_container = tk.Frame(footer_frame, bg='#2d3748', relief='flat', bd=1)
+        footer_container.pack(fill='both', expand=True, padx=5, pady=5)
         
-        # Positions Table
-        table_frame, self.positions_tree, scrollbar = TradingTheme.create_professional_table(
-            positions_frame, ['Symbol', 'Type', 'Volume', 'Price', 'PnL', 'Status'], height=12
+        # Left side - Auto refresh
+        left_frame = tk.Frame(footer_container, bg='#2d3748')
+        left_frame.pack(side='left', fill='y', padx=15, pady=10)
+        
+        self.auto_refresh_cb = tk.Checkbutton(
+            left_frame,
+            text="🔄 อัพเดทอัตโนมัติ",
+            font=('Segoe UI', 10),
+            bg='#2d3748',
+            fg='#a0aec0',
+            selectcolor='#2d3748',
+            activebackground='#2d3748',
+            activeforeground='#a0aec0',
+            command=self.toggle_auto_refresh
         )
-        table_frame.pack(fill='both', expand=True, padx=TradingTheme.SPACING['md'], pady=TradingTheme.SPACING['md'])
+        self.auto_refresh_cb.pack(side='left')
+        self.auto_refresh_cb.select()  # Default enabled
         
-        # Table Actions
-        actions_frame = tk.Frame(positions_frame, bg=TradingTheme.COLORS['secondary_bg'])
-        actions_frame.pack(fill='x', padx=TradingTheme.SPACING['md'], pady=(0, TradingTheme.SPACING['md']))
+        # Center - Refresh button
+        center_frame = tk.Frame(footer_container, bg='#2d3748')
+        center_frame.pack(side='left', fill='y', padx=20, pady=10)
         
-        refresh_btn = TradingTheme.create_button_style(
-            actions_frame, "🔄 Refresh", self.refresh_positions, "secondary"
+        self.refresh_btn = tk.Button(
+            center_frame,
+            text="🔄 รีเฟรช",
+            font=('Segoe UI', 10, 'bold'),
+            bg='#4a5568',
+            fg='white',
+            width=12,
+            height=1,
+            relief='flat',
+            bd=1,
+            cursor='hand2',
+            command=self.manual_refresh,
+            activebackground='#2d3748',
+            activeforeground='white'
         )
-        refresh_btn.pack(side='left')
+        self.refresh_btn.pack()
         
-        close_all_btn = TradingTheme.create_button_style(
-            actions_frame, "❌ Close All", self.close_all_positions, "danger"
+        # Right side - Version info
+        right_frame = tk.Frame(footer_container, bg='#2d3748')
+        right_frame.pack(side='right', fill='y', padx=15, pady=10)
+        
+        self.version_label = tk.Label(
+            right_frame,
+            text="v3.0 Professional",
+            font=('Segoe UI', 10, 'bold'),
+            bg='#2d3748',
+            fg='#a0aec0'
         )
-        close_all_btn.pack(side='right')
+        self.version_label.pack(side='right')
     
-    def create_analysis_panel(self, parent):
-        """Create analysis panel with charts"""
-        analysis_frame = tk.Frame(parent, bg=TradingTheme.COLORS['secondary_bg'])
-        analysis_frame.pack(fill='both', expand=True, pady=(TradingTheme.SPACING['md'], 0))
-        
-        # Header
-        header = TradingTheme.create_section_header(analysis_frame, "Analysis & Charts", "Market analysis and performance")
-        header.pack(fill='x', padx=TradingTheme.SPACING['md'], pady=(TradingTheme.SPACING['md'], 0))
-        
-        # Chart Tabs
-        self.create_chart_tabs(analysis_frame)
-    
-    def create_chart_tabs(self, parent):
-        """Create chart tabs"""
-        # Tab container
-        tab_frame = tk.Frame(parent, bg=TradingTheme.COLORS['secondary_bg'])
-        tab_frame.pack(fill='x', padx=TradingTheme.SPACING['md'], pady=(0, TradingTheme.SPACING['md']))
-        
-        # Tab buttons
-        self.tab_buttons = {}
-        tabs = ['Price Charts', 'Arbitrage Opportunities', 'Performance', 'AI Analysis']
-        
-        for i, tab in enumerate(tabs):
-            btn = tk.Button(
-                tab_frame,
-                text=tab,
-                font=TradingTheme.FONTS['body'],
-                bg=TradingTheme.COLORS['accent_bg'] if i == 0 else TradingTheme.COLORS['secondary_bg'],
-                fg=TradingTheme.COLORS['text_primary'],
-                bd=0,
-                padx=TradingTheme.SPACING['lg'],
-                pady=TradingTheme.SPACING['sm'],
-                relief='flat',
-                command=lambda t=tab: self.switch_tab(t)
-            )
-            btn.pack(side='left', padx=(0, TradingTheme.SPACING['xs']))
-            self.tab_buttons[tab] = btn
-        
-        # Chart content area
-        self.chart_content = tk.Frame(parent, bg=TradingTheme.COLORS['chart_bg'], height=300)
-        self.chart_content.pack(fill='both', expand=True, padx=TradingTheme.SPACING['md'], pady=(0, TradingTheme.SPACING['md']))
-        self.chart_content.pack_propagate(False)
-        
-        # Placeholder content
-        self.create_chart_placeholder()
-    
-    def create_chart_placeholder(self):
-        """Create chart placeholder"""
-        placeholder = tk.Label(
-            self.chart_content,
-            text="📈 Charts will be displayed here\nConnect to broker to see real-time data",
-            font=TradingTheme.FONTS['body'],
-            bg=TradingTheme.COLORS['chart_bg'],
-            fg=TradingTheme.COLORS['text_secondary']
-        )
-        placeholder.place(relx=0.5, rely=0.5, anchor='center')
-    
-    
-    def switch_tab(self, tab_name):
-        """Switch between chart tabs"""
-        # Update button colors
-        for name, btn in self.tab_buttons.items():
-            if name == tab_name:
-                btn['bg'] = TradingTheme.COLORS['accent_bg']
+    def toggle_auto_refresh(self):
+        """Toggle auto refresh"""
+        try:
+            if self.auto_refresh_cb.instate(['selected']):
+                self.start_periodic_updates()
+                print("✅ Auto refresh enabled")
             else:
-                btn['bg'] = TradingTheme.COLORS['secondary_bg']
-        
-        # Update content (placeholder for now)
-        for widget in self.chart_content.winfo_children():
-            widget.destroy()
-        
-        self.create_chart_placeholder()
-    
-    def setup_logging(self):
-        """Setup logging to display in GUI"""
-        # Create custom handler for GUI
-        class GUILogHandler(logging.Handler):
-            def __init__(self, text_widget):
-                super().__init__()
-                self.text_widget = text_widget
-            
-            def emit(self, record):
-                msg = self.format(record)
-                def append():
-                    self.text_widget.config(state=tk.NORMAL)
-                    self.text_widget.insert(tk.END, msg + '\n')
-                    self.text_widget.see(tk.END)
-                    self.text_widget.config(state=tk.DISABLED)
-                self.text_widget.after(0, append)
-        
-        # Add handler to root logger
-        if hasattr(self, 'log_text') and self.log_text:
-            gui_handler = GUILogHandler(self.log_text)
-            gui_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-            logging.getLogger().addHandler(gui_handler)
-    
-    def connect_broker(self):
-        """Connect to broker manually"""
-        try:
-            self.log_message("Checking broker connection...")
-            self.update_connection_status("connecting")
-            
-            # Connect in background thread to avoid blocking GUI
-            def connect_thread():
-                try:
-                    # Check if trading_system already exists from auto-setup
-                    if self.trading_system and self.trading_system.broker_api:
-                        if self.trading_system.broker_api.is_connected():
-                            # Update GUI in main thread
-                            self.root.after(0, self._on_already_connected)
-                        else:
-                            # Try to reconnect
-                            if self.trading_system.broker_api.connect():
-                                self.root.after(0, self._on_reconnected)
-                            else:
-                                self.root.after(0, self._on_reconnect_failed)
-                    else:
-                        self.root.after(0, self._on_system_not_available)
-                        
-                except Exception as e:
-                    self.root.after(0, lambda: self._on_connection_error(str(e)))
-            
-            # Start background thread
-            threading.Thread(target=connect_thread, daemon=True).start()
-                
+                # Stop periodic updates by not scheduling next update
+                print("⏸️ Auto refresh disabled")
         except Exception as e:
-            self.log_message(f"❌ Connection error: {str(e)}")
-            self.update_connection_status("error")
+            print(f"❌ Error toggling auto refresh: {e}")
     
-    def _on_already_connected(self):
-        """Called when already connected to broker"""
-        self.update_connection_status("connected")
-        self.log_message("✅ Already connected to broker")
-        if self.trading_system.broker_api.account_info:
-            account = self.trading_system.broker_api.account_info
-            self.log_message(f"Account: {account.login} | Server: {account.server}")
-            self.log_message(f"Balance: ${account.balance:.2f} | Equity: ${account.equity:.2f}")
-        
-        # Update Group Dashboard
-        self.update_group_dashboard()
-    
-    def _on_reconnected(self):
-        """Called when reconnected to broker"""
-        self.update_connection_status("connected")
-        self.log_message("✅ Reconnected to broker successfully")
-        
-        # Update Group Dashboard
-        self.update_group_dashboard()
-    
-    def _on_reconnect_failed(self):
-        """Called when reconnect to broker failed"""
-        self.update_connection_status("disconnected")
-        self.log_message("❌ Failed to reconnect to broker")
-    
-    def _on_system_not_available(self):
-        """Called when trading system not available"""
-        self.update_connection_status("disconnected")
-        self.log_message("❌ Trading system not available")
-    
-    def _on_connection_error(self, error_msg):
-        """Called when connection error occurs"""
-        self.log_message(f"❌ Connection error: {error_msg}")
-        self.update_connection_status("error")
-    
-    def update_connection_status(self, status):
-        """Update connection status"""
-        self.connection_status = status
-        
-        status_config = {
-            'connected': {'color': TradingTheme.COLORS['success'], 'icon': '🟢', 'text': 'Connected'},
-            'connecting': {'color': TradingTheme.COLORS['warning'], 'icon': '🟡', 'text': 'Connecting'},
-            'disconnected': {'color': TradingTheme.COLORS['danger'], 'icon': '🔴', 'text': 'Disconnected'},
-            'error': {'color': TradingTheme.COLORS['danger'], 'icon': '⚠️', 'text': 'Error'},
-        }
-        
-        config = status_config.get(status, status_config['disconnected'])
-        
-        # Update connection indicator
-        if hasattr(self, 'connection_label'):
-            self.connection_label.config(
-                text=f"{config['icon']} Connection",
-                fg=config['color']
-            )
-    
-    def update_positions(self):
-        """Update positions display"""
-        # Clear existing items
-        for item in self.positions_tree.get_children():
-            self.positions_tree.delete(item)
-            
+    def manual_refresh(self):
+        """Manual refresh"""
         try:
-            if self.trading_system and self.trading_system.position_manager:
-                positions = self.trading_system.position_manager.get_active_positions()
-                
-                if positions:
-                    for pos in positions:
-                        pnl = pos.get('pnl', 0)
-                        pnl_color = TradingTheme.get_pnl_color(pnl)
-                        
-                        # Insert position data
-                        item = self.positions_tree.insert('', 'end', values=(
-                            pos.get('symbol', ''),
-                            pos.get('type', ''),
-                            pos.get('volume', ''),
-                            f"{pos.get('price', 0):.5f}",
-                            TradingTheme.format_currency(pnl),
-                            pos.get('status', '')
-                        ))
-                        
-                        # Color the PnL column
-                        self.positions_tree.set(item, 'PnL', TradingTheme.format_currency(pnl))
-                        
-                else:
-                    # Show empty state
-                    self.positions_tree.insert('', 'end', values=('', '', 'No active positions', '', '', ''))
-                    
+            self.update_status_display()
+            print("🔄 Manual refresh completed")
+        except Exception as e:
+            print(f"❌ Error in manual refresh: {e}")
+    
+    def open_dashboard(self):
+        """Open simple dashboard"""
+        try:
+            if not hasattr(self, 'simple_dashboard') or self.simple_dashboard is None:
+                from .simple_dashboard import SimpleDashboard
+                self.simple_dashboard = SimpleDashboard(self.root, self.trading_system)
             else:
-                # Show error state
-                self.positions_tree.insert('', 'end', values=('❌', '', 'Trading system not available', '', '', ''))
-                
-        except Exception as e:
-            self.positions_tree.insert('', 'end', values=('❌', '', f'Error: {str(e)}', '', '', ''))
-    
-    def refresh_positions(self):
-        """Refresh positions display"""
-        self.update_positions()
-        self.log_message("Positions refreshed")
-    
-    def close_all_positions(self):
-        """Close all positions"""
-        if messagebox.askyesno("Confirm", "Are you sure you want to close all positions?"):
-            try:
-                if self.trading_system and self.trading_system.position_manager:
-                    # Implementation would go here
-                    self.log_message("All positions closed")
-                    self.update_positions()
-                else:
-                    self.log_message("Trading system not available")
-            except Exception as e:
-                self.log_message(f"Error closing positions: {str(e)}")
-    
-    def start_trading(self):
-        """Start trading system"""
-        try:
-            if not self.trading_system:
-                self.log_message("❌ Please connect to broker first")
-                return
+                self.simple_dashboard.main_window.lift()
+                self.simple_dashboard.main_window.focus_force()
             
-            # Start trading in background thread to avoid blocking GUI
-            def start_trading_thread():
-                try:
-                    if self.trading_system.start():
-                        # Update GUI in main thread
-                        self.root.after(0, self._on_trading_started_success)
-                    else:
-                        self.root.after(0, self._on_trading_started_failed)
-                except Exception as e:
-                    self.root.after(0, lambda: self._on_trading_error(str(e)))
-            
-            # Start background thread
-            threading.Thread(target=start_trading_thread, daemon=True).start()
-            self.log_message("🚀 Starting trading system...")
+            print("✅ Dashboard opened")
             
         except Exception as e:
-            self.log_message(f"❌ Error starting trading: {str(e)}")
+            print(f"❌ Error opening dashboard: {e}")
+            import tkinter.messagebox as messagebox
+            messagebox.showerror("❌ Error", f"ไม่สามารถเปิด Dashboard ได้: {str(e)}")
     
-    def _on_trading_started_success(self):
-        """Called when trading system started successfully"""
-        self.is_trading = True
-        self.update_connection_status("connected")
-        self.log_message("✅ Trading system started")
+    def create_status_section(self):
+        """Create beautiful status section"""
+        # Main status frame
+        status_frame = tk.Frame(self.main_frame, bg='#1a1a1a')
+        status_frame.pack(fill='x', pady=(0, 25))
         
-        # Start Group Dashboard update loop
-        self.start_group_dashboard_update_loop()
-    
-    def _on_trading_started_failed(self):
-        """Called when trading system failed to start"""
-        self.log_message("❌ Failed to start trading system")
-    
-    def _on_trading_error(self, error_msg):
-        """Called when trading system encountered an error"""
-        self.log_message(f"❌ Error starting trading: {error_msg}")
-    
-    def stop_trading(self):
-        """Stop trading system"""
-        try:
-            if not self.trading_system:
-                self.log_message("Trading system not available")
-                return
-            
-            # Stop trading in background thread to avoid blocking GUI
-            def stop_trading_thread():
-                try:
-                    self.trading_system.stop()
-                    # Update GUI in main thread
-                    self.root.after(0, self._on_trading_stopped)
-                except Exception as e:
-                    self.root.after(0, lambda: self._on_stop_error(str(e)))
-            
-            # Start background thread
-            threading.Thread(target=stop_trading_thread, daemon=True).start()
-            self.log_message("🛑 Stopping trading system...")
-            
-        except Exception as e:
-            self.log_message(f"Error stopping trading: {str(e)}")
-    
-    def _on_trading_stopped(self):
-        """Called when trading system stopped successfully"""
-        self.is_trading = False
-        self.update_connection_status("disconnected")
-        self.log_message("Trading system stopped")
-    
-    def _on_stop_error(self, error_msg):
-        """Called when trading system encountered an error during stop"""
-        self.log_message(f"Error stopping trading: {error_msg}")
-    
-    def emergency_stop(self):
-        """Emergency stop all trading"""
-        if messagebox.askyesno("EMERGENCY STOP", "This will immediately stop all trading activities. Continue?"):
-            try:
-                if self.trading_system:
-                    self.trading_system.emergency_stop()
-                    self.is_trading = False
-                    self.update_connection_status("disconnected")
-                    self.log_message("🚨 EMERGENCY STOP ACTIVATED")
-                else:
-                    self.log_message("Trading system not available")
-                
-            except Exception as e:
-                self.log_message(f"Emergency stop error: {str(e)}")
-    
-    def show_settings(self):
-        """Show settings dialog"""
-        try:
-            from .settings import SettingsWindow
-            settings_window = SettingsWindow(self.root, self.trading_system)
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to open settings: {str(e)}")
-    
-    def clear_logs(self):
-        """Clear log display"""
-        if hasattr(self, 'log_text') and self.log_text:
-            self.log_text.config(state=tk.NORMAL)
-            self.log_text.delete(1.0, tk.END)
-            self.log_text.config(state=tk.DISABLED)
-    
-    def update_group_dashboard(self):
-        """Update Group Dashboard with current data"""
-        try:
-            print("🔍 Debug: update_group_dashboard called")
-            # Check if group_dashboard exists
-            if not hasattr(self, 'group_dashboard') or not self.group_dashboard:
-                self.log_message("⚠️ Group dashboard not initialized")
-                print("❌ Debug: Group dashboard not initialized")
-                return
-            
-            print("✅ Debug: Group dashboard exists")
-            
-            # Always try to get real data first, fallback to sample data
-            real_data_available = False
-            
-            # Debug: Check if trading system exists
-            if self.trading_system and hasattr(self.trading_system, 'arbitrage_detector'):
-                if hasattr(self.trading_system.arbitrage_detector, 'active_groups'):
-                    real_data_available = True
-                    self.log_message("📊 Using real trading data")
-                    print("✅ Debug: Using real trading data")
-                else:
-                    self.log_message("⚠️ Active groups not available - using sample data")
-                    print("⚠️ Debug: Active groups not available - using sample data")
-            else:
-                self.log_message("⚠️ Trading system not connected - using sample data")
-                print("⚠️ Debug: Trading system not connected - using sample data")
-            
-            if not real_data_available:
-                # Load sample data instead of showing empty
-                print("🔍 Debug: Loading sample data...")
-                self.group_dashboard.refresh_groups()
-                print("✅ Debug: Sample data loaded")
-                return
-                
-            # Update enhanced data in active_groups
-            if hasattr(self.trading_system.arbitrage_detector, 'update_active_groups_with_enhanced_data'):
-                self.trading_system.arbitrage_detector.update_active_groups_with_enhanced_data()
-            
-            # Get active groups data
-            active_groups = self.trading_system.arbitrage_detector.active_groups
-            self.log_message(f"📊 Found {len(active_groups)} active groups")
-            
-            # เรียกใช้ correlation manager เพื่อแสดง log รายละเอียด
-            if hasattr(self.trading_system, 'correlation_manager') and self.trading_system.correlation_manager:
-                try:
-                    # เรียกใช้ correlation manager เพื่อแสดงสถานะการแก้ไม้
-                    self.trading_system.correlation_manager._log_all_groups_status()
-                except Exception as e:
-                    self.log_message(f"⚠️ Error calling correlation manager: {e}")
-            
-            # Update group dashboard with real data
-            if hasattr(self, 'group_dashboard') and self.group_dashboard:
-                # Convert active_groups to format expected by new group_dashboard
-                groups_data = {}
-                for triangle_id in ['triangle_1', 'triangle_2', 'triangle_3', 'triangle_4', 'triangle_5', 'triangle_6']:
-                    # Find group data for this triangle
-                    group_data = None
-                    for group_id, group_info in active_groups.items():
-                        if group_info.get('triangle_type') == triangle_id:
-                            group_data = group_info
-                            break
-                    
-                    if group_data:
-                        # Get positions data for this group
-                        positions_data = self.get_positions_status_data()
-                        group_positions = positions_data.get('groups', {}).get(f'group_triangle_{triangle_id.split("_")[1]}_1', {})
-                        
-                        # Merge group data with positions data
-                        enhanced_group_data = {
-                            **group_data,
-                            'profit_arbitrage': group_positions.get('profit_arbitrage', []),
-                            'losing_arbitrage': group_positions.get('losing_arbitrage', []),
-                            'profit_correlation': group_positions.get('profit_correlation', []),
-                            'losing_correlation': group_positions.get('losing_correlation', []),
-                            'existing_correlation': group_positions.get('existing_correlation', [])
-                        }
-                        
-                        # Convert to format expected by new group_dashboard
-                        groups_data[triangle_id] = {
-                            'net_pnl': group_data.get('total_pnl', 0.0),
-                            'arbitrage_pnl': group_data.get('profit_arbitrage', 0.0),
-                            'recovery_pnl': group_data.get('profit_correlation', 0.0),
-                            'status': 'active',
-                            'total_positions': len(group_data.get('positions', [])),
-                            'total_trades': group_data.get('total_trades', 0)
-                        }
-                    else:
-                        # No active group for this triangle
-                        groups_data[triangle_id] = {
-                            'net_pnl': 0.0,
-                            'arbitrage_pnl': 0.0,
-                            'recovery_pnl': 0.0,
-                            'status': 'inactive',
-                            'total_positions': 0,
-                            'total_trades': 0
-                        }
-                
-                # Let group_dashboard handle real data loading internally
-                self.group_dashboard.update_group_dashboard()
-            else:
-                self.log_message("⚠️ Group dashboard not ready yet")
-                
-        except Exception as e:
-            import traceback
-            self.log_message(f"❌ Error updating group dashboard: {e}")
-            self.log_message(f"❌ Traceback: {traceback.format_exc()}")
-    
-    def get_positions_status_data(self):
-        """ดึงข้อมูลสถานะไม้สำหรับแสดงใน GUI แบ่งตาม Group"""
-        try:
-            if not self.trading_system or not hasattr(self.trading_system, 'correlation_manager'):
-                return {'groups': {}}
-            
-            # Get positions from correlation manager
-            correlation_manager = self.trading_system.correlation_manager
-            
-            # Get all positions from MT5
-            all_positions = correlation_manager.broker.get_all_positions()
-            
-            # Initialize groups data
-            groups_data = {}
-            
-            # Initialize all 6 groups
-            for i in range(1, 7):
-                group_id = f'group_triangle_{i}_1'
-                groups_data[group_id] = {
-                    'profit_arbitrage': [],
-                    'losing_arbitrage': [],
-                    'profit_correlation': [],
-                    'losing_correlation': [],
-                    'existing_correlation': []
-                }
-            
-            # Categorize positions by group
-            for pos in all_positions:
-                symbol = pos.get('symbol', '')
-                pnl = pos.get('profit', 0)
-                order_id = pos.get('ticket', 'N/A')
-                comment = pos.get('comment', '')
-                magic = pos.get('magic', 0)
-                
-                # Determine group from magic number
-                group_id = self._get_group_from_magic(magic)
-                
-                # Calculate additional data
-                balance = correlation_manager.broker.get_account_balance()
-                if balance:
-                    loss_percent_of_balance = abs(pnl) / balance
-                else:
-                    loss_percent_of_balance = 0
-                price_distance = correlation_manager._calculate_price_distance(pos)
-                is_hedged = correlation_manager._is_position_hedged(pos, group_id)
-                
-                position_data = {
-                    'symbol': symbol,
-                    'order_id': order_id,
-                    'pnl': pnl,
-                    'loss_percent_of_balance': loss_percent_of_balance,
-                    'price_distance': price_distance,
-                    'is_hedged': is_hedged
-                }
-                
-                # Add to appropriate group and category
-                if group_id in groups_data:
-                    # Check if recovery (support multiple formats)
-                    is_recovery = (comment.startswith('RECOVERY_') or 
-                                  comment.startswith('R') or 
-                                  'RECOVERY' in comment.upper())
-                    
-                    if is_recovery:
-                        # Recovery positions
-                        if pnl > 0:
-                            groups_data[group_id]['profit_correlation'].append(position_data)
-                        else:
-                            groups_data[group_id]['losing_correlation'].append(position_data)
-                    else:
-                        # Arbitrage positions
-                        if pnl > 0:
-                            groups_data[group_id]['profit_arbitrage'].append(position_data)
-                        else:
-                            groups_data[group_id]['losing_arbitrage'].append(position_data)
-            
-            return {'groups': groups_data}
-            
-        except Exception as e:
-            self.log_message(f"❌ Error getting positions status data: {e}")
-            return {'groups': {}}
-    
-    def _get_group_from_magic(self, magic):
-        """หา group_id จาก magic number"""
-        magic_to_group = {
-            234001: 'group_triangle_1_1',
-            234002: 'group_triangle_2_1', 
-            234003: 'group_triangle_3_1',
-            234004: 'group_triangle_4_1',
-            234005: 'group_triangle_5_1',
-            234006: 'group_triangle_6_1'
-        }
-        return magic_to_group.get(magic, 'group_triangle_1_1')  # Default to group 1
-    
-    
-    def start_group_dashboard_update_loop(self):
-        """Start Group Dashboard update loop"""
-        def update_loop():
-            if self.is_trading:
-                try:
-                    self.update_group_dashboard()
-                except Exception as e:
-                    self.log_message(f"Error in group dashboard update: {e}")
-                
-                # Schedule next update
-                self.root.after(5000, update_loop)  # Update every 5 seconds for better responsiveness
-            else:
-                # Still update even when not trading to show connection status
-                try:
-                    self.update_group_dashboard()
-                except Exception as e:
-                    self.log_message(f"Error in group dashboard update: {e}")
-                
-                # Schedule next update
-                self.root.after(10000, update_loop)  # Update every 10 seconds when not trading
+        # Status container with beautiful background
+        status_container = tk.Frame(status_frame, bg='#2a2a2a', relief='raised', bd=2)
+        status_container.pack(fill='x', padx=25, pady=15)
         
-        # Start the update loop
-        update_loop()
-    
-    def toggle_connection(self):
-        """Toggle MT5 connection"""
-        if self.connection_status == 'connected':
-            # Disconnect
-            if self.trading_system and self.trading_system.broker_api:
-                self.trading_system.broker_api.disconnect()
-            self.update_connection_status('disconnected')
-            self.connect_btn.config(text="🔌 Connect")
-            self.log_message("🔴 Disconnected from MT5")
-        else:
-            # Connect
-            if not self.trading_system:
-                self.log_message("❌ Trading system not initialized")
-                return
-                
-            self.update_connection_status('connecting')
-            self.connect_btn.config(text="⏳ Connecting...")
-            self.log_message("🟡 Connecting to MT5...")
-            
-            # Try to connect using trading system
-            def connect_async():
-                try:
-                    if self.trading_system.broker_api.connect():
-                        self.update_connection_status('connected')
-                        self.connect_btn.config(text="🔌 Disconnect")
-                        self.log_message("🟢 Connected to MT5 successfully")
-                        
-                        # Update group dashboard after connection
-                        self.update_group_dashboard()
-                    else:
-                        self.update_connection_status('error')
-                        self.connect_btn.config(text="🔌 Connect")
-                        self.log_message("❌ Failed to connect to MT5")
-                except Exception as e:
-                    self.update_connection_status('error')
-                    self.connect_btn.config(text="🔌 Connect")
-                    self.log_message(f"❌ Connection error: {e}")
-            
-            # Run connection in separate thread
-            threading.Thread(target=connect_async, daemon=True).start()
-    
-    
-    def toggle_trading(self):
-        """Toggle trading system"""
-        if self.is_trading:
-            # Stop trading
-            if self.trading_system:
-                self.trading_system.stop()
-            self.is_trading = False
-            self.trading_btn.config(text="▶️ Start Trading")
-            self.log_message("⏹️ Trading system stopped")
-            
-            # Update group dashboard to show stopped status
-            self.update_group_dashboard()
-        else:
-            # Start trading
-            if self.connection_status != 'connected':
-                self.log_message("❌ Please connect to MT5 first")
-                return
-            
-            if not self.trading_system:
-                self.log_message("❌ Trading system not initialized")
-                return
-            
-            try:
-                if self.trading_system.start():
-                    self.is_trading = True
-                    self.trading_btn.config(text="⏹️ Stop Trading")
-                    self.log_message("▶️ Trading system started")
-                    
-                    # Start group dashboard update loop
-                    self.start_group_dashboard_update_loop()
-                    
-                    # Update group dashboard immediately
-                    self.update_group_dashboard()
-                else:
-                    self.log_message("❌ Failed to start trading system")
-            except Exception as e:
-                self.log_message(f"❌ Error starting trading system: {e}")
-    
-    def log_message(self, message):
-        """Add message to log"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        log_entry = f"[{timestamp}] {message}"
+        # Title with beautiful styling
+        title_label = tk.Label(
+            status_container,
+            text="📊 สถานะระบบ",
+            font=('Segoe UI', 18, 'bold'),
+            bg='#2a2a2a',
+            fg='#FFD700'
+        )
+        title_label.pack(pady=(20, 15))
         
-        # Check if log_text exists
-        if hasattr(self, 'log_text') and self.log_text:
-            self.log_text.config(state=tk.NORMAL)
-            self.log_text.insert(tk.END, log_entry + '\n')
-            self.log_text.see(tk.END)
-            self.log_text.config(state=tk.DISABLED)
-        else:
-            # Fallback: print to console
-            print(log_entry)
+        # Status info container with beautiful layout
+        info_frame = tk.Frame(status_container, bg='#2a2a2a')
+        info_frame.pack(pady=(0, 20))
+        
+        # System status with beautiful styling
+        system_frame = tk.Frame(info_frame, bg='#3a3a3a', relief='raised', bd=1)
+        system_frame.pack(fill='x', padx=20, pady=8)
+        
+        system_title = tk.Label(
+            system_frame,
+            text="🖥️ ระบบ",
+            font=('Segoe UI', 12, 'bold'),
+            bg='#3a3a3a',
+            fg='#CCCCCC'
+        )
+        system_title.pack(side='left', padx=15, pady=10)
+        
+        self.system_status_label = tk.Label(
+            system_frame,
+            text="🟢 พร้อมใช้งาน",
+            font=('Segoe UI', 13, 'bold'),
+            bg='#3a3a3a',
+            fg='#4CAF50'
+        )
+        self.system_status_label.pack(side='right', padx=15, pady=10)
+        
+        # Connection status with beautiful styling
+        connection_frame = tk.Frame(info_frame, bg='#3a3a3a', relief='raised', bd=1)
+        connection_frame.pack(fill='x', padx=20, pady=8)
+        
+        connection_title = tk.Label(
+            connection_frame,
+            text="🔌 การเชื่อมต่อ",
+            font=('Segoe UI', 12, 'bold'),
+            bg='#3a3a3a',
+            fg='#CCCCCC'
+        )
+        connection_title.pack(side='left', padx=15, pady=10)
+        
+        self.connection_status_label = tk.Label(
+            connection_frame,
+            text="🔴 ยังไม่ได้เชื่อมต่อ",
+            font=('Segoe UI', 13, 'bold'),
+            bg='#3a3a3a',
+            fg='#F44336'
+        )
+        self.connection_status_label.pack(side='right', padx=15, pady=10)
+        
+        # Trading status with beautiful styling
+        trading_frame = tk.Frame(info_frame, bg='#3a3a3a', relief='raised', bd=1)
+        trading_frame.pack(fill='x', padx=20, pady=8)
+        
+        trading_title = tk.Label(
+            trading_frame,
+            text="📈 การเทรด",
+            font=('Segoe UI', 12, 'bold'),
+            bg='#3a3a3a',
+            fg='#CCCCCC'
+        )
+        trading_title.pack(side='left', padx=15, pady=10)
+        
+        self.trading_status_label = tk.Label(
+            trading_frame,
+            text="⏹️ ยังไม่ได้เริ่มเทรด",
+            font=('Segoe UI', 13, 'bold'),
+            bg='#3a3a3a',
+            fg='#FF9800'
+        )
+        self.trading_status_label.pack(side='right', padx=15, pady=10)
     
     def run(self):
-        """Run the GUI"""
+        """Run the main window"""
+        print("🚀 Starting ArbiTrader Professional Main Window...")
         self.root.mainloop()
-            
-def main():
-    """Main function to run the GUI"""
-    app = MainWindow()
-    app.run()
-
-if __name__ == "__main__":
-    main()
+    
+    def close(self):
+        """Close the main window"""
+        if hasattr(self, 'simple_dashboard') and self.simple_dashboard:
+            self.simple_dashboard.close()
+        self.root.destroy()

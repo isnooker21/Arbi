@@ -549,9 +549,9 @@ class SettingsWindow:
         try:
             presets = {
                 "ultra_fast": {
-                    "arbitrage_params.detection.min_threshold": 0.00005,
+                    "arbitrage_params.detection.min_threshold": 0.00003,
                     "arbitrage_params.detection.spread_tolerance": 1.5,
-                    "arbitrage_params.execution.commission_rate": 0.00005,
+                    "arbitrage_params.execution.commission_rate": 0.00003,
                     "arbitrage_params.execution.max_slippage": 0.001,
                     "arbitrage_params.triangles.balance_tolerance_percent": 40.0,
                     "arbitrage_params.triangles.max_active_triangles": 3,
@@ -561,9 +561,9 @@ class SettingsWindow:
                     "market_regimes.normal.arbitrage_threshold": 0.001
                 },
                 "fast": {
-                    "arbitrage_params.detection.min_threshold": 0.00008,
+                    "arbitrage_params.detection.min_threshold": 0.00006,
                     "arbitrage_params.detection.spread_tolerance": 1.2,
-                    "arbitrage_params.execution.commission_rate": 0.00008,
+                    "arbitrage_params.execution.commission_rate": 0.00006,
                     "arbitrage_params.execution.max_slippage": 0.0008,
                     "arbitrage_params.triangles.balance_tolerance_percent": 35.0,
                     "arbitrage_params.triangles.max_active_triangles": 3,
