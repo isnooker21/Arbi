@@ -925,7 +925,7 @@ class MainWindow:
             if self.trading_system and self.is_connected:
                 # Get real active groups from trading system
                 if hasattr(self.trading_system, 'arbitrage_detector'):
-                    active_groups = self.trading_system.arbitrage_detector.get_active_groups()
+                    active_groups = self.trading_system.arbitrage_detector.active_groups
                     active_count = len([g for g in active_groups.values() if g.get('status') == 'active'])
                     total_count = len(active_groups)
                     
@@ -935,10 +935,12 @@ class MainWindow:
                     # Get real P&L from broker
                     total_pnl = 0.0
                     if hasattr(self.trading_system, 'broker_api'):
-                        positions = self.trading_system.broker_api.get_positions()
+                        positions = self.trading_system.broker_api.get_all_positions()
                         if positions:
                             for position in positions:
-                                if hasattr(position, 'profit'):
+                                if isinstance(position, dict) and 'profit' in position:
+                                    total_pnl += float(position['profit'])
+                                elif hasattr(position, 'profit'):
                                     total_pnl += float(position.profit)
                     
                     if hasattr(self, 'total_pnl_label'):
