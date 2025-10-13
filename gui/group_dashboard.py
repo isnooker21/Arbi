@@ -210,7 +210,7 @@ class GroupDashboard:
         print("✅ Debug: create_main_content_area completed")
     
     def create_groups_view(self):
-        """สร้าง groups view - แสดงทุก group ในหน้าเดียว"""
+        """สร้าง groups view - แสดงทุก group ในหน้าเดียวพร้อม scrollbar"""
         print("🔍 Debug: create_groups_view called")
         
         # Clear existing content
@@ -218,10 +218,43 @@ class GroupDashboard:
             widget.destroy()
         print("🔍 Debug: Cleared existing content")
         
-        # Groups container - ใช้ Frame ธรรมดาแทน Canvas
-        self.groups_frame = tk.Frame(self.content_frame, bg='#1a1a1a')
-        self.groups_frame.pack(fill='both', expand=True, padx=20, pady=20)
-        print("🔍 Debug: Groups frame created directly")
+        # Create main container with scrollbar
+        main_container = tk.Frame(self.content_frame, bg='#1a1a1a')
+        main_container.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Create canvas for scrolling
+        self.groups_canvas = tk.Canvas(
+            main_container,
+            bg='#1a1a1a',
+            highlightthickness=0
+        )
+        
+        # Create scrollbar
+        self.groups_scrollbar = ttk.Scrollbar(
+            main_container, 
+            orient='vertical', 
+            command=self.groups_canvas.yview
+        )
+        self.groups_canvas.configure(yscrollcommand=self.groups_scrollbar.set)
+        
+        # Pack canvas and scrollbar
+        self.groups_canvas.pack(side='left', fill='both', expand=True)
+        self.groups_scrollbar.pack(side='right', fill='y')
+        
+        # Create frame inside canvas
+        self.groups_frame = tk.Frame(self.groups_canvas, bg='#1a1a1a')
+        self.canvas_window = self.groups_canvas.create_window(
+            (0, 0), 
+            window=self.groups_frame, 
+            anchor='nw'
+        )
+        
+        # Bind events for scrolling
+        self.groups_frame.bind('<Configure>', self._on_frame_configure)
+        self.groups_canvas.bind('<Configure>', self._on_canvas_configure)
+        self.groups_canvas.bind_all('<MouseWheel>', self._on_mousewheel)
+        
+        print("🔍 Debug: Groups frame with scrollbar created")
         
         # Create group cards
         print("🔍 Debug: Creating full size group cards...")
@@ -230,6 +263,7 @@ class GroupDashboard:
         
         # Force immediate display
         self.groups_frame.update_idletasks()
+        self.groups_canvas.update_idletasks()
         self.parent.update_idletasks()
         print("🔍 Debug: Forced immediate display")
     
@@ -298,6 +332,9 @@ class GroupDashboard:
         
         # Force update after creating all cards
         self.groups_frame.update_idletasks()
+        if hasattr(self, 'groups_canvas'):
+            self.groups_canvas.update_idletasks()
+            self.groups_canvas.configure(scrollregion=self.groups_canvas.bbox('all'))
         self.parent.update_idletasks()
         print("🔍 Debug: Frame updated after creating cards")
     
@@ -974,9 +1011,13 @@ class GroupDashboard:
             # Force GUI update
             self.parent.update_idletasks()
             
-            # Update frame if exists
+            # Update frame and canvas if exists
             if hasattr(self, 'groups_frame'):
                 self.groups_frame.update_idletasks()
+            
+            if hasattr(self, 'groups_canvas'):
+                self.groups_canvas.update_idletasks()
+                self.groups_canvas.configure(scrollregion=self.groups_canvas.bbox('all'))
 
         except Exception as e:
             print(f"❌ Error updating dashboard: {e}")
@@ -1023,9 +1064,13 @@ class GroupDashboard:
             # Force GUI update
             self.parent.update_idletasks()
             
-            # Update frame if exists
+            # Update frame and canvas if exists
             if hasattr(self, 'groups_frame'):
                 self.groups_frame.update_idletasks()
+            
+            if hasattr(self, 'groups_canvas'):
+                self.groups_canvas.update_idletasks()
+                self.groups_canvas.configure(scrollregion=self.groups_canvas.bbox('all'))
                 
         except Exception as e:
             print(f"Error updating stats overview: {e}")
@@ -1177,6 +1222,23 @@ class GroupDashboard:
         )
         self.summary_labels['total_recovery'].pack(side='left', padx=25, pady=20)
     
+    def _on_frame_configure(self, event):
+        """Update scroll region when frame size changes"""
+        self.groups_canvas.configure(scrollregion=self.groups_canvas.bbox('all'))
+    
+    def _on_canvas_configure(self, event):
+        """Update canvas window when canvas size changes"""
+        canvas_width = event.width
+        frame_width = self.groups_frame.winfo_reqwidth()
+        
+        if frame_width != canvas_width:
+            # Update the inner frame's width to fill the canvas
+            self.groups_canvas.itemconfig(self.canvas_window, width=canvas_width)
+    
+    def _on_mousewheel(self, event):
+        """Handle mouse wheel scrolling"""
+        self.groups_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+    
     def refresh_groups(self):
         """รีเฟรชข้อมูล groups"""
         try:
@@ -1244,10 +1306,15 @@ class GroupDashboard:
             # Force GUI update
             self.parent.update_idletasks()
             
-            # Update frame
+            # Update frame and canvas
             if hasattr(self, 'groups_frame'):
                 self.groups_frame.update_idletasks()
                 print("🔍 Debug: Frame updated in refresh_groups")
+            
+            if hasattr(self, 'groups_canvas'):
+                self.groups_canvas.update_idletasks()
+                self.groups_canvas.configure(scrollregion=self.groups_canvas.bbox('all'))
+                print("🔍 Debug: Canvas updated in refresh_groups")
             
         except Exception as e:
             print(f"❌ Error refreshing groups: {e}")
