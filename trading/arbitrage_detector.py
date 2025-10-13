@@ -1779,6 +1779,14 @@ class TriangleArbitrageDetector:
             spread2 = self.broker.get_spread(pair2) if hasattr(self.broker, 'get_spread') else 0
             spread3 = self.broker.get_spread(pair3) if hasattr(self.broker, 'get_spread') else 0
             
+            # ตรวจสอบว่า spread เป็น None หรือไม่
+            if spread1 is None:
+                spread1 = 0
+            if spread2 is None:
+                spread2 = 0
+            if spread3 is None:
+                spread3 = 0
+            
             # Import TradingCalculations
             from utils.calculations import TradingCalculations
             
@@ -1999,6 +2007,11 @@ class TriangleArbitrageDetector:
             spread2 = self.broker.get_spread(pair2)
             spread3 = self.broker.get_spread(pair3)
             
+            # ตรวจสอบว่าได้ค่า spread หรือไม่
+            if spread1 is None or spread2 is None or spread3 is None:
+                self.logger.warning(f"Spread data unavailable for {triangle}: {spread1}, {spread2}, {spread3}")
+                return False  # ถ้าไม่มีข้อมูล spread ให้ return False
+            
             # Check if all spreads are below threshold
             max_spread = 0.5  # 0.5 pips
             return (spread1 < max_spread and 
@@ -2109,6 +2122,11 @@ class TriangleArbitrageDetector:
             price = self.broker.get_current_price(symbol)
             if price:
                 spread = self.broker.get_spread(symbol) if hasattr(self.broker, 'get_spread') else 0
+                
+                # ตรวจสอบว่า spread เป็น None หรือไม่
+                if spread is None:
+                    spread = 0  # ใช้ค่า default 0 pips
+                
                 # แปลง spread จาก pips เป็นราคา
                 if 'JPY' in symbol:
                     spread_price = spread * 0.01
