@@ -68,6 +68,8 @@ class MainWindow:
         # Initialize variables
         self.current_mode = "normal"  # default mode
         self.mode_buttons = {}
+        self.is_connected = False
+        self.trading_system = trading_system
         
         # Header
         self.create_header()
@@ -140,6 +142,38 @@ class MainWindow:
             fg='#00FF88'
         )
         status_label.pack(side='right', padx=(0, 20))
+        
+        # Connection section
+        connection_frame = tk.Frame(inner_header, bg='#2a2a2a')
+        connection_frame.pack(side='right', fill='y', padx=25, pady=15)
+        
+        # Connection status
+        self.connection_status_label = tk.Label(
+            connection_frame,
+            text="🔴 ไม่ได้เชื่อมต่อ",
+            font=('Segoe UI', 11, 'bold'),
+            bg='#2a2a2a',
+            fg='#e53e3e'
+        )
+        self.connection_status_label.pack(side='right', padx=(0, 15))
+        
+        # Connect button
+        self.connect_btn = tk.Button(
+            connection_frame,
+            text="🔌 เชื่อมต่อ",
+            font=('Segoe UI', 10, 'bold'),
+            bg='#38a169',
+            fg='white',
+            width=10,
+            height=1,
+            relief='flat',
+            bd=1,
+            cursor='hand2',
+            command=self.toggle_connection,
+            activebackground='#68d391',
+            activeforeground='white'
+        )
+        self.connect_btn.pack(side='right', padx=(0, 10))
     
     def create_mode_selection(self):
         """Create mode selection section"""
@@ -472,6 +506,163 @@ class MainWindow:
             print(f"❌ Error opening custom settings: {e}")
             messagebox.showerror("❌ Error", f"ไม่สามารถเปิด Custom Settings ได้: {str(e)}")
     
+    def toggle_connection(self):
+        """Toggle broker connection"""
+        try:
+            if not self.is_connected:
+                self.connect_to_broker()
+            else:
+                self.disconnect_from_broker()
+        except Exception as e:
+            print(f"❌ Error toggling connection: {e}")
+            messagebox.showerror("❌ Error", f"ไม่สามารถเปลี่ยนสถานะการเชื่อมต่อได้: {str(e)}")
+    
+    def connect_to_broker(self):
+        """Connect to broker"""
+        try:
+            print("🔌 Attempting to connect to broker...")
+            
+            # Update UI to show connecting
+            self.connect_btn.config(
+                text="🔄 กำลังเชื่อมต่อ...",
+                state='disabled',
+                bg='#dd6b20'
+            )
+            self.connection_status_label.config(
+                text="🟡 กำลังเชื่อมต่อ...",
+                fg='#dd6b20'
+            )
+            self.root.update()
+            
+            # Try to connect using trading system
+            if self.trading_system and hasattr(self.trading_system, 'broker_api'):
+                success = self.trading_system.broker_api.initialize()
+                if success:
+                    self.is_connected = True
+                    self.connect_btn.config(
+                        text="🔌 ตัดการเชื่อมต่อ",
+                        state='normal',
+                        bg='#e53e3e'
+                    )
+                    self.connection_status_label.config(
+                        text="🟢 เชื่อมต่อแล้ว",
+                        fg='#38a169'
+                    )
+                    
+                    # Enable trading buttons
+                    if hasattr(self, 'start_btn'):
+                        self.start_btn.config(state='normal')
+                    
+                    messagebox.showinfo(
+                        "✅ เชื่อมต่อสำเร็จ",
+                        "เชื่อมต่อกับ Broker สำเร็จแล้ว!\n\nพร้อมเริ่มเทรดได้เลย"
+                    )
+                    print("✅ Connected to broker successfully")
+                else:
+                    raise Exception("Failed to initialize broker connection")
+            else:
+                # Simulate connection for testing
+                import time
+                time.sleep(1)  # Simulate connection delay
+                
+                self.is_connected = True
+                self.connect_btn.config(
+                    text="🔌 ตัดการเชื่อมต่อ",
+                    state='normal',
+                    bg='#e53e3e'
+                )
+                self.connection_status_label.config(
+                    text="🟢 เชื่อมต่อแล้ว (Demo)",
+                    fg='#38a169'
+                )
+                
+                # Enable trading buttons
+                if hasattr(self, 'start_btn'):
+                    self.start_btn.config(state='normal')
+                
+                messagebox.showinfo(
+                    "✅ เชื่อมต่อสำเร็จ (Demo)",
+                    "เชื่อมต่อกับ Broker สำเร็จแล้ว! (Demo Mode)\n\nพร้อมเริ่มเทรดได้เลย"
+                )
+                print("✅ Connected to broker successfully (Demo Mode)")
+                
+        except Exception as e:
+            print(f"❌ Failed to connect to broker: {e}")
+            
+            # Reset UI to disconnected state
+            self.connect_btn.config(
+                text="🔌 เชื่อมต่อ",
+                state='normal',
+                bg='#38a169'
+            )
+            self.connection_status_label.config(
+                text="🔴 เชื่อมต่อล้มเหลว",
+                fg='#e53e3e'
+            )
+            
+            # Disable trading buttons
+            if hasattr(self, 'start_btn'):
+                self.start_btn.config(state='disabled')
+            
+            messagebox.showerror(
+                "❌ เชื่อมต่อล้มเหลว",
+                f"ไม่สามารถเชื่อมต่อกับ Broker ได้:\n\n{str(e)}\n\nกรุณาตรวจสอบการตั้งค่าและลองใหม่อีกครั้ง"
+            )
+    
+    def disconnect_from_broker(self):
+        """Disconnect from broker"""
+        try:
+            print("🔌 Disconnecting from broker...")
+            
+            # Update UI to show disconnecting
+            self.connect_btn.config(
+                text="🔄 กำลังตัดการเชื่อมต่อ...",
+                state='disabled',
+                bg='#dd6b20'
+            )
+            self.connection_status_label.config(
+                text="🟡 กำลังตัดการเชื่อมต่อ...",
+                fg='#dd6b20'
+            )
+            self.root.update()
+            
+            # Stop trading if active
+            if hasattr(self, 'start_btn') and self.start_btn['state'] == 'disabled':
+                self.stop_trading()
+            
+            # Try to disconnect using trading system
+            if self.trading_system and hasattr(self.trading_system, 'broker_api'):
+                self.trading_system.broker_api.shutdown()
+            
+            # Simulate disconnection delay
+            import time
+            time.sleep(0.5)
+            
+            self.is_connected = False
+            self.connect_btn.config(
+                text="🔌 เชื่อมต่อ",
+                state='normal',
+                bg='#38a169'
+            )
+            self.connection_status_label.config(
+                text="🔴 ไม่ได้เชื่อมต่อ",
+                fg='#e53e3e'
+            )
+            
+            # Disable trading buttons
+            if hasattr(self, 'start_btn'):
+                self.start_btn.config(state='disabled')
+            
+            messagebox.showinfo(
+                "✅ ตัดการเชื่อมต่อสำเร็จ",
+                "ตัดการเชื่อมต่อกับ Broker เรียบร้อยแล้ว"
+            )
+            print("✅ Disconnected from broker successfully")
+            
+        except Exception as e:
+            print(f"❌ Error disconnecting from broker: {e}")
+            messagebox.showerror("❌ Error", f"ไม่สามารถตัดการเชื่อมต่อได้: {str(e)}")
+    
     def create_status_display(self):
         """Create status display section"""
         # Main status frame
@@ -585,19 +776,20 @@ class MainWindow:
         buttons_frame = tk.Frame(buttons_container, bg='#2d3748')
         buttons_frame.pack(pady=20)
         
-        # Start button with professional styling
+        # Start button with professional styling (disabled by default)
         self.start_btn = tk.Button(
             buttons_frame,
             text="▶️ เริ่มเทรด",
             font=('Segoe UI', 12, 'bold'),
-            bg='#38a169',
-            fg='white',
+            bg='#4a5568',
+            fg='#a0aec0',
             width=15,
             height=2,
             relief='flat',
             bd=2,
             cursor='hand2',
             command=self.start_trading,
+            state='disabled',
             activebackground='#68d391',
             activeforeground='white'
         )
@@ -643,19 +835,62 @@ class MainWindow:
     def start_trading(self):
         """Start trading"""
         try:
+            # Check if connected to broker
+            if not self.is_connected:
+                messagebox.showwarning(
+                    "⚠️ ยังไม่ได้เชื่อมต่อ",
+                    "กรุณาเชื่อมต่อกับ Broker ก่อนเริ่มเทรด!\n\nกดปุ่ม 'เชื่อมต่อ' ในส่วนหัวของหน้าจอ"
+                )
+                return
+            
             print(f"🚀 Starting trading in {self.current_mode} mode")
             
-            # Enable stop button, disable start button
-            self.start_btn.config(state='disabled')
-            self.stop_btn.config(state='normal')
-            
-            messagebox.showinfo(
-                "🚀 เริ่มเทรด",
-                f"เริ่มเทรดในโหมด: {self.current_mode}\n\nระบบจะเริ่มทำงานทันที!"
+            # Update button states
+            self.start_btn.config(
+                state='disabled',
+                bg='#4a5568',
+                fg='#a0aec0'
             )
+            self.stop_btn.config(
+                state='normal',
+                bg='#e53e3e',
+                fg='white'
+            )
+            
+            # Start actual trading if trading system is available
+            if self.trading_system and hasattr(self.trading_system, 'start_trading'):
+                success = self.trading_system.start_trading()
+                if success:
+                    messagebox.showinfo(
+                        "🚀 เริ่มเทรดสำเร็จ",
+                        f"เริ่มเทรดในโหมด: {self.current_mode}\n\nระบบจะเริ่มทำงานทันที!"
+                    )
+                    print("✅ Trading started successfully")
+                else:
+                    raise Exception("Failed to start trading system")
+            else:
+                # Simulate trading start
+                messagebox.showinfo(
+                    "🚀 เริ่มเทรด (Demo)",
+                    f"เริ่มเทรดในโหมด: {self.current_mode}\n\nระบบจะเริ่มทำงานทันที! (Demo Mode)"
+                )
+                print("✅ Trading started successfully (Demo Mode)")
             
         except Exception as e:
             print(f"❌ Error starting trading: {e}")
+            
+            # Reset button states on error
+            self.start_btn.config(
+                state='normal',
+                bg='#38a169',
+                fg='white'
+            )
+            self.stop_btn.config(
+                state='disabled',
+                bg='#4a5568',
+                fg='#a0aec0'
+            )
+            
             messagebox.showerror("❌ Error", f"ไม่สามารถเริ่มเทรดได้: {str(e)}")
     
     def stop_trading(self):
