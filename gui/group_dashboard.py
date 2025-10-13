@@ -945,9 +945,47 @@ class GroupDashboard:
             
             if 'Win Rate' in self.stats_cards:
                 self.stats_cards['Win Rate'].config(text=f"{win_rate:.1f}%")
+            
+            # Update summary panel
+            self.update_summary_panel(groups_data)
+            
+            # Force GUI update
+            self.parent.update_idletasks()
                 
         except Exception as e:
             print(f"Error updating stats overview: {e}")
+    
+    def update_summary_panel(self, groups_data):
+        """อัปเดต summary panel"""
+        try:
+            if not hasattr(self, 'summary_labels'):
+                return
+            
+            # Calculate totals
+            total_pnl = sum(g.get('net_pnl', 0.0) for g in groups_data.values())
+            active_groups = sum(1 for g in groups_data.values() if g.get('status') == 'active')
+            total_positions = sum(g.get('total_positions', 0) for g in groups_data.values())
+            total_trades = sum(g.get('total_trades', 0) for g in groups_data.values())
+            
+            # Update summary labels
+            if 'active' in self.summary_labels:
+                self.summary_labels['active'].config(text=f"Active: {active_groups}")
+            
+            if 'total_pnl' in self.summary_labels:
+                color = '#4CAF50' if total_pnl >= 0 else '#F44336'
+                self.summary_labels['total_pnl'].config(
+                    text=f"Total Net PnL: ${total_pnl:.2f}",
+                    fg=color
+                )
+            
+            if 'total_positions' in self.summary_labels:
+                self.summary_labels['total_positions'].config(text=f"Total Positions: {total_positions}")
+            
+            if 'total_recovery' in self.summary_labels:
+                self.summary_labels['total_recovery'].config(text=f"Total Recovery: {total_trades}")
+                
+        except Exception as e:
+            print(f"Error updating summary panel: {e}")
     
     def update_single_group_card(self, triangle_id, group_data):
         """อัปเดต group card เดียว"""
@@ -1011,46 +1049,53 @@ class GroupDashboard:
         summary_frame.pack(fill='x', pady=(10, 0))
         summary_frame.pack_propagate(False)
         
-        # Summary labels
-        tk.Label(
+        # Summary labels - make them instance variables for updating
+        self.summary_labels = {}
+        
+        self.summary_labels['total_groups'] = tk.Label(
             summary_frame,
             text="Total Groups: 6",
             font=('Arial', 10, 'bold'),
             bg='#2d2d2d',
             fg='white'
-        ).pack(side='left', padx=20, pady=15)
+        )
+        self.summary_labels['total_groups'].pack(side='left', padx=20, pady=15)
         
-        tk.Label(
+        self.summary_labels['active'] = tk.Label(
             summary_frame,
-            text="Active: 3",
+            text="Active: 0",
             font=('Arial', 10, 'bold'),
             bg='#2d2d2d',
             fg='#4CAF50'
-        ).pack(side='left', padx=20, pady=15)
+        )
+        self.summary_labels['active'].pack(side='left', padx=20, pady=15)
         
-        tk.Label(
+        self.summary_labels['total_pnl'] = tk.Label(
             summary_frame,
             text="Total Net PnL: $0.00",
             font=('Arial', 10, 'bold'),
             bg='#2d2d2d',
             fg='#FFD700'
-        ).pack(side='left', padx=20, pady=15)
+        )
+        self.summary_labels['total_pnl'].pack(side='left', padx=20, pady=15)
         
-        tk.Label(
+        self.summary_labels['total_positions'] = tk.Label(
             summary_frame,
             text="Total Positions: 0",
             font=('Arial', 10, 'bold'),
             bg='#2d2d2d',
             fg='white'
-        ).pack(side='left', padx=20, pady=15)
+        )
+        self.summary_labels['total_positions'].pack(side='left', padx=20, pady=15)
         
-        tk.Label(
+        self.summary_labels['total_recovery'] = tk.Label(
             summary_frame,
             text="Total Recovery: 0",
             font=('Arial', 10, 'bold'),
             bg='#2d2d2d',
             fg='white'
-        ).pack(side='left', padx=20, pady=15)
+        )
+        self.summary_labels['total_recovery'].pack(side='left', padx=20, pady=15)
     
     def refresh_groups(self):
         """รีเฟรชข้อมูล groups"""
@@ -1112,6 +1157,9 @@ class GroupDashboard:
             print("🔍 Debug: Calling update_group_dashboard with sample data")
             self.update_group_dashboard(sample_data)
             print("✅ Debug: update_group_dashboard completed")
+            
+            # Force GUI update
+            self.parent.update_idletasks()
             
         except Exception as e:
             print(f"❌ Error refreshing groups: {e}")

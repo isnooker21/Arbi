@@ -128,6 +128,9 @@ class MainWindow:
                 # Call refresh_groups to show sample data
                 self.group_dashboard.refresh_groups()
                 print("✅ Debug: refresh_groups completed")
+                
+                # Start update loop immediately to show data
+                self.start_group_dashboard_update_loop()
             else:
                 print("❌ Debug: group_dashboard not found")
         except Exception as e:
@@ -603,23 +606,23 @@ class MainWindow:
         try:
             # Check if group_dashboard exists
             if not hasattr(self, 'group_dashboard') or not self.group_dashboard:
+                self.log_message("⚠️ Group dashboard not initialized")
                 return
+            
+            # Always try to get real data first, fallback to sample data
+            real_data_available = False
             
             # Debug: Check if trading system exists
-            if not self.trading_system:
-                self.log_message("⚠️ Trading system not connected - showing sample data")
-                # Load sample data instead of showing empty
-                self.group_dashboard.refresh_groups()
-                return
+            if self.trading_system and hasattr(self.trading_system, 'arbitrage_detector'):
+                if hasattr(self.trading_system.arbitrage_detector, 'active_groups'):
+                    real_data_available = True
+                    self.log_message("📊 Using real trading data")
+                else:
+                    self.log_message("⚠️ Active groups not available - using sample data")
+            else:
+                self.log_message("⚠️ Trading system not connected - using sample data")
             
-            if not hasattr(self.trading_system, 'arbitrage_detector'):
-                self.log_message("⚠️ Arbitrage detector not available - showing sample data")
-                # Load sample data instead of showing empty
-                self.group_dashboard.refresh_groups()
-                return
-            
-            if not hasattr(self.trading_system.arbitrage_detector, 'active_groups'):
-                self.log_message("⚠️ Active groups not available - showing sample data")
+            if not real_data_available:
                 # Load sample data instead of showing empty
                 self.group_dashboard.refresh_groups()
                 return
@@ -801,7 +804,16 @@ class MainWindow:
                     self.log_message(f"Error in group dashboard update: {e}")
                 
                 # Schedule next update
-                self.root.after(30000, update_loop)  # Update every 30 seconds
+                self.root.after(5000, update_loop)  # Update every 5 seconds for better responsiveness
+            else:
+                # Still update even when not trading to show connection status
+                try:
+                    self.update_group_dashboard()
+                except Exception as e:
+                    self.log_message(f"Error in group dashboard update: {e}")
+                
+                # Schedule next update
+                self.root.after(10000, update_loop)  # Update every 10 seconds when not trading
         
         # Start the update loop
         update_loop()
@@ -832,6 +844,9 @@ class MainWindow:
                         self.update_connection_status('connected')
                         self.connect_btn.config(text="🔌 Disconnect")
                         self.log_message("🟢 Connected to MT5 successfully")
+                        
+                        # Update group dashboard after connection
+                        self.update_group_dashboard()
                     else:
                         self.update_connection_status('error')
                         self.connect_btn.config(text="🔌 Connect")
@@ -854,6 +869,9 @@ class MainWindow:
             self.is_trading = False
             self.trading_btn.config(text="▶️ Start Trading")
             self.log_message("⏹️ Trading system stopped")
+            
+            # Update group dashboard to show stopped status
+            self.update_group_dashboard()
         else:
             # Start trading
             if self.connection_status != 'connected':
@@ -872,6 +890,9 @@ class MainWindow:
                     
                     # Start group dashboard update loop
                     self.start_group_dashboard_update_loop()
+                    
+                    # Update group dashboard immediately
+                    self.update_group_dashboard()
                 else:
                     self.log_message("❌ Failed to start trading system")
             except Exception as e:
