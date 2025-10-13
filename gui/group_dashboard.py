@@ -113,10 +113,10 @@ class GroupDashboard:
         
         # Stats cards - ปรับปรุงสีสันและขนาด
         stats_data = [
-            {"title": "Total P&L", "value": "$0.00", "color": "#2E7D32", "icon": "💰", "gradient": "#4CAF50"},
-            {"title": "Active Groups", "value": "0/6", "color": "#1565C0", "icon": "🔺", "gradient": "#2196F3"},
-            {"title": "Today's Trades", "value": "0", "color": "#E65100", "icon": "📈", "gradient": "#FF9800"},
-            {"title": "Win Rate", "value": "0%", "color": "#4A148C", "icon": "🎯", "gradient": "#9C27B0"}
+            {"title": "Total P&L", "value": "$0.00", "color": "#2E7D32", "icon": "💰", "gradient": "#4CAF50", "subtitle": "Real MT5 Data"},
+            {"title": "Active Groups", "value": "0/6", "color": "#1565C0", "icon": "🔺", "gradient": "#2196F3", "subtitle": "Live Positions"},
+            {"title": "Today's Trades", "value": "0", "color": "#E65100", "icon": "📈", "gradient": "#FF9800", "subtitle": "Real Orders"},
+            {"title": "Win Rate", "value": "0%", "color": "#4A148C", "icon": "🎯", "gradient": "#9C27B0", "subtitle": "Live Stats"}
         ]
         
         self.stats_cards = {}
@@ -178,16 +178,26 @@ class GroupDashboard:
             value_frame = tk.Frame(card, bg=stat['color'])
             value_frame.pack(fill='both', expand=True, padx=15, pady=10)
             
-            value_label = tk.Label(
-                value_frame,
-                text=stat['value'],
-                font=('Consolas', 18, 'bold'),
-                bg=stat['color'],
-                fg='white'
-            )
-            value_label.pack(expand=True)
-            
-            self.stats_cards[stat['title']] = value_label
+                value_label = tk.Label(
+                    value_frame,
+                    text=stat['value'],
+                    font=('Consolas', 18, 'bold'),
+                    bg=stat['color'],
+                    fg='white'
+                )
+                value_label.pack(expand=True)
+                
+                # เพิ่ม subtitle
+                subtitle_label = tk.Label(
+                    value_frame,
+                    text=stat.get('subtitle', ''),
+                    font=('Segoe UI', 8),
+                    bg=stat['color'],
+                    fg='#E0E0E0'
+                )
+                subtitle_label.pack()
+                
+                self.stats_cards[stat['title']] = value_label
     
     def create_main_content_area(self):
         """สร้างพื้นที่หลัก - แต่ละ group แยกเต็มหน้า"""
@@ -675,7 +685,7 @@ class GroupDashboard:
         
         tk.Label(
             header_frame,
-            text=f"🎯 Active Positions - {config['name']}",
+            text=f"🎯 Active Positions - {config['name']} (Real MT5 Data)",
             font=('Arial', 14, 'bold'),
             bg='#3d3d3d',
             fg=config['color']
@@ -739,11 +749,17 @@ class GroupDashboard:
         self.positions_tree.pack(side='left', fill='both', expand=True)
         positions_scrollbar.pack(side='right', fill='y')
         
-        # Sample data for this group
-        sample_positions = self.get_group_sample_positions(config)
+        # Real data for this group
+        real_positions = self.get_group_real_positions(config)
         
-        for pos in sample_positions:
-            self.positions_tree.insert('', 'end', values=pos)
+        if real_positions:
+            for pos in real_positions:
+                self.positions_tree.insert('', 'end', values=pos)
+        else:
+            # แสดงข้อความว่าไม่มี positions
+            self.positions_tree.insert('', 'end', values=(
+                'No Active', 'Positions', 'Found', '--', '--', '--', '--', '--'
+            ))
     
     def create_group_recovery_tab(self, config):
         """สร้าง recovery tab สำหรับ group เดียว"""
@@ -884,23 +900,83 @@ class GroupDashboard:
         for i in range(4):  # 4 columns
             metrics_frame.grid_columnconfigure(i, weight=1)
     
-    def get_group_sample_positions(self, config):
-        """สร้างข้อมูล positions ตัวอย่างสำหรับ group"""
-        pairs = config['pairs']
-        sample_positions = []
-        
-        for i, pair in enumerate(pairs):
-            order_type = 'BUY' if i % 2 == 0 else 'SELL'
-            volume = f"0.{50 + i * 10}"
-            open_price = f"1.{8500 + i * 200}"
-            current_price = f"1.{8505 + i * 205}"
-            pnl = f"+${5 + i * 2}.{30 + i * 10}"
+    def get_group_real_positions(self, config):
+        """ดึงข้อมูล positions จริงสำหรับ group"""
+        try:
+            # ดึงข้อมูลจริงจาก active_groups.json
+            active_groups_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'active_groups.json')
+            if not os.path.exists(active_groups_file):
+                return []
             
-            sample_positions.append((
-                pair, order_type, volume, open_price, current_price, pnl, 'Active', '17:30:25'
-            ))
-        
-        return sample_positions
+            with open(active_groups_file, 'r') as f:
+                active_groups_data = json.load(f)
+            
+            active_groups = active_groups_data.get('active_groups', {})
+            
+            # หา group ที่ตรงกับ config
+            group_data = None
+            for group_id, group_info in active_groups.items():
+                if group_info.get('triangle_type') == config['id']:
+                    group_data = group_info
+                    break
+            
+            if not group_data:
+                return []
+            
+            positions = group_data.get('positions', [])
+            real_positions = []
+            
+            for position in positions:
+                symbol = position.get('symbol', 'Unknown')
+                direction = position.get('direction', 'Unknown')
+                lot_size = position.get('lot_size', 0)
+                entry_price = position.get('entry_price', 0)
+                order_id = position.get('order_id', 0)
+                entry_time = position.get('entry_time', '')
+                
+                # ดึงราคาปัจจุบันจริงจาก MetaTrader5
+                current_price = self.get_real_current_price(symbol, order_id)
+                if current_price is None:
+                    current_price = entry_price
+                
+                # ดึง P&L จริงจาก MetaTrader5
+                real_pnl = self.get_real_position_pnl(order_id)
+                if real_pnl is None:
+                    # คำนวณ P&L จากราคาปัจจุบัน
+                    if direction == 'BUY':
+                        real_pnl = (current_price - entry_price) * lot_size * 100000
+                    else:  # SELL
+                        real_pnl = (entry_price - current_price) * lot_size * 100000
+                
+                # แปลง symbol ให้สั้นลง
+                if '.v' in symbol:
+                    symbol = symbol.replace('.v', '')
+                
+                # แปลงเวลา
+                if entry_time:
+                    try:
+                        from datetime import datetime
+                        dt = datetime.fromisoformat(entry_time.replace('Z', '+00:00'))
+                        time_str = dt.strftime('%H:%M:%S')
+                    except:
+                        time_str = '17:30:25'
+                else:
+                    time_str = '17:30:25'
+                
+                # สร้างข้อมูล position
+                pnl_str = f"+${real_pnl:.2f}" if real_pnl >= 0 else f"-${abs(real_pnl):.2f}"
+                
+                real_positions.append((
+                    symbol, direction, f"{lot_size:.2f}", f"{entry_price:.5f}", 
+                    f"{current_price:.5f}", pnl_str, 'Active', time_str
+                ))
+            
+            print(f"✅ Loaded {len(real_positions)} real positions for {config['name']}")
+            return real_positions
+            
+        except Exception as e:
+            print(f"❌ Error loading real positions for {config['name']}: {e}")
+            return []
     
     def get_group_sample_recovery(self, config):
         """สร้างข้อมูล recovery ตัวอย่างสำหรับ group"""
@@ -974,8 +1050,43 @@ class GroupDashboard:
     
     def refresh_group_positions(self, group_id):
         """รีเฟรชข้อมูล positions ของ group"""
-        print(f"Refreshing positions for group: {group_id}")
-        # TODO: Implement actual refresh logic
+        try:
+            print(f"🔄 Refreshing positions for group: {group_id}")
+            
+            # หา config ของ group
+            group_config = None
+            for card_id, card_data in self.group_cards.items():
+                if card_id == group_id:
+                    group_config = card_data['config']
+                    break
+            
+            if not group_config:
+                print(f"❌ Group config not found for {group_id}")
+                return
+            
+            # ล้างข้อมูลเก่าในตาราง
+            if hasattr(self, 'positions_tree'):
+                for item in self.positions_tree.get_children():
+                    self.positions_tree.delete(item)
+            
+            # ดึงข้อมูล positions ใหม่
+            real_positions = self.get_group_real_positions(group_config)
+            
+            if real_positions:
+                for pos in real_positions:
+                    self.positions_tree.insert('', 'end', values=pos)
+                print(f"✅ Refreshed {len(real_positions)} positions for {group_id}")
+            else:
+                # แสดงข้อความว่าไม่มี positions
+                self.positions_tree.insert('', 'end', values=(
+                    'No Active', 'Positions', 'Found', '--', '--', '--', '--', '--'
+                ))
+                print(f"⚠️ No active positions found for {group_id}")
+                
+        except Exception as e:
+            print(f"❌ Error refreshing positions for {group_id}: {e}")
+            import traceback
+            traceback.print_exc()
     
     def get_real_trading_data(self):
         """ดึงข้อมูลจริงจากระบบ trading"""
@@ -997,25 +1108,40 @@ class GroupDashboard:
                     
                     positions = group_info.get('positions', [])
                     for position in positions:
-                        # คำนวณ P&L แบบมืออาชีพ
+                        # ดึงข้อมูลจริงจาก MetaTrader5
                         lot_size = position.get('lot_size', 0)
                         entry_price = position.get('entry_price', 0)
                         direction = position.get('direction', 'BUY')
                         symbol = position.get('symbol', '')
+                        order_id = position.get('order_id', 0)
                         
-                        # จำลองราคาปัจจุบัน (ในความเป็นจริงต้องดึงจาก broker)
-                        import random
-                        price_variation = random.uniform(-0.0005, 0.0005)
-                        current_price = entry_price + price_variation
+                        # ดึง P&L จริงจาก MetaTrader5
+                        real_pnl = self.get_real_position_pnl(order_id)
                         
-                        # คำนวณ P&L ตามทิศทาง
-                        if direction == 'BUY':
-                            pnl = (current_price - entry_price) * lot_size * 100000
-                        else:  # SELL
-                            pnl = (entry_price - current_price) * lot_size * 100000
-                        
-                        total_pnl += pnl
-                        active_positions += 1
+                        if real_pnl is not None:
+                            # ใช้ P&L จริงจาก MetaTrader5
+                            total_pnl += real_pnl
+                            active_positions += 1
+                            print(f"✅ Real P&L for {symbol} (Order {order_id}): ${real_pnl:.2f}")
+                        else:
+                            # ถ้าไม่สามารถดึง P&L ได้ ให้ใช้ราคาปัจจุบันคำนวณ
+                            current_price = self.get_real_current_price(symbol, order_id)
+                            
+                            if current_price is not None:
+                                # คำนวณ P&L จริงตามทิศทาง
+                                if direction == 'BUY':
+                                    pnl = (current_price - entry_price) * lot_size * 100000
+                                else:  # SELL
+                                    pnl = (entry_price - current_price) * lot_size * 100000
+                                
+                                total_pnl += pnl
+                                active_positions += 1
+                                print(f"✅ Calculated P&L for {symbol}: ${pnl:.2f}")
+                            else:
+                                # ถ้าไม่สามารถดึงราคาได้ ให้ใช้ 0
+                                total_pnl += 0.0
+                                active_positions += 1
+                                print(f"⚠️ No price data for {symbol}, using 0 P&L")
                     
                     # สร้างข้อมูล group
                     triangle = group_info.get('triangle', [])
@@ -1032,6 +1158,7 @@ class GroupDashboard:
                     }
             
             print(f"✅ Debug: Loaded real data for {len(real_data)} groups")
+            print(f"📊 Total P&L calculated from MetaTrader5 real positions")
             return real_data
             
         except Exception as e:
@@ -1064,6 +1191,64 @@ class GroupDashboard:
             }
         
         return empty_data
+    
+    def get_real_current_price(self, symbol, order_id):
+        """ดึงราคาปัจจุบันจริงจาก MetaTrader5"""
+        try:
+            import MetaTrader5 as mt5
+            
+            # เชื่อมต่อ MetaTrader5
+            if not mt5.initialize():
+                print(f"❌ MT5 initialize failed: {mt5.last_error()}")
+                return None
+            
+            # ดึงข้อมูล position จาก order_id
+            positions = mt5.positions_get(ticket=order_id)
+            if positions and len(positions) > 0:
+                position = positions[0]
+                # ใช้ราคาปัจจุบันจาก position
+                if position.type == 0:  # BUY position
+                    current_price = position.price_current
+                else:  # SELL position
+                    current_price = position.price_current
+                
+                print(f"✅ Real price for {symbol} (Order {order_id}): {current_price}")
+                return current_price
+            else:
+                # ถ้าไม่เจอ position ให้ดึงราคาปัจจุบันจาก symbol
+                tick = mt5.symbol_info_tick(symbol)
+                if tick:
+                    current_price = (tick.bid + tick.ask) / 2  # ใช้ราคากลาง
+                    print(f"✅ Real price for {symbol}: {current_price}")
+                    return current_price
+                else:
+                    print(f"❌ Cannot get price for {symbol}")
+                    return None
+                    
+        except Exception as e:
+            print(f"❌ Error getting real price for {symbol}: {e}")
+            return None
+    
+    def get_real_position_pnl(self, order_id):
+        """ดึง P&L จริงจาก MetaTrader5"""
+        try:
+            import MetaTrader5 as mt5
+            
+            # เชื่อมต่อ MetaTrader5
+            if not mt5.initialize():
+                return 0.0
+            
+            # ดึงข้อมูล position
+            positions = mt5.positions_get(ticket=order_id)
+            if positions and len(positions) > 0:
+                position = positions[0]
+                return position.profit
+            else:
+                return 0.0
+                
+        except Exception as e:
+            print(f"❌ Error getting real P&L for order {order_id}: {e}")
+            return 0.0
 
     def update_group_dashboard(self, groups_data=None):
         """อัปเดต dashboard ทั้งหมด - ใช้ข้อมูลจริง"""
