@@ -2082,7 +2082,7 @@ class TriangleArbitrageDetector:
                 return True
             
             # Check if all spreads are below threshold
-            max_spread = 3.0  # เพิ่มเป็น 3.0 pips เพื่อให้ออกไม้ง่ายขึ้น
+            max_spread = self._get_config_value('arbitrage_params.detection.spread_tolerance', 3.0)  # ดึงจาก config
             acceptable = (spread1 < max_spread and 
                          spread2 < max_spread and 
                          spread3 < max_spread)
@@ -2342,8 +2342,8 @@ class TriangleArbitrageDetector:
             
             self.logger.info(f"📊 {triangle}: Triangle Balance - {pair1}=${value1:.0f}, {pair2}=${value2:.0f}, {pair3}=${value3:.0f}, Deviation={deviation_percent:.1f}%")
             
-            # ยอมรับได้ถ้าต่างกันไม่เกิน 25% - ปรับให้ยืดหยุ่นขึ้น
-            max_deviation = 25.0
+            # ยอมรับได้ถ้าต่างกันไม่เกินค่าใน config - ปรับให้ยืดหยุ่นขึ้น
+            max_deviation = self._get_config_value('arbitrage_params.triangles.balance_tolerance_percent', 25.0)
             
             if deviation_percent > max_deviation:
                 self.logger.info(f"❌ {triangle}: Imbalance too high ({deviation_percent:.1f}% > {max_deviation}%)")

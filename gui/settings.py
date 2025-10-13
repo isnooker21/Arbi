@@ -227,14 +227,26 @@ class SettingsWindow:
              "int", 50, 200, "เช่น 100 = คำนวณความเสี่ยงจาก 100 pips movement")
         ])
         
-        # 7. Arbitrage Settings
-        self.create_section(right_column, "⚡ Arbitrage Settings", [
+        # 7. Arbitrage Strategy Presets
+        self.create_section(right_column, "⚡ Arbitrage Strategy Presets", [
+            ("เลือกกลยุทธ์", "arbitrage_params.strategy_preset", 
+             "string", "balanced", "เลือกกลยุทธ์การเข้าไม้ arbitrage")
+        ])
+        
+        # 7.1 Arbitrage Settings (Manual)
+        self.create_section(right_column, "⚡ Arbitrage Settings (Manual)", [
             ("Threshold ขั้นต่ำ", "arbitrage_params.detection.min_threshold", 
              "float", 0.00001, 0.01, "เช่น 0.0001 = ต้องมีส่วนต่าง >= 0.01%"),
             ("Triangle สูงสุด", "arbitrage_params.triangles.max_active_triangles", 
              "int", 1, 10, "เช่น 4 = เปิดได้สูงสุด 4 groups"),
             ("Spread Tolerance", "arbitrage_params.detection.spread_tolerance", 
-             "float", 0.1, 2.0, "เช่น 0.5 = ยอมรับ spread 0.5 pips")
+             "float", 0.1, 2.0, "เช่น 0.5 = ยอมรับ spread 0.5 pips"),
+            ("Commission Rate", "arbitrage_params.execution.commission_rate", 
+             "float", 0.00001, 0.001, "เช่น 0.0001 = ค่าคอม 0.01% ต่อ leg"),
+            ("Max Slippage", "arbitrage_params.execution.max_slippage", 
+             "float", 0.0001, 0.002, "เช่น 0.0005 = slippage สูงสุด 0.05%"),
+            ("Balance Tolerance (%)", "arbitrage_params.triangles.balance_tolerance_percent", 
+             "float", 10.0, 50.0, "เช่น 25 = ยอมรับความไม่สมดุล 25%")
         ])
         
         # 9. Multi-Armed Bandit
@@ -432,6 +444,34 @@ class SettingsWindow:
                     font=('Arial', 11, 'bold')
                 )
                 dropdown.pack(side='left', padx=5, pady=2)
+            elif "strategy_preset" in param_path:
+                # Strategy preset dropdown
+                strategy_options = ["ultra_fast", "fast", "balanced", "precise"]
+                strategy_labels = {
+                    "ultra_fast": "🚀 ออกไม้เร็วมาก ซิ่ง",
+                    "fast": "⚡ ออกไม้เร็ว ซิ่งน้อย", 
+                    "balanced": "⚖️ ออกไม้ปกติ สมดุล",
+                    "precise": "🎯 ออกไม้ช้ามากแม่นยำ เสี่ยงต่ำ"
+                }
+                var = tk.StringVar(value=str(current_value) if current_value else "balanced")
+                dropdown = ttk.Combobox(
+                    input_frame,
+                    textvariable=var,
+                    values=[f"{key} - {strategy_labels[key]}" for key in strategy_options],
+                    state="readonly",
+                    width=25,
+                    font=('Arial', 10, 'bold')
+                )
+                dropdown.pack(side='left', padx=5, pady=2)
+                
+                # Add callback to apply preset when changed
+                def on_strategy_change(event):
+                    selected = dropdown.get()
+                    if selected:
+                        preset_key = selected.split(" - ")[0]
+                        self.apply_strategy_preset(preset_key)
+                
+                dropdown.bind('<<ComboboxSelected>>', on_strategy_change)
             else:
                 # Regular string entry
                 var = tk.StringVar(value=str(current_value))
@@ -503,6 +543,88 @@ class SettingsWindow:
         
         # Store variable reference
         self.parameter_vars[param_path] = var
+    
+    def apply_strategy_preset(self, preset_key):
+        """Apply strategy preset to all arbitrage parameters"""
+        try:
+            presets = {
+                "ultra_fast": {
+                    "arbitrage_params.detection.min_threshold": 0.00005,
+                    "arbitrage_params.detection.spread_tolerance": 1.5,
+                    "arbitrage_params.execution.commission_rate": 0.00005,
+                    "arbitrage_params.execution.max_slippage": 0.001,
+                    "arbitrage_params.triangles.balance_tolerance_percent": 40.0,
+                    "arbitrage_params.triangles.max_active_triangles": 3,
+                    "market_regimes.volatile.arbitrage_threshold": 0.001,
+                    "market_regimes.trending.arbitrage_threshold": 0.0008,
+                    "market_regimes.ranging.arbitrage_threshold": 0.0003,
+                    "market_regimes.normal.arbitrage_threshold": 0.001
+                },
+                "fast": {
+                    "arbitrage_params.detection.min_threshold": 0.00008,
+                    "arbitrage_params.detection.spread_tolerance": 1.2,
+                    "arbitrage_params.execution.commission_rate": 0.00008,
+                    "arbitrage_params.execution.max_slippage": 0.0008,
+                    "arbitrage_params.triangles.balance_tolerance_percent": 35.0,
+                    "arbitrage_params.triangles.max_active_triangles": 3,
+                    "market_regimes.volatile.arbitrage_threshold": 0.0012,
+                    "market_regimes.trending.arbitrage_threshold": 0.001,
+                    "market_regimes.ranging.arbitrage_threshold": 0.0005,
+                    "market_regimes.normal.arbitrage_threshold": 0.0012
+                },
+                "balanced": {
+                    "arbitrage_params.detection.min_threshold": 0.0001,
+                    "arbitrage_params.detection.spread_tolerance": 0.8,
+                    "arbitrage_params.execution.commission_rate": 0.0001,
+                    "arbitrage_params.execution.max_slippage": 0.0006,
+                    "arbitrage_params.triangles.balance_tolerance_percent": 25.0,
+                    "arbitrage_params.triangles.max_active_triangles": 2,
+                    "market_regimes.volatile.arbitrage_threshold": 0.0015,
+                    "market_regimes.trending.arbitrage_threshold": 0.0012,
+                    "market_regimes.ranging.arbitrage_threshold": 0.0008,
+                    "market_regimes.normal.arbitrage_threshold": 0.0015
+                },
+                "precise": {
+                    "arbitrage_params.detection.min_threshold": 0.0002,
+                    "arbitrage_params.detection.spread_tolerance": 0.5,
+                    "arbitrage_params.execution.commission_rate": 0.0002,
+                    "arbitrage_params.execution.max_slippage": 0.0004,
+                    "arbitrage_params.triangles.balance_tolerance_percent": 15.0,
+                    "arbitrage_params.triangles.max_active_triangles": 1,
+                    "market_regimes.volatile.arbitrage_threshold": 0.002,
+                    "market_regimes.trending.arbitrage_threshold": 0.0018,
+                    "market_regimes.ranging.arbitrage_threshold": 0.0012,
+                    "market_regimes.normal.arbitrage_threshold": 0.002
+                }
+            }
+            
+            if preset_key in presets:
+                preset_values = presets[preset_key]
+                
+                # Update all parameter variables
+                for param_path, value in preset_values.items():
+                    if param_path in self.parameter_vars:
+                        var = self.parameter_vars[param_path]
+                        var.set(str(value))
+                        
+                        # Update the underlying settings
+                        self.set_nested_value(self.settings, param_path, value)
+                
+                print(f"✅ Applied {preset_key} strategy preset")
+                
+                # Show preset description
+                descriptions = {
+                    "ultra_fast": "🚀 ออกไม้เร็วมาก ซิ่ง - กำไรต่ำแต่บ่อย, เสี่ยงสูง",
+                    "fast": "⚡ ออกไม้เร็ว ซิ่งน้อย - กำไรรวมดี, เสี่ยงปานกลาง",
+                    "balanced": "⚖️ ออกไม้ปกติ สมดุล - สมดุลระหว่างกำไรและความเสี่ยง",
+                    "precise": "🎯 ออกไม้ช้ามากแม่นยำ เสี่ยงต่ำ - กำไรสูงต่อ trade, ออกไม้น้อย"
+                }
+                
+                if preset_key in descriptions:
+                    print(f"📋 {descriptions[preset_key]}")
+                    
+        except Exception as e:
+            print(f"❌ Error applying preset: {e}")
     
     def get_nested_value(self, data, path):
         """Get value from nested dictionary using dot notation"""

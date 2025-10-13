@@ -139,6 +139,7 @@
     "description": "Smart recovery with trend analysis, conditional chain recovery, ML-ready logging, and Smart Recovery Flow"
   },
   "arbitrage_params": {
+    "strategy_preset": "balanced",
     "detection": {
       "min_threshold": 0.0001,
       "max_threshold": 0.01,
@@ -146,10 +147,16 @@
       "execution_timeout_ms": 2000,
       "description": "⭐ UPGRADED: Min 3 pips (was 1.5 pips), 30% spread tolerance = realistic edge"
     },
+    "execution": {
+      "commission_rate": 0.0001,
+      "max_slippage": 0.0005,
+      "description": "Commission 0.01% per leg, Max slippage 0.05%"
+    },
     "triangles": {
       "max_active_triangles": 2,
       "triangle_hold_time_minutes": 720.0,
       "correlation_check_interval": 60.0,
+      "balance_tolerance_percent": 25.0,
       "description": "⭐ UPGRADED: Max 2 triangles (was 3), hold 12 hours = quality over quantity"
     },
     "closing": {
