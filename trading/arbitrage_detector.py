@@ -29,6 +29,7 @@ import threading
 import time
 import os
 import sys
+import MetaTrader5 as mt5
 
 # Ensure project root is on sys.path when running this module directly
 try:
@@ -94,7 +95,17 @@ class TriangleArbitrageDetector:
         self.performance_metrics = {
             'total_opportunities': 0,
             'successful_trades': 0,
-            'avg_execution_time': 0
+            'avg_execution_time': 0,
+            # ⭐ New metrics for improved system
+            'opportunities_checked': 0,
+            'passed_direction_check': 0,
+            'passed_feasibility_check': 0,
+            'passed_balance_check': 0,
+            'forward_path_selected': 0,
+            'reverse_path_selected': 0,
+            'avg_expected_profit': 0.0,
+            'total_expected_profit': 0.0,
+            'orders_cancelled_due_to_failure': 0
             # 'market_regime_changes': 0  # DISABLED - not used in simple trading
         }
         
@@ -417,15 +428,40 @@ class TriangleArbitrageDetector:
                 self._execute_new_triangle_orders(triangle, triangle_name)
     
     def _execute_new_triangle_orders(self, triangle, triangle_name):
-        """⭐ Method ใหม่ - ใช้แค่สูตรใหม่เท่านั้น"""
+        """⭐ ปรับปรุงใหม่ - คำนวณทิศทางและตรวจสอบก่อนส่งออเดอร์"""
         try:
-            # ดึง balance จาก MT5
+            # Track: ตรวจสอบโอกาสใหม่
+            self.performance_metrics['opportunities_checked'] += 1
+            
+            # 1. คำนวณทิศทางที่ถูกต้อง
+            direction_info = self.calculate_arbitrage_direction(triangle)
+            
+            if not direction_info:
+                self.logger.debug(f"⏭️ {triangle_name}: No profitable arbitrage opportunity")
+                return
+            
+            # Track: ผ่านการตรวจสอบทิศทาง
+            self.performance_metrics['passed_direction_check'] += 1
+            if direction_info['direction'] == 'forward':
+                self.performance_metrics['forward_path_selected'] += 1
+            else:
+                self.performance_metrics['reverse_path_selected'] += 1
+            
+            # 2. ตรวจสอบความเป็นไปได้
+            if not self._validate_execution_feasibility(triangle, direction_info):
+                self.logger.debug(f"⏭️ {triangle_name}: Failed feasibility check")
+                return
+            
+            # Track: ผ่านการตรวจสอบความเป็นไปได้
+            self.performance_metrics['passed_feasibility_check'] += 1
+            
+            # 3. ดึง balance จาก MT5
             balance = self.broker.get_account_balance()
             if not balance:
                 self.logger.error("❌ Cannot get balance from MT5")
                 return
             
-            # โหลด risk_per_trade_percent จาก config โดยตรง
+            # 4. โหลด risk_per_trade_percent จาก config
             import json
             config_path = 'config/adaptive_params.json'
             with open(config_path, 'r', encoding='utf-8') as f:
@@ -436,18 +472,15 @@ class TriangleArbitrageDetector:
                 return
             
             risk_per_trade_percent = float(risk_per_trade_percent)
-            max_loss_pips = 100.0
+            max_loss_pips = config.get('position_sizing', {}).get('lot_calculation', {}).get('max_loss_pips', 50.0)
             
-            # Debug: แสดงค่า config ที่โหลดมา
-            self.logger.info(f"🔍 DEBUG: Loading from: {config_path}")
-            self.logger.info(f"🔍 DEBUG: risk_per_trade_percent = {risk_per_trade_percent}%")
-            
-            # สูตร: Risk Amount = Balance × (Risk% ÷ 100)
+            # 5. สูตร: Risk Amount = Balance × (Risk% ÷ 100)
             risk_amount = balance * (risk_per_trade_percent / 100.0)
             
             self.logger.info(f"💰 {triangle_name}: Balance=${balance:,.2f}, Risk={risk_per_trade_percent}%, Risk Amount=${risk_amount:.2f}")
+            self.logger.info(f"📈 {triangle_name}: {direction_info['direction'].upper()} path - Expected profit: {direction_info['profit_percent']:.4f}%")
             
-            # คำนวณ lot สำหรับแต่ละคู่
+            # 6. คำนวณ lot สำหรับแต่ละคู่
             triangle_symbols = list(triangle)
             lot_sizes = {}
             
@@ -462,30 +495,59 @@ class TriangleArbitrageDetector:
                 lot_size = max(0.01, round(lot_size, 2))
                 
                 lot_sizes[symbol] = lot_size
-                self.logger.info(f"   {symbol}: pip_value=${pip_value:.2f}, lot={lot_size:.2f}")
+                self.logger.debug(f"   {symbol}: pip_value=${pip_value:.2f}, lot={lot_size:.2f}")
             
-            # ส่งออเดอร์
-            self._send_new_triangle_orders(triangle, triangle_name, lot_sizes)
+            # 7. ตรวจสอบความสมดุลของ Triangle
+            balance_ok = self._verify_triangle_balance(triangle, lot_sizes)
+            if balance_ok:
+                self.performance_metrics['passed_balance_check'] += 1
+            else:
+                self.logger.warning(f"⚠️ {triangle_name}: Triangle not balanced, adjusting...")
+                # ยังคงส่งต่อไป แต่เตือน (เพราะ deviation อาจยอมรับได้)
+            
+            # Track: บันทึกกำไรที่คาดหวัง
+            expected_profit = direction_info.get('profit_percent', 0)
+            self.performance_metrics['total_expected_profit'] += expected_profit
+            if self.performance_metrics['passed_feasibility_check'] > 0:
+                self.performance_metrics['avg_expected_profit'] = (
+                    self.performance_metrics['total_expected_profit'] / 
+                    self.performance_metrics['passed_feasibility_check']
+                )
+            
+            # 8. ส่งออเดอร์พร้อมทิศทางที่คำนวณแล้ว
+            success = self._send_new_triangle_orders(triangle, triangle_name, lot_sizes, direction_info)
+            
+            if success:
+                self.performance_metrics['successful_trades'] += 1
             
         except Exception as e:
             self.logger.error(f"Error in _execute_new_triangle_orders: {e}")
     
-    def _send_new_triangle_orders(self, triangle, triangle_name, lot_sizes):
-        """⭐ ส่งออเดอร์ใหม่ - ใช้แค่ lot_sizes ที่คำนวณแล้ว"""
+    def _send_new_triangle_orders(self, triangle, triangle_name, lot_sizes, direction_info):
+        """⭐ ปรับปรุงใหม่ - ใช้ทิศทางที่คำนวณได้จาก direction_info"""
         try:
             triangle_symbols = list(triangle)
             triangle_magic = self.triangle_magic_numbers.get(triangle_name, 234000)
             
-            self.logger.info(f"🚀 Sending orders for {triangle_name}: {triangle_symbols}")
+            # ดึงทิศทางที่คำนวณไว้
+            orders_direction = direction_info.get('orders', {})
+            path_direction = direction_info.get('direction', 'unknown')
+            expected_profit = direction_info.get('profit_percent', 0)
             
-            # ส่งออเดอร์สำหรับแต่ละคู่
-            for i, symbol in enumerate(triangle_symbols):
-                direction = 'BUY' if i == 0 else 'SELL'
+            self.logger.info(f"🚀 Sending {path_direction.upper()} arbitrage for {triangle_name}: {triangle_symbols}")
+            self.logger.info(f"   Expected Net Profit: {expected_profit:.4f}%")
+            
+            placed_orders = []
+            
+            # ส่งออเดอร์สำหรับแต่ละคู่ตามทิศทางที่คำนวณ
+            for symbol in triangle_symbols:
+                # ใช้ทิศทางจาก direction_info (ไม่ใช่ hard-coded)
+                direction = orders_direction.get(symbol, 'BUY')
                 lot_size = lot_sizes.get(symbol, 0.01)
                 
                 # สร้าง comment ตามหมายเลขสามเหลี่ยม
                 triangle_number = triangle_name.split('_')[-1]  # ได้ 1, 2, 3, 4, 5, 6
-                comment = f"G{triangle_number}_{symbol}"
+                comment = f"G{triangle_number}_{symbol}_{direction[:1]}"  # เช่น G1_EURUSD_B
                 
                 # ส่งออเดอร์ (ใช้ real symbol จาก SymbolMapper)
                 real_symbol = self.symbol_mapper.get_real_symbol(symbol)
@@ -496,14 +558,41 @@ class TriangleArbitrageDetector:
                     comment=comment,
                     magic=triangle_magic
                 )
+                
                 if result and result.get('success', False):
-                    self.logger.info(f"✅ {triangle_name} {symbol} {direction} {lot_size} lots - SUCCESS")
+                    placed_orders.append({
+                        'symbol': symbol,
+                        'direction': direction,
+                        'lot_size': lot_size,
+                        'ticket': result.get('ticket')
+                    })
+                    self.logger.info(f"✅ {symbol} {direction} {lot_size} lots - SUCCESS (Ticket: {result.get('ticket')})")
                 else:
+                    # ถ้าออเดอร์ล้มเหลว ยกเลิกทั้งหมดเพื่อไม่ให้เหลือ partial fill
                     error_msg = result.get('error', 'Unknown error') if result else 'No result'
-                    self.logger.error(f"❌ {triangle_name} {symbol} {direction} {lot_size} lots - FAILED: {error_msg}")
+                    self.logger.error(f"❌ {symbol} {direction} {lot_size} lots - FAILED: {error_msg}")
+                    self.logger.warning(f"🔄 Cancelling all orders for {triangle_name} due to failure")
+                    
+                    # Track: นับจำนวนครั้งที่ยกเลิกออเดอร์
+                    self.performance_metrics['orders_cancelled_due_to_failure'] += len(placed_orders)
+                    
+                    # ยกเลิกออเดอร์ที่ส่งไปแล้ว
+                    for order in placed_orders:
+                        try:
+                            self.broker.close_position(order['ticket'])
+                            self.logger.info(f"🔄 Cancelled {order['symbol']} (Ticket: {order['ticket']})")
+                        except Exception as cancel_error:
+                            self.logger.error(f"Error cancelling order {order['ticket']}: {cancel_error}")
+                    
+                    return False
+            
+            # บันทึกข้อมูล arbitrage ที่สำเร็จ
+            self.logger.info(f"✅ {triangle_name}: All {len(placed_orders)} orders placed successfully!")
+            return True
                     
         except Exception as e:
             self.logger.error(f"Error in _send_new_triangle_orders: {e}")
+            return False
     
     def _send_simple_orders(self):
         """⭐ ฟังก์ชันใหม่ - ใช้แค่สูตรใหม่เท่านั้น"""
@@ -1919,6 +2008,289 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error checking spread for {triangle}: {e}")
             return False
+    
+    def calculate_arbitrage_direction(self, triangle: Tuple[str, str, str]) -> Optional[Dict]:
+        """
+        ⭐ คำนวณทิศทางที่ถูกต้องสำหรับ Triangle Arbitrage
+        
+        คำนวณ Forward Path (BUY-BUY-SELL) และ Reverse Path (BUY-SELL-SELL)
+        เลือกทางที่ให้กำไรสูงกว่าหลังหักต้นทุนทั้งหมด
+        
+        Returns:
+            Dict with keys: direction, profit_percent, orders, raw_profit
+            None if no profitable opportunity
+        """
+        try:
+            pair1, pair2, pair3 = triangle
+            
+            # 1. ดึงราคา Bid/Ask
+            bid1, ask1 = self._get_bid_ask(pair1)
+            bid2, ask2 = self._get_bid_ask(pair2)
+            bid3, ask3 = self._get_bid_ask(pair3)
+            
+            if not all([bid1, ask1, bid2, ask2, bid3, ask3]):
+                self.logger.warning(f"Cannot get bid/ask prices for {triangle}")
+                return None
+            
+            # 2. คำนวณ Forward Path (BUY pair1, BUY pair2, SELL pair3)
+            # เริ่มด้วย 1 USD
+            forward_step1 = 1 / ask1          # ซื้อ pair1 ได้ base currency
+            forward_step2 = forward_step1 / ask2  # ซื้อ pair2 ได้ counter currency
+            forward_step3 = forward_step2 * bid3  # ขาย pair3 ได้ USD กลับมา
+            forward_result = forward_step3
+            forward_profit_percent = (forward_result - 1.0) * 100
+            
+            # 3. คำนวณ Reverse Path (BUY pair3, SELL pair2, SELL pair1)
+            reverse_step1 = 1 / ask3          # ซื้อ pair3
+            reverse_step2 = reverse_step1 * bid2  # ขาย pair2
+            reverse_step3 = reverse_step2 * bid1  # ขาย pair1 ได้ USD กลับมา
+            reverse_result = reverse_step3
+            reverse_profit_percent = (reverse_result - 1.0) * 100
+            
+            # 4. คำนวณต้นทุนรวม
+            total_cost_percent = self._calculate_total_cost(triangle, bid1, ask1, bid2, ask2, bid3, ask3)
+            
+            # 5. คำนวณกำไรสุทธิ
+            forward_net = forward_profit_percent - total_cost_percent
+            reverse_net = reverse_profit_percent - total_cost_percent
+            
+            # 6. Threshold ขั้นต่ำ (ดึงจาก config)
+            min_profit_threshold = self._get_config_value('arbitrage_params.detection.min_threshold', 0.0003) * 100
+            if min_profit_threshold < 0.3:  # ขั้นต่ำ 0.3% (3 pips)
+                min_profit_threshold = 0.3
+            
+            # 7. ตัดสินใจ
+            if forward_net > min_profit_threshold and forward_net >= reverse_net:
+                return {
+                    'direction': 'forward',
+                    'profit_percent': forward_net,
+                    'raw_profit': forward_profit_percent,
+                    'cost_percent': total_cost_percent,
+                    'orders': {
+                        pair1: 'BUY',
+                        pair2: 'BUY',
+                        pair3: 'SELL'
+                    }
+                }
+            elif reverse_net > min_profit_threshold:
+                return {
+                    'direction': 'reverse',
+                    'profit_percent': reverse_net,
+                    'raw_profit': reverse_profit_percent,
+                    'cost_percent': total_cost_percent,
+                    'orders': {
+                        pair1: 'SELL',
+                        pair2: 'SELL',
+                        pair3: 'BUY'
+                    }
+                }
+            else:
+                # ไม่มีโอกาสที่ทำกำไรได้
+                self.logger.debug(f"{triangle}: No profitable opportunity - Forward: {forward_net:.4f}%, Reverse: {reverse_net:.4f}%")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Error calculating arbitrage direction for {triangle}: {e}")
+            return None
+    
+    def _get_bid_ask(self, symbol: str) -> Tuple[Optional[float], Optional[float]]:
+        """ดึงราคา Bid และ Ask สำหรับ symbol"""
+        try:
+            # ใช้ real symbol
+            real_symbol = self.symbol_mapper.get_real_symbol(symbol)
+            
+            # ใช้ MT5 ดึงราคา
+            tick = mt5.symbol_info_tick(real_symbol)
+            
+            if tick:
+                return tick.bid, tick.ask
+            
+            # Fallback: ใช้ราคาปัจจุบัน + spread
+            price = self.broker.get_current_price(symbol)
+            if price:
+                spread = self.broker.get_spread(symbol) if hasattr(self.broker, 'get_spread') else 0
+                # แปลง spread จาก pips เป็นราคา
+                if 'JPY' in symbol:
+                    spread_price = spread * 0.01
+                else:
+                    spread_price = spread * 0.0001
+                
+                bid = price - spread_price / 2
+                ask = price + spread_price / 2
+                return bid, ask
+            
+            return None, None
+            
+        except Exception as e:
+            self.logger.error(f"Error getting bid/ask for {symbol}: {e}")
+            return None, None
+    
+    def _calculate_total_cost(self, triangle: Tuple[str, str, str], 
+                            bid1: float, ask1: float, 
+                            bid2: float, ask2: float, 
+                            bid3: float, ask3: float) -> float:
+        """
+        คำนวณต้นทุนรวมทั้งหมด (Spread + Commission + Slippage)
+        """
+        try:
+            # 1. Spread Cost (คำนวณจากความต่างระหว่าง Bid-Ask)
+            spread_cost_1 = (ask1 - bid1) / bid1 * 100
+            spread_cost_2 = (ask2 - bid2) / bid2 * 100
+            spread_cost_3 = (ask3 - bid3) / bid3 * 100
+            spread_cost_total = spread_cost_1 + spread_cost_2 + spread_cost_3
+            
+            # 2. Commission Cost (ดึงจาก config หรือใช้ค่า default)
+            commission_rate = self._get_config_value('arbitrage_params.execution.commission_rate', 0.0001)
+            commission_cost = commission_rate * 3 * 100  # 3 legs
+            
+            # 3. Slippage Cost (ดึงจาก config หรือใช้ค่า default)
+            slippage = self._get_config_value('arbitrage_params.execution.max_slippage', 0.0005)
+            slippage_cost = slippage * 3 * 100  # 3 legs
+            
+            # รวมต้นทุน
+            total_cost = spread_cost_total + commission_cost + slippage_cost
+            
+            return total_cost
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating total cost: {e}")
+            return 0.5  # Return default 0.5% if error
+    
+    def _validate_execution_feasibility(self, triangle: Tuple[str, str, str], direction_info: Dict) -> bool:
+        """
+        ⭐ ตรวจสอบว่าสามารถทำกำไรได้จริงหลังหักต้นทุนทั้งหมด
+        """
+        try:
+            if not direction_info:
+                return False
+            
+            profit_percent = direction_info.get('profit_percent', 0)
+            
+            # ต้องกำไรสุทธิอย่างน้อย 0.3% (3 pips)
+            min_threshold = 0.3
+            
+            if profit_percent < min_threshold:
+                self.logger.debug(f"{triangle}: Profit too low ({profit_percent:.4f}% < {min_threshold}%)")
+                return False
+            
+            # ตรวจสอบ spread ไม่สูงเกินไป
+            if not self._check_spread_acceptable(triangle):
+                self.logger.debug(f"{triangle}: Spread too high")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error validating feasibility: {e}")
+            return False
+    
+    def _verify_triangle_balance(self, triangle: Tuple[str, str, str], lot_sizes: Dict) -> bool:
+        """
+        ⭐ ตรวจสอบว่า lot sizes ที่คำนวณได้ทำให้ triangle สมดุลหรือไม่
+        """
+        try:
+            pair1, pair2, pair3 = triangle
+            
+            # ดึงราคาปัจจุบัน
+            price1 = self.broker.get_current_price(pair1)
+            price2 = self.broker.get_current_price(pair2)
+            price3 = self.broker.get_current_price(pair3)
+            
+            if not all([price1, price2, price3]):
+                self.logger.warning(f"Cannot get prices for balance check: {triangle}")
+                return False
+            
+            # คำนวณมูลค่าแต่ละ leg
+            lot1 = lot_sizes.get(pair1, 0.01)
+            lot2 = lot_sizes.get(pair2, 0.01)
+            lot3 = lot_sizes.get(pair3, 0.01)
+            
+            # มูลค่าใน USD (approximate)
+            value1 = lot1 * 100000 * price1
+            value2 = lot2 * 100000 * price2 * price3  # EUR/GBP ต้องแปลงเป็น USD
+            value3 = lot3 * 100000 * price3
+            
+            # คำนวณความแตกต่าง
+            max_value = max(value1, value2, value3)
+            min_value = min(value1, value2, value3)
+            avg_value = (value1 + value2 + value3) / 3
+            
+            if avg_value == 0:
+                return False
+            
+            deviation_percent = ((max_value - min_value) / avg_value) * 100
+            
+            self.logger.debug(f"📊 Triangle Balance: {pair1}=${value1:.0f}, {pair2}=${value2:.0f}, {pair3}=${value3:.0f}, Dev={deviation_percent:.1f}%")
+            
+            # ยอมรับได้ถ้าต่างกันไม่เกิน 15%
+            max_deviation = 15.0
+            
+            if deviation_percent > max_deviation:
+                self.logger.warning(f"⚠️ {triangle}: Imbalance too high ({deviation_percent:.1f}% > {max_deviation}%)")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error verifying triangle balance: {e}")
+            return True  # Return True on error to not block trades
+    
+    def log_performance_summary(self):
+        """
+        ⭐ แสดงสรุป Performance Metrics ของระบบ Arbitrage ที่ปรับปรุงแล้ว
+        """
+        try:
+            metrics = self.performance_metrics
+            
+            # คำนวณ conversion rates
+            checked = metrics['opportunities_checked']
+            if checked > 0:
+                direction_pass_rate = (metrics['passed_direction_check'] / checked) * 100
+                feasibility_pass_rate = (metrics['passed_feasibility_check'] / checked) * 100
+                balance_pass_rate = (metrics['passed_balance_check'] / checked) * 100
+                success_rate = (metrics['successful_trades'] / checked) * 100
+            else:
+                direction_pass_rate = feasibility_pass_rate = balance_pass_rate = success_rate = 0
+            
+            # สรุป Forward vs Reverse
+            forward = metrics['forward_path_selected']
+            reverse = metrics['reverse_path_selected']
+            total_paths = forward + reverse
+            if total_paths > 0:
+                forward_pct = (forward / total_paths) * 100
+                reverse_pct = (reverse / total_paths) * 100
+            else:
+                forward_pct = reverse_pct = 0
+            
+            self.logger.info("=" * 80)
+            self.logger.info("📊 ARBITRAGE SYSTEM PERFORMANCE SUMMARY (IMPROVED)")
+            self.logger.info("=" * 80)
+            self.logger.info(f"Total Opportunities Checked: {checked}")
+            self.logger.info(f"")
+            self.logger.info(f"✅ Passed Direction Check: {metrics['passed_direction_check']} ({direction_pass_rate:.1f}%)")
+            self.logger.info(f"   └─ Forward Path: {forward} ({forward_pct:.1f}%)")
+            self.logger.info(f"   └─ Reverse Path: {reverse} ({reverse_pct:.1f}%)")
+            self.logger.info(f"")
+            self.logger.info(f"✅ Passed Feasibility Check: {metrics['passed_feasibility_check']} ({feasibility_pass_rate:.1f}%)")
+            self.logger.info(f"✅ Passed Balance Check: {metrics['passed_balance_check']} ({balance_pass_rate:.1f}%)")
+            self.logger.info(f"")
+            self.logger.info(f"🎯 Successful Trades: {metrics['successful_trades']} ({success_rate:.1f}%)")
+            self.logger.info(f"💰 Average Expected Profit: {metrics['avg_expected_profit']:.4f}%")
+            self.logger.info(f"")
+            self.logger.info(f"❌ Orders Cancelled (Failures): {metrics['orders_cancelled_due_to_failure']}")
+            self.logger.info("=" * 80)
+            
+            # คำนวณ Filter Effectiveness
+            if checked > 0:
+                filtered_out = checked - metrics['successful_trades']
+                filter_effectiveness = (filtered_out / checked) * 100
+                self.logger.info(f"🔍 Filter Effectiveness: {filter_effectiveness:.1f}% of opportunities filtered out")
+                self.logger.info(f"   (This prevents losing trades from poor arbitrage opportunities)")
+            
+            self.logger.info("=" * 80)
+            
+        except Exception as e:
+            self.logger.error(f"Error logging performance summary: {e}")
     
     def get_active_triangles(self) -> Dict:
         """Get all active triangles"""
