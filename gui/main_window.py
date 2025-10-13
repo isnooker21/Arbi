@@ -122,11 +122,18 @@ class MainWindow:
     def load_sample_data(self):
         """Load sample data to show groups"""
         try:
+            print("🔍 Debug: Loading sample data...")
             if hasattr(self, 'group_dashboard') and self.group_dashboard:
+                print("🔍 Debug: group_dashboard found, calling refresh_groups...")
                 # Call refresh_groups to show sample data
                 self.group_dashboard.refresh_groups()
+                print("✅ Debug: refresh_groups completed")
+            else:
+                print("❌ Debug: group_dashboard not found")
         except Exception as e:
-            print(f"Error loading sample data: {e}")
+            print(f"❌ Error loading sample data: {e}")
+            import traceback
+            traceback.print_exc()
     
     def create_trading_control_panel(self, parent):
         """Create trading control panel"""

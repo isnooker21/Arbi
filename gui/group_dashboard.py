@@ -19,21 +19,34 @@ class GroupDashboard:
     
     def setup_ui(self):
         """สร้าง UI สำหรับ Group Dashboard - ปรับปรุงใหม่"""
+        print("🔍 Debug: setup_ui called")
+        
         # Main container
         self.main_frame = tk.Frame(self.parent, bg='#1a1a1a')
         self.main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        print("🔍 Debug: main_frame created")
         
         # Header
+        print("🔍 Debug: Creating header...")
         self.create_header()
+        print("✅ Debug: Header created")
         
         # Stats Overview Cards
+        print("🔍 Debug: Creating stats overview...")
         self.create_stats_overview()
+        print("✅ Debug: Stats overview created")
         
         # Main content area - แบ่งเป็น 2 ส่วน
+        print("🔍 Debug: Creating main content area...")
         self.create_main_content_area()
+        print("✅ Debug: Main content area created")
         
         # Summary panel
+        print("🔍 Debug: Creating summary panel...")
         self.create_summary_panel()
+        print("✅ Debug: Summary panel created")
+        
+        print("✅ Debug: setup_ui completed")
     
     def create_header(self):
         """สร้าง header - ปรับปรุงใหม่"""
@@ -146,26 +159,36 @@ class GroupDashboard:
     
     def create_main_content_area(self):
         """สร้างพื้นที่หลัก - แต่ละ group แยกเต็มหน้า"""
+        print("🔍 Debug: create_main_content_area called")
+        
         # Main content frame
         self.content_frame = tk.Frame(self.main_frame, bg='#1a1a1a')
         self.content_frame.pack(fill='both', expand=True)
+        print("🔍 Debug: content_frame created")
         
         # Create groups view (default)
+        print("🔍 Debug: Creating groups view...")
         self.create_groups_view()
+        print("✅ Debug: Groups view created")
         
         # Initialize group detail views (hidden by default)
         self.group_detail_views = {}
         self.current_view = 'groups'
+        print("✅ Debug: create_main_content_area completed")
     
     def create_groups_view(self):
         """สร้าง groups view - แสดงทุก group ในหน้าเดียว"""
+        print("🔍 Debug: create_groups_view called")
+        
         # Clear existing content
         for widget in self.content_frame.winfo_children():
             widget.destroy()
+        print("🔍 Debug: Cleared existing content")
         
         # Groups container
         groups_container = tk.Frame(self.content_frame, bg='#1a1a1a')
         groups_container.pack(fill='both', expand=True, padx=20, pady=20)
+        print("🔍 Debug: Groups container created")
         
         # Create canvas for scrolling
         self.groups_canvas = tk.Canvas(
@@ -173,6 +196,7 @@ class GroupDashboard:
             bg='#1a1a1a',
             highlightthickness=0
         )
+        print("🔍 Debug: Groups canvas created")
         
         # Scrollbar
         groups_scrollbar = ttk.Scrollbar(groups_container, orient='vertical', command=self.groups_canvas.yview)
@@ -180,20 +204,27 @@ class GroupDashboard:
         
         self.groups_canvas.pack(side='left', fill='both', expand=True)
         groups_scrollbar.pack(side='right', fill='y')
+        print("🔍 Debug: Canvas and scrollbar packed")
         
         # Groups frame inside canvas
         self.groups_frame = tk.Frame(self.groups_canvas, bg='#1a1a1a')
         self.canvas_frame = self.groups_canvas.create_window((0, 0), window=self.groups_frame, anchor='nw')
+        print("🔍 Debug: Groups frame inside canvas created")
         
         # Bind events
         self.groups_frame.bind('<Configure>', lambda e: self.groups_canvas.configure(scrollregion=self.groups_canvas.bbox('all')))
         self.groups_canvas.bind_all('<MouseWheel>', lambda e: self.groups_canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
+        print("🔍 Debug: Events bound")
         
         # Create group cards
+        print("🔍 Debug: Creating full size group cards...")
         self.create_full_size_group_cards()
+        print("✅ Debug: Full size group cards created")
     
     def create_full_size_group_cards(self):
         """สร้าง group cards ขนาดใหญ่เต็มหน้า"""
+        print("🔍 Debug: create_full_size_group_cards called")
+        
         # Group configurations
         group_configs = [
             {
@@ -244,12 +275,19 @@ class GroupDashboard:
         self.status_indicators = {}
         self.pnl_labels = {}
         
+        print(f"🔍 Debug: Creating {len(group_configs)} group cards...")
+        
         # Create full-size cards (1 card per row)
         for i, config in enumerate(group_configs):
+            print(f"🔍 Debug: Creating card {i+1}/{len(group_configs)}: {config['name']}")
             self.create_single_full_size_group_card(config, i)
+        
+        print("✅ Debug: All group cards created successfully")
     
     def create_single_full_size_group_card(self, config, row):
         """สร้าง group card ขนาดใหญ่เต็มแถว"""
+        print(f"🔍 Debug: Creating card for {config['name']} (row {row})")
+        
         # Main card frame
         card_frame = tk.Frame(
             self.groups_frame,
@@ -260,6 +298,7 @@ class GroupDashboard:
         )
         card_frame.pack(fill='x', padx=20, pady=10)
         card_frame.pack_propagate(False)
+        print(f"🔍 Debug: Card frame created for {config['name']}")
         
         # Header
         header_frame = tk.Frame(card_frame, bg=config['color'], height=50)
@@ -427,6 +466,8 @@ class GroupDashboard:
             'positions_text': positions_text,
             'config': config
         }
+        
+        print(f"✅ Debug: Card for {config['name']} created and stored")
     
     def show_group_details(self, group_id):
         """แสดงรายละเอียดของ group ที่เลือก"""
@@ -840,21 +881,36 @@ class GroupDashboard:
     def update_group_dashboard(self, groups_data=None):
         """อัปเดต dashboard ทั้งหมด - ใหม่"""
         try:
+            print("🔍 Debug: update_group_dashboard called")
             if groups_data is None:
                 groups_data = {}
+                print("🔍 Debug: groups_data is None, using empty dict")
+
+            print(f"🔍 Debug: groups_data keys: {list(groups_data.keys())}")
 
             # Update stats overview
             if hasattr(self, 'stats_cards'):
+                print("🔍 Debug: Updating stats overview")
                 self.update_stats_overview(groups_data)
+            else:
+                print("❌ Debug: No stats_cards found")
 
             # Update group cards (only if in groups view)
             if hasattr(self, 'group_cards') and self.current_view == 'groups':
+                print(f"🔍 Debug: Updating group cards, current_view: {self.current_view}")
                 for triangle_id in self.group_cards.keys():
                     group_data = groups_data.get(triangle_id, {})
+                    print(f"🔍 Debug: Updating {triangle_id} with data: {group_data}")
                     self.update_single_group_card(triangle_id, group_data)
+            else:
+                print(f"❌ Debug: Cannot update group cards - has group_cards: {hasattr(self, 'group_cards')}, current_view: {getattr(self, 'current_view', 'None')}")
+
+            print("✅ Debug: update_group_dashboard completed")
 
         except Exception as e:
-            print(f"Error updating dashboard: {e}")
+            print(f"❌ Error updating dashboard: {e}")
+            import traceback
+            traceback.print_exc()
     
     def update_stats_overview(self, groups_data):
         """อัปเดต stats overview cards"""
@@ -999,6 +1055,7 @@ class GroupDashboard:
     def refresh_groups(self):
         """รีเฟรชข้อมูล groups"""
         try:
+            print("🔍 Debug: refresh_groups called")
             # Simulate data update (ในระบบจริงจะดึงจาก trading system)
             sample_data = {
                 'triangle_1': {
@@ -1052,7 +1109,11 @@ class GroupDashboard:
             }
             
             # Update dashboard with sample data
+            print("🔍 Debug: Calling update_group_dashboard with sample data")
             self.update_group_dashboard(sample_data)
+            print("✅ Debug: update_group_dashboard completed")
             
         except Exception as e:
-            print(f"Error refreshing groups: {e}")
+            print(f"❌ Error refreshing groups: {e}")
+            import traceback
+            traceback.print_exc()
