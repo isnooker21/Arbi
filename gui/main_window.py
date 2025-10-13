@@ -535,7 +535,7 @@ class MainWindow:
             
             # Connect using real trading system
             if self.trading_system and hasattr(self.trading_system, 'broker_api'):
-                success = self.trading_system.broker_api.initialize()
+                success = self.trading_system.broker_api.connect()
                 if success:
                     self.is_connected = True
                     self.connect_btn.config(
