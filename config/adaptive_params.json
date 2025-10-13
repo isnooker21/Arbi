@@ -33,7 +33,7 @@
     "lot_calculation": {
       "use_simple_mode": false,
       "use_risk_based_sizing": true,
-      "risk_per_trade_percent": 1.0,
+      "risk_per_trade_percent": 2.0,
       "max_loss_pips": 50.0,
       "description": "⭐ UPGRADED: Risk 0.3% per trade (was 0.5%), Max loss 50 pips = more conservative"
     },
@@ -58,7 +58,7 @@
       "description": "⭐ UPGRADED: Multi-timeframe correlation 82%+ (was 65%) for 33% better hedge quality"
     },
     "loss_thresholds": {
-      "min_loss_percent": -2.0,
+      "min_loss_percent": -5.0,
       "min_price_distance_pips": 30.0,
       "recovery_target": 0.0,
       "use_percentage_based": true,
@@ -98,7 +98,7 @@
     "chain_recovery": {
       "enabled": true,
       "mode": "strict",
-      "max_chain_depth": 1,
+      "max_chain_depth": 2,
       "min_loss_percent_for_chain": 5.0,
       "only_when_trend_uncertain": false,
       "max_positions_per_group": 8,
@@ -141,22 +141,22 @@
   "arbitrage_params": {
     "strategy_preset": "balanced",
     "detection": {
-      "min_threshold": 0.0001,
+      "min_threshold": 5e-05,
       "max_threshold": 0.01,
-      "spread_tolerance": 0.5,
+      "spread_tolerance": 1.0,
       "execution_timeout_ms": 2000,
       "description": "⭐ UPGRADED: Min 3 pips (was 1.5 pips), 30% spread tolerance = realistic edge"
     },
     "execution": {
-      "max_slippage": 0.0005,
-      "commission_rate": 0.0001,
+      "max_slippage": 0.0008,
+      "commission_rate": 5e-05,
       "min_profit_threshold": 0.0001
     },
     "triangles": {
-      "max_active_triangles": 2,
+      "max_active_triangles": 3,
       "triangle_hold_time_minutes": 720.0,
       "correlation_check_interval": 60.0,
-      "balance_tolerance_percent": 15.0,
+      "balance_tolerance_percent": 25.0,
       "description": "⭐ UPGRADED: Max 2 triangles (was 3), hold 12 hours = quality over quantity"
     },
     "closing": {
@@ -166,7 +166,7 @@
       "min_profit_base_balance": 10000.0,
       "trailing_stop_enabled": true,
       "trailing_stop_distance": 30.0,
-      "lock_profit_percentage": 0.7,
+      "lock_profit_percentage": 0.5,
       "max_loss_per_group": -500,
       "auto_close_losing_groups": true,
       "description": "⭐ UPGRADED: Min profit $20 (was $5), Trailing $30, Max loss -$500/group = realistic targets"

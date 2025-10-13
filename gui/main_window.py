@@ -69,7 +69,6 @@ class MainWindow:
         self.current_mode = "normal"  # default mode
         self.mode_buttons = {}
         self.is_connected = False
-        self.trading_system = trading_system
         
         # Header
         self.create_header()
@@ -897,7 +896,7 @@ class MainWindow:
                     "ปิดออเดอร์ทั้งหมดเรียบร้อยแล้ว!"
                 )
                 
-            except Exception as e:
+        except Exception as e:
             print(f"❌ Error emergency close: {e}")
             messagebox.showerror("❌ Error", f"ไม่สามารถปิดออเดอร์ได้: {str(e)}")
     
@@ -1095,7 +1094,7 @@ class MainWindow:
             if self.auto_refresh_cb.instate(['selected']):
                 self.start_periodic_updates()
                 print("✅ Auto refresh enabled")
-                        else:
+            else:
                 # Stop periodic updates by not scheduling next update
                 print("⏸️ Auto refresh disabled")
         except Exception as e:
@@ -1121,7 +1120,7 @@ class MainWindow:
             
             print("✅ Dashboard opened")
             
-                except Exception as e:
+        except Exception as e:
             print(f"❌ Error opening dashboard: {e}")
             import tkinter.messagebox as messagebox
             messagebox.showerror("❌ Error", f"ไม่สามารถเปิด Dashboard ได้: {str(e)}")
