@@ -2091,8 +2091,18 @@ class TriangleArbitrageDetector:
                 # เพราะระบบจะคำนวณต้นทุนจาก Bid-Ask ใน _calculate_total_cost แทน
                 return True
             
-            # Check if all spreads are below threshold - ปรับให้ยืดหยุ่นมากขึ้น
-            max_spread = self._get_config_value('arbitrage_params.detection.spread_tolerance', 10.0)  # เพิ่มจาก 3.0 เป็น 10.0
+            # 🆕 ใช้ Strategy Preset เพื่อปรับ spread tolerance
+            strategy_preset = self._get_config_value('arbitrage_params.strategy_preset', 'balanced')
+            
+            # 🎯 Spread Tolerance ตาม Strategy Preset (ซิ่งมาก = ยอมรับ spread สูง)
+            spread_tolerances = {
+                'ultra_fast': 15.0,    # ซิ่งที่สุด - ยอมรับ spread สูง
+                'fast': 12.0,          # ซิ่งกลาง - ยอมรับ spread ปานกลาง
+                'balanced': 8.0,       # สมดุล - spread ปกติ
+                'precise': 5.0         # แม่นยำ - spread ต่ำ
+            }
+            
+            max_spread = spread_tolerances.get(strategy_preset, 8.0)
             acceptable = (spread1 < max_spread and 
                          spread2 < max_spread and 
                          spread3 < max_spread)
@@ -2317,10 +2327,23 @@ class TriangleArbitrageDetector:
         try:
             profit_percent = direction_info.get('profit_percent', 0)
             
-            if profit_percent >= 0.05:
+            # 🆕 ดึง Strategy Preset เพื่อปรับเกณฑ์กำไร
+            strategy_preset = self._get_config_value('arbitrage_params.strategy_preset', 'balanced')
+            
+            # 🎯 Profit Thresholds ตาม Strategy Preset
+            profit_thresholds = {
+                'ultra_fast': {'high': 0.02, 'medium': 0.002},    # ซิ่งที่สุด - รับกำไรต่ำ
+                'fast': {'high': 0.03, 'medium': 0.003},          # ซิ่งกลาง - รับกำไรปานกลาง
+                'balanced': {'high': 0.05, 'medium': 0.005},      # สมดุล - รับกำไรปกติ
+                'precise': {'high': 0.08, 'medium': 0.008}        # แม่นยำ - รับกำไรสูง
+            }
+            
+            thresholds = profit_thresholds.get(strategy_preset, profit_thresholds['balanced'])
+            
+            if profit_percent >= thresholds['high']:
                 score = 35.0
-            elif profit_percent >= 0.005:
-                score = (profit_percent / 0.05) * 35.0
+            elif profit_percent >= thresholds['medium']:
+                score = (profit_percent / thresholds['high']) * 35.0
             else:
                 score = 0.0
             
@@ -2652,7 +2675,19 @@ class TriangleArbitrageDetector:
         """⚠️ คะแนนจากความเสี่ยง (0-5 คะแนน) | 0 groups=5, <50%=4, <80%=3, >=80%=1"""
         try:
             num_active_groups = len(self.active_groups)
-            max_groups = self._get_config_value('system_limits.max_concurrent_groups', 5)
+            
+            # 🆕 ใช้ Strategy Preset เพื่อปรับ max groups
+            strategy_preset = self._get_config_value('arbitrage_params.strategy_preset', 'balanced')
+            
+            # 🎯 Max Groups ตาม Strategy Preset (ซิ่งมาก = รับ groups มาก)
+            max_groups_by_preset = {
+                'ultra_fast': 6,        # ซิ่งที่สุด - รับ 6 groups
+                'fast': 5,              # ซิ่งกลาง - รับ 5 groups
+                'balanced': 4,          # สมดุล - รับ 4 groups
+                'precise': 3            # แม่นยำ - รับ 3 groups
+            }
+            
+            max_groups = max_groups_by_preset.get(strategy_preset, 4)
             
             if num_active_groups == 0:
                 risk_level, score = "VERY LOW", 5.0
@@ -2676,9 +2711,31 @@ class TriangleArbitrageDetector:
     def _get_adaptive_score_threshold(self) -> float:
         """🎯 Adaptive Threshold | Volatile=80, Trending=75, Normal=70, Ranging=65"""
         try:
+            # 🆕 ดึง Strategy Preset จาก config
+            strategy_preset = self._get_config_value('arbitrage_params.strategy_preset', 'balanced')
             current_regime = self._get_current_market_regime()
-            regime_thresholds = {'volatile': 80.0, 'trending': 75.0, 'normal': 70.0, 'ranging': 65.0}
-            return regime_thresholds.get(current_regime, 70.0)
+            
+            # 🎯 Strategy Preset Thresholds (จากน้อยไปมาก = ซิ่งไปเซฟ)
+            preset_thresholds = {
+                'ultra_fast': {'volatile': 50.0, 'trending': 45.0, 'normal': 40.0, 'ranging': 35.0},  # ซิ่งที่สุด
+                'fast': {'volatile': 60.0, 'trending': 55.0, 'normal': 50.0, 'ranging': 45.0},        # ซิ่งกลาง
+                'balanced': {'volatile': 75.0, 'trending': 70.0, 'normal': 65.0, 'ranging': 60.0},     # สมดุล
+                'precise': {'volatile': 85.0, 'trending': 80.0, 'normal': 75.0, 'ranging': 70.0}       # แม่นยำ
+            }
+            
+            # ใช้ threshold ตาม preset และ regime
+            if strategy_preset in preset_thresholds:
+                thresholds = preset_thresholds[strategy_preset]
+                threshold = thresholds.get(current_regime, thresholds['normal'])
+                self.logger.debug(f"🎯 Using {strategy_preset.upper()} preset threshold: {threshold} ({current_regime} market)")
+                return threshold
+            else:
+                # Fallback: ใช้ค่าเดิม
+                regime_thresholds = {'volatile': 80.0, 'trending': 75.0, 'normal': 70.0, 'ranging': 65.0}
+                threshold = regime_thresholds.get(current_regime, 70.0)
+                self.logger.debug(f"🎯 Using default threshold: {threshold} ({current_regime} market)")
+                return threshold
+                
         except Exception as e:
             self.logger.error(f"Error getting adaptive threshold: {e}")
             return 70.0
@@ -2750,7 +2807,8 @@ class TriangleArbitrageDetector:
             # ใช้ adaptive threshold ตาม market regime
             adaptive_threshold = self._get_adaptive_score_threshold()
             
-            self.logger.info(f"🎯 Threshold:       {adaptive_threshold:.1f} ({self._get_current_market_regime().upper()} market)")
+            strategy_preset = self._get_config_value('arbitrage_params.strategy_preset', 'balanced')
+            self.logger.info(f"🎯 Threshold:       {adaptive_threshold:.1f} ({self._get_current_market_regime().upper()} market, {strategy_preset.upper()} preset)")
             self.logger.info(f"{'='*60}")
             
             # ตัดสินใจ
@@ -2811,8 +2869,18 @@ class TriangleArbitrageDetector:
             
             self.logger.info(f"📊 {triangle}: Triangle Balance - {pair1}=${value1:.0f}, {pair2}=${value2:.0f}, {pair3}=${value3:.0f}, Deviation={deviation_percent:.1f}%")
             
-            # ยอมรับได้ถ้าต่างกันไม่เกินค่าใน config - ปรับให้ยืดหยุ่นขึ้น
-            max_deviation = self._get_config_value('arbitrage_params.triangles.balance_tolerance_percent', 25.0)
+            # 🆕 ใช้ Strategy Preset เพื่อปรับ balance tolerance
+            strategy_preset = self._get_config_value('arbitrage_params.strategy_preset', 'balanced')
+            
+            # 🎯 Balance Tolerance ตาม Strategy Preset (ซิ่งมาก = ยอมรับความไม่สมดุลมาก)
+            balance_tolerances = {
+                'ultra_fast': 40.0,    # ซิ่งที่สุด - ยอมรับความไม่สมดุลมาก
+                'fast': 35.0,          # ซิ่งกลาง - ยอมรับความไม่สมดุลปานกลาง
+                'balanced': 25.0,      # สมดุล - ความสมดุลปกติ
+                'precise': 15.0        # แม่นยำ - ความสมดุลสูง
+            }
+            
+            max_deviation = balance_tolerances.get(strategy_preset, 25.0)
             
             if deviation_percent > max_deviation:
                 self.logger.info(f"❌ {triangle}: Imbalance too high ({deviation_percent:.1f}% > {max_deviation}%)")
