@@ -47,7 +47,7 @@ from trading.adaptive_engine import AdaptiveEngine
 from trading.position_manager import PositionManager
 from trading.risk_manager import RiskManager
 
-# from ai.market_analyzer import MarketAnalyzer  # DISABLED - not used in simple trading system
+from ai.market_analyzer import MarketAnalyzer  # ⭐ ENABLED for Intelligent Scoring System
 
 from data.data_feed import RealTimeDataFeed
 from data.database import DatabaseManager
@@ -77,7 +77,7 @@ class TradingSystem:
         self.arbitrage_detector = None
         self.correlation_manager = None
         self.adaptive_engine = None
-        # self.market_analyzer = None  # DISABLED - not used in simple trading system
+        self.market_analyzer = None  # ⭐ ENABLED for Intelligent Scoring System
         self.data_feed = None
         self.database_manager = None
         
@@ -237,16 +237,16 @@ class TradingSystem:
             self.logger.info("Position manager initialized")
             
             # Initialize market analyzer (simplified)
-        # Market Analyzer - DISABLED for simple trading system
-        # self.market_analyzer = MarketAnalyzer(self.broker_api)
-        # self.market_analyzer = None
+            # ⭐ Market Analyzer - ENABLED for Intelligent Scoring System
+            self.market_analyzer = MarketAnalyzer(self.broker_api)
+            self.logger.info("✅ Market Analyzer initialized for Intelligent Scoring")
             
             # Initialize adaptive engine first (main trading engine)
             self.adaptive_engine = AdaptiveEngine(
                 self.broker_api,
                 None,  # arbitrage_detector will be set later
                 None,  # correlation_manager will be set later
-                None  # No market analyzer needed for simple trading system
+                self.market_analyzer  # ⭐ Pass MarketAnalyzer for adaptive trading
             )
             self.logger.info("Adaptive engine initialized")
             
@@ -261,6 +261,10 @@ class TradingSystem:
                 self.adaptive_engine,  # Pass adaptive_engine to arbitrage_detector
                 self.correlation_manager  # Pass correlation_manager to arbitrage_detector
             )
+            
+            # ⭐ เชื่อม MarketAnalyzer เข้ากับ Arbitrage Detector สำหรับ Intelligent Scoring
+            self.arbitrage_detector.market_analyzer = self.market_analyzer
+            self.logger.info("✅ MarketAnalyzer connected to Arbitrage Detector")
             
             # 🆕 Pass symbol_mapper from arbitrage_detector to correlation_manager
             self.correlation_manager.symbol_mapper = self.arbitrage_detector.symbol_mapper

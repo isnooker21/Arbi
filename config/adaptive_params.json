@@ -62,7 +62,7 @@
       "min_price_distance_pips": 30.0,
       "recovery_target": 0.0,
       "use_percentage_based": true,
-      "max_loss_per_group": -500,
+      "max_loss_per_group": -1000,
       "description": "⭐ UPGRADED: 3% loss + 30 pips distance (was 1% + 15 pips) = 64% fewer unnecessary recoveries"
     },
     "timing": {
@@ -141,34 +141,34 @@
   "arbitrage_params": {
     "strategy_preset": "balanced",
     "detection": {
-      "min_threshold": 5e-05,
+      "min_threshold": 0.000001,
       "max_threshold": 0.01,
-      "spread_tolerance": 1.0,
+      "spread_tolerance": 10.0,
       "execution_timeout_ms": 2000,
       "description": "⭐ UPGRADED: Min 3 pips (was 1.5 pips), 30% spread tolerance = realistic edge"
     },
     "execution": {
-      "max_slippage": 0.0008,
-      "commission_rate": 5e-05,
-      "min_profit_threshold": 0.0001
+      "max_slippage": 0.0001,
+      "commission_rate": 0.00001,
+      "min_profit_threshold": 0.000001
     },
     "triangles": {
       "max_active_triangles": 5,
       "triangle_hold_time_minutes": 720.0,
       "correlation_check_interval": 60.0,
-      "balance_tolerance_percent": 25.0,
+      "balance_tolerance_percent": 50.0,
       "description": "⭐ UPGRADED: Max 2 triangles (was 3), hold 12 hours = quality over quantity"
     },
     "closing": {
       "enable_net_pnl_check": true,
-      "min_profit_to_close": 20,
-      "min_profit_base": 20.0,
+      "min_profit_to_close": 1,
+      "min_profit_base": 1.0,
       "min_profit_base_balance": 10000.0,
       "trailing_stop_enabled": true,
-      "trailing_stop_distance": 30.0,
-      "lock_profit_percentage": 0.5,
-      "max_loss_per_group": -500,
-      "auto_close_losing_groups": true,
+      "trailing_stop_distance": 10.0,
+      "lock_profit_percentage": 0.1,
+      "max_loss_per_group": -1000,
+      "auto_close_losing_groups": false,
       "description": "⭐ UPGRADED: Min profit $20 (was $5), Trailing $30, Max loss -$500/group = realistic targets"
     },
     "description": "Arbitrage detection and execution parameters"
@@ -253,7 +253,7 @@
     "description": "System performance and threading settings"
   },
   "arbitrage": {
-    "min_threshold": 0.00001,
+    "min_threshold": 0.000001,
     "commission_rate": 0.00001,
     "max_active_triangles": 5
   },

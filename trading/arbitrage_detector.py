@@ -2155,9 +2155,8 @@ class TriangleArbitrageDetector:
             reverse_net = reverse_profit_percent - total_cost_percent
             
             # 6. Threshold ขั้นต่ำ (ดึงจาก config)
-            min_profit_threshold = self._get_config_value('arbitrage_params.detection.min_threshold', 0.0001) * 100
-            if min_profit_threshold < 0.001:  # ขั้นต่ำ 0.001% (0.01 pip) - ปรับให้ง่ายขึ้นมาก
-                min_profit_threshold = 0.001
+            min_profit_threshold = self._get_config_value('arbitrage_params.detection.min_threshold', 0.000001) * 100
+            # ใช้ค่าจาก config file โดยตรง ไม่ hardcode
             
             # 7. ตัดสินใจ
             self.logger.info(f"📊 {triangle}: Net profits - Forward: {forward_net:.4f}%, Reverse: {reverse_net:.4f}%, Min threshold: {min_profit_threshold:.4f}%")
@@ -2272,41 +2271,306 @@ class TriangleArbitrageDetector:
             self.logger.error(f"Error calculating total cost: {e}")
             return 0.5  # Return default 0.5% if error
     
+    # ==================================================================================
+    # 🎯 INTELLIGENT SCORING SYSTEM (6 FACTORS)
+    # ==================================================================================
+    
+    def _calculate_opportunity_score(self, triangle: Tuple[str, str, str], direction_info: Dict) -> Optional[Dict]:
+        """🎯 คำนวณคะแนนโอกาส Arbitrage จาก 6 ปัจจัยหลัก (0-100 คะแนน)"""
+        try:
+            factors = {}
+            
+            # Factor 1: Profit Score (0-35 คะแนน)
+            profit_data = self._get_profit_score(direction_info)
+            factors['profit'] = profit_data
+            
+            # Factor 2: Spread Score (0-20 คะแนน)
+            spread_data = self._get_spread_score(triangle)
+            factors['spread'] = spread_data
+            
+            # Factor 3: Market Condition Score (0-20 คะแนน)
+            market_data = self._get_market_condition_score(triangle)
+            factors['market'] = market_data
+            
+            # Factor 4: Time Pattern Score (0-10 คะแนน)
+            time_data = self._get_time_pattern_score()
+            factors['time'] = time_data
+            
+            # Factor 5: Execution Probability (0-10 คะแนน)
+            execution_data = self._get_execution_probability_score(triangle, direction_info)
+            factors['execution'] = execution_data
+            
+            # Factor 6: Risk Score (0-5 คะแนน)
+            risk_data = self._get_risk_score(triangle, direction_info)
+            factors['risk'] = risk_data
+            
+            # คำนวณคะแนนรวม
+            total_score = sum(f['score'] for f in factors.values())
+            
+            return {
+                'total_score': total_score,
+                'factors': factors
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating opportunity score: {e}")
+            return None
+    
+    def _get_profit_score(self, direction_info: Dict) -> Dict:
+        """📈 คะแนนจากกำไรที่คาดหวัง (0-35 คะแนน) | 0.05%=35, 0.03%=21, 0.01%=7"""
+        try:
+            profit_percent = direction_info.get('profit_percent', 0)
+            
+            if profit_percent >= 0.05:
+                score = 35.0
+            elif profit_percent >= 0.005:
+                score = (profit_percent / 0.05) * 35.0
+            else:
+                score = 0.0
+            
+            return {
+                'score': min(score, 35.0),
+                'weight': 0.35,
+                'value': profit_percent
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating profit score: {e}")
+            return {'score': 0.0, 'weight': 0.35, 'value': 0.0}
+    
+    def _get_spread_score(self, triangle: Tuple[str, str, str]) -> Dict:
+        """📊 คะแนนจาก Spread (0-20 คะแนน) | <=2pips=20, 5pips=10, >=10pips=0"""
+        try:
+            pair1, pair2, pair3 = triangle
+            spread1 = self.broker.get_spread(pair1) or 5.0
+            spread2 = self.broker.get_spread(pair2) or 5.0
+            spread3 = self.broker.get_spread(pair3) or 5.0
+            avg_spread = (spread1 + spread2 + spread3) / 3.0
+            
+            if avg_spread <= 2.0:
+                score = 20.0
+            elif avg_spread >= 10.0:
+                score = 0.0
+            else:
+                score = 20.0 - ((avg_spread - 2.0) / 8.0) * 20.0
+            
+            return {
+                'score': max(0.0, min(score, 20.0)),
+                'weight': 0.20,
+                'value': avg_spread
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating spread score: {e}")
+            return {'score': 10.0, 'weight': 0.20, 'value': 5.0}
+    
+    def _get_market_condition_score(self, triangle: Tuple[str, str, str]) -> Dict:
+        """🌍 คะแนนจากสภาพตลาด (0-20 คะแนน) | Ranging=20, Normal=15, Trending=10, Volatile=5"""
+        try:
+            current_regime = self._get_current_market_regime()
+            regime_scores = {'ranging': 20.0, 'normal': 15.0, 'trending': 10.0, 'volatile': 5.0}
+            base_score = regime_scores.get(current_regime, 10.0)
+            
+            volatility_adjustment = 0.0
+            try:
+                if hasattr(self, 'market_analyzer') and self.market_analyzer:
+                    market_conditions = self.market_analyzer.analyze_market_conditions(list(triangle))
+                    volatility = market_conditions.get('volatility_level', 0.001)
+                    if volatility < 0.0005:
+                        volatility_adjustment = 2.0
+                    elif volatility > 0.002:
+                        volatility_adjustment = -3.0
+            except Exception:
+                pass
+            
+            final_score = base_score + volatility_adjustment
+            
+            return {
+                'score': max(0.0, min(final_score, 20.0)),
+                'weight': 0.20,
+                'regime': current_regime.upper()
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating market condition score: {e}")
+            return {'score': 10.0, 'weight': 0.20, 'regime': 'UNKNOWN'}
+    
+    def _get_time_pattern_score(self) -> Dict:
+        """🕐 คะแนนจากเวลา (0-10 คะแนน) | LDN/NY=10, LDN=9, NY=9, Asian=6, Off=3"""
+        try:
+            current_time = datetime.now()
+            hour_gmt = current_time.hour
+            
+            if 13 <= hour_gmt < 17:
+                score, session = 10.0, "London/NY Overlap"
+            elif 7 <= hour_gmt < 16:
+                score, session = 9.0, "London"
+            elif 12 <= hour_gmt < 21:
+                score, session = 9.0, "NY"
+            elif 0 <= hour_gmt < 9:
+                score, session = 6.0, "Asian"
+            else:
+                score, session = 3.0, "Off-hours"
+            
+            return {
+                'score': score,
+                'weight': 0.10,
+                'session': session
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating time pattern score: {e}")
+            return {'score': 5.0, 'weight': 0.10, 'session': 'Unknown'}
+    
+    def _get_execution_probability_score(self, triangle: Tuple[str, str, str], direction_info: Dict) -> Dict:
+        """⚡ คะแนนจากโอกาสสำเร็จ (0-10 คะแนน) | Profit/Cost ratio >= 2.0 = 100%"""
+        try:
+            profit_percent = direction_info.get('profit_percent', 0)
+            cost_percent = direction_info.get('cost_percent', 0.5)
+            profit_cost_ratio = profit_percent / cost_percent if cost_percent > 0 else 0
+            
+            if profit_cost_ratio >= 2.0:
+                probability = 100.0
+            elif profit_cost_ratio >= 0.5:
+                probability = ((profit_cost_ratio - 0.5) / 1.5) * 100.0
+            else:
+                probability = 0.0
+            
+            score = (probability / 100.0) * 10.0
+            
+            return {
+                'score': min(score, 10.0),
+                'weight': 0.10,
+                'probability': probability
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating execution probability: {e}")
+            return {'score': 5.0, 'weight': 0.10, 'probability': 50.0}
+    
+    def _get_risk_score(self, triangle: Tuple[str, str, str], direction_info: Dict) -> Dict:
+        """⚠️ คะแนนจากความเสี่ยง (0-5 คะแนน) | 0 groups=5, <50%=4, <80%=3, >=80%=1"""
+        try:
+            num_active_groups = len(self.active_groups)
+            max_groups = self._get_config_value('system_limits.max_concurrent_groups', 5)
+            
+            if num_active_groups == 0:
+                risk_level, score = "VERY LOW", 5.0
+            elif num_active_groups < max_groups * 0.5:
+                risk_level, score = "LOW", 4.0
+            elif num_active_groups < max_groups * 0.8:
+                risk_level, score = "MEDIUM", 3.0
+            else:
+                risk_level, score = "HIGH", 1.0
+            
+            return {
+                'score': score,
+                'weight': 0.05,
+                'level': risk_level
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating risk score: {e}")
+            return {'score': 3.0, 'weight': 0.05, 'level': 'MEDIUM'}
+    
+    def _get_adaptive_score_threshold(self) -> float:
+        """🎯 Adaptive Threshold | Volatile=80, Trending=75, Normal=70, Ranging=65"""
+        try:
+            current_regime = self._get_current_market_regime()
+            regime_thresholds = {'volatile': 80.0, 'trending': 75.0, 'normal': 70.0, 'ranging': 65.0}
+            return regime_thresholds.get(current_regime, 70.0)
+        except Exception as e:
+            self.logger.error(f"Error getting adaptive threshold: {e}")
+            return 70.0
+    
+    def _get_current_market_regime(self) -> str:
+        """📊 ดึง Market Regime ปัจจุบัน | volatile/trending/ranging/normal"""
+        try:
+            if hasattr(self, 'market_analyzer') and self.market_analyzer:
+                try:
+                    conditions = self.market_analyzer.analyze_market_conditions()
+                    return conditions.get('market_regime', 'normal').lower()
+                except Exception:
+                    pass
+            
+            try:
+                data = self.broker.get_historical_data('EURUSD', 'H1', 24)
+                if data is not None and len(data) > 10:
+                    returns = data['close'].pct_change().dropna()
+                    volatility = returns.std()
+                    if volatility > 0.002:
+                        return 'volatile'
+                    elif volatility < 0.0005:
+                        return 'ranging'
+                    else:
+                        return 'normal'
+            except Exception:
+                pass
+            
+            return 'normal'
+        except Exception as e:
+            self.logger.error(f"Error getting market regime: {e}")
+            return 'normal'
+    
+    # ==================================================================================
+    # END OF INTELLIGENT SCORING SYSTEM
+    # ==================================================================================
+    
     def _validate_execution_feasibility(self, triangle: Tuple[str, str, str], direction_info: Dict) -> bool:
-        """
-        ⭐ ตรวจสอบว่าสามารถทำกำไรได้จริงหลังหักต้นทุนทั้งหมด
-        """
+        """⭐ UPGRADED: Intelligent Multi-Factor Scoring (6 factors, 0-100 score, adaptive threshold)"""
         try:
             if not direction_info:
                 self.logger.info(f"❌ {triangle}: No direction info provided")
                 return False
             
-            profit_percent = direction_info.get('profit_percent', 0)
-            raw_profit = direction_info.get('raw_profit', 0)
-            cost_percent = direction_info.get('cost_percent', 0)
+            # คำนวณคะแนนจาก 6 ปัจจัย
+            score_result = self._calculate_opportunity_score(triangle, direction_info)
             
-            self.logger.info(f"💰 {triangle}: Raw profit: {raw_profit:.4f}%, Cost: {cost_percent:.4f}%, Net: {profit_percent:.4f}%")
-            
-            # ต้องกำไรสุทธิอย่างน้อย 0.001% (0.01 pip) - ปรับให้ง่ายขึ้นมาก
-            min_threshold = 0.001
-            
-            if profit_percent < min_threshold:
-                self.logger.info(f"❌ {triangle}: Profit too low ({profit_percent:.4f}% < {min_threshold}%)")
+            if not score_result:
+                self.logger.info(f"❌ {triangle}: Failed to calculate score")
                 return False
             
-            self.logger.info(f"✅ {triangle}: Profit check passed ({profit_percent:.4f}% >= {min_threshold}%)")
+            total_score = score_result['total_score']
+            factors = score_result['factors']
             
-            # ตรวจสอบ spread ไม่สูงเกินไป
-            if not self._check_spread_acceptable(triangle):
-                self.logger.info(f"❌ {triangle}: Spread too high")
+            # Log รายละเอียดคะแนน
+            self.logger.info(f"")
+            self.logger.info(f"{'='*60}")
+            self.logger.info(f"📊 INTELLIGENT SCORING SYSTEM - {triangle}")
+            self.logger.info(f"{'='*60}")
+            self.logger.info(f"✓ Profit Score:     {factors['profit']['score']:5.1f} / 35  ({factors['profit']['value']:.4f}%)")
+            self.logger.info(f"✓ Spread Score:     {factors['spread']['score']:5.1f} / 20  ({factors['spread']['value']:.1f} pips avg)")
+            self.logger.info(f"✓ Market Score:     {factors['market']['score']:5.1f} / 20  ({factors['market']['regime']})")
+            self.logger.info(f"✓ Time Score:       {factors['time']['score']:5.1f} / 10  ({factors['time']['session']})")
+            self.logger.info(f"✓ Execution Score:  {factors['execution']['score']:5.1f} / 10  ({factors['execution']['probability']:.0f}%)")
+            self.logger.info(f"✓ Risk Score:       {factors['risk']['score']:5.1f} / 5   ({factors['risk']['level']})")
+            self.logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            self.logger.info(f"📈 TOTAL SCORE:     {total_score:.1f} / 100")
+            
+            # ใช้ adaptive threshold ตาม market regime
+            adaptive_threshold = self._get_adaptive_score_threshold()
+            
+            self.logger.info(f"🎯 Threshold:       {adaptive_threshold:.1f} ({self._get_current_market_regime().upper()} market)")
+            self.logger.info(f"{'='*60}")
+            
+            # ตัดสินใจ
+            if total_score >= adaptive_threshold:
+                self.logger.info(f"✅ DECISION: ENTER TRADE ({total_score:.1f} >= {adaptive_threshold:.1f})")
+                self.logger.info(f"")
+                
+                # Track metrics
+                self.performance_metrics['passed_feasibility_check'] = self.performance_metrics.get('passed_feasibility_check', 0) + 1
+                
+                return True
+            else:
+                self.logger.info(f"❌ DECISION: SKIP ({total_score:.1f} < {adaptive_threshold:.1f})")
+                self.logger.info(f"")
                 return False
-            
-            self.logger.info(f"✅ {triangle}: Spread check passed")
-            
-            return True
             
         except Exception as e:
-            self.logger.error(f"Error validating feasibility: {e}")
+            self.logger.error(f"Error in intelligent scoring: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             return False
     
     def _verify_triangle_balance(self, triangle: Tuple[str, str, str], lot_sizes: Dict) -> bool:
