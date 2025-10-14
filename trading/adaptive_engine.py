@@ -112,6 +112,41 @@ class AdaptiveEngine:
         
         self.logger.info("Adaptive Engine initialized successfully")
     
+    def reload_config(self):
+        """Reload configuration from adaptive_params.json"""
+        try:
+            import json
+            import os
+            
+            config_path = os.path.join("config", "adaptive_params.json")
+            
+            if not os.path.exists(config_path):
+                self.logger.warning("Config file not found, using default settings")
+                return
+            
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            # Update position sizing parameters
+            position_sizing = config.get('position_sizing', {})
+            lot_calc = position_sizing.get('lot_calculation', {})
+            risk_mgmt = position_sizing.get('risk_management', {})
+            
+            self.position_sizing['risk_per_trade'] = lot_calc.get('risk_per_trade_percent', 0.005) / 100
+            self.position_sizing['max_position_size'] = risk_mgmt.get('max_concurrent_groups', 2) * 2.0
+            
+            # Update market regime parameters
+            market_regimes = config.get('market_regimes', {})
+            for regime, params in market_regimes.items():
+                if regime in self.regime_parameters:
+                    self.regime_parameters[regime]['arbitrage_threshold'] = params.get('arbitrage_threshold', 0.001)
+                    self.regime_parameters[regime]['recovery_aggressiveness'] = params.get('recovery_aggressiveness', 0.7)
+            
+            self.logger.info("✅ Adaptive Engine config reloaded successfully")
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error reloading adaptive engine config: {e}")
+    
     def start_adaptive_trading(self):
         """เริ่มต้นระบบ Adaptive Trading"""
         try:

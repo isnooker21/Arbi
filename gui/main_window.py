@@ -239,34 +239,59 @@ class MainWindow:
                     "commission_rate": 0.00001,
                     "max_active_triangles": 5,
                     "trailing_stop_distance": 20.0,
-                    "description": "เสียงสูงสุด ไม่ปิดล็อคอะไรเลย"
+                    "recovery_enabled": True,
+                    "min_loss_percent": -2.0,  # แก้ไม้เร็วเมื่อขาดทุน 2%
+                    "min_price_distance_pips": 15.0,  # แก้ไม้เมื่อห่าง 15 pips
+                    "recovery_aggressiveness": 0.9,  # แก้ไม้แบบก้าวร้าว
+                    "max_chain_depth": 5,  # แก้ไม้ได้ 5 ขั้น
+                    "description": "เสียงสูงสุด ไม่ปิดล็อคอะไรเลย แก้ไม้เร็ว 5 ขั้น"
                 },
                 "fast": {
                     "min_threshold": 0.00003,
                     "commission_rate": 0.00003,
                     "max_active_triangles": 4,
                     "trailing_stop_distance": 25.0,
-                    "description": "เสียงปานกลาง แก้ไม้น้อยกว่า"
+                    "recovery_enabled": True,
+                    "min_loss_percent": -3.0,  # แก้ไม้เมื่อขาดทุน 3%
+                    "min_price_distance_pips": 20.0,  # แก้ไม้เมื่อห่าง 20 pips
+                    "recovery_aggressiveness": 0.8,  # แก้ไม้แบบปานกลาง
+                    "max_chain_depth": 3,  # แก้ไม้ได้ 3 ขั้น
+                    "description": "เสียงปานกลาง แก้ไม้น้อยกว่า 3 ขั้น"
                 },
                 "normal": {
                     "min_threshold": 0.00005,
                     "commission_rate": 0.00005,
                     "max_active_triangles": 3,
                     "trailing_stop_distance": 30.0,
-                    "description": "ค่ากลางที่สุด สมดุลระหว่างกำไรและความเสี่ยง"
+                    "recovery_enabled": True,
+                    "min_loss_percent": -5.0,  # แก้ไม้เมื่อขาดทุน 5%
+                    "min_price_distance_pips": 30.0,  # แก้ไม้เมื่อห่าง 30 pips
+                    "recovery_aggressiveness": 0.7,  # แก้ไม้แบบสมดุล
+                    "max_chain_depth": 2,  # แก้ไม้ได้ 2 ขั้น
+                    "description": "ค่ากลางที่สุด สมดุลระหว่างกำไรและความเสี่ยง 2 ขั้น"
                 },
                 "safe": {
                     "min_threshold": 0.00008,
                     "commission_rate": 0.00008,
                     "max_active_triangles": 2,
                     "trailing_stop_distance": 40.0,
-                    "description": "รันแบบปลอดภัย ความเสี่ยงต่ำสุด"
+                    "recovery_enabled": True,
+                    "min_loss_percent": -8.0,  # แก้ไม้เมื่อขาดทุน 8%
+                    "min_price_distance_pips": 50.0,  # แก้ไม้เมื่อห่าง 50 pips
+                    "recovery_aggressiveness": 0.5,  # แก้ไม้แบบระมัดระวัง
+                    "max_chain_depth": 1,  # แก้ไม้ได้ 1 ขั้น
+                    "description": "รันแบบปลอดภัย ความเสี่ยงต่ำสุด แก้ไม้ช้า 1 ขั้น"
                 },
                 "custom": {
                     "min_threshold": 0.00005,
                     "commission_rate": 0.00005,
                     "max_active_triangles": 3,
                     "trailing_stop_distance": 30.0,
+                    "recovery_enabled": True,
+                    "min_loss_percent": -5.0,
+                    "min_price_distance_pips": 30.0,
+                    "recovery_aggressiveness": 0.7,
+                    "max_chain_depth": 2,  # แก้ไม้ได้ 2 ขั้น (ปรับได้)
                     "description": "ปรับแต่งตามต้องการ"
                 }
             }
@@ -278,7 +303,14 @@ class MainWindow:
                 # Save to config file (except custom mode)
                 if mode != "custom":
                     self.save_mode_to_config(mode, config)
-                    print(f"✅ Mode {mode} saved to config")
+                
+                # Update recovery settings based on mode
+                self.update_recovery_settings_for_mode(mode, config)
+                
+                # Reload config in all trading components
+                self.reload_trading_system_config()
+                
+                print(f"✅ Mode {mode} saved to config and applied to trading system")
                 
                 # Update current mode label
                 if hasattr(self, 'current_mode_label'):
@@ -330,6 +362,167 @@ class MainWindow:
                 current[key] = {}
             current = current[key]
         current[keys[-1]] = value
+    
+    def update_recovery_settings_for_mode(self, mode, config):
+        """Update recovery settings based on selected mode"""
+        try:
+            import json
+            import os
+            
+            config_path = os.path.join("config", "adaptive_params.json")
+            
+            # Load current config
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    adaptive_config = json.load(f)
+            else:
+                adaptive_config = {}
+            
+            # Ensure recovery_params exists
+            if 'recovery_params' not in adaptive_config:
+                adaptive_config['recovery_params'] = {}
+            
+            # Update recovery settings based on mode
+            recovery_params = adaptive_config['recovery_params']
+            
+            # Update loss thresholds
+            if 'loss_thresholds' not in recovery_params:
+                recovery_params['loss_thresholds'] = {}
+            
+            recovery_params['loss_thresholds']['min_loss_percent'] = config.get('min_loss_percent', -5.0)
+            recovery_params['loss_thresholds']['min_price_distance_pips'] = config.get('min_price_distance_pips', 30.0)
+            
+            # Update chain recovery settings
+            if 'chain_recovery' not in recovery_params:
+                recovery_params['chain_recovery'] = {}
+            
+            recovery_params['chain_recovery']['enabled'] = config.get('recovery_enabled', True)
+            recovery_params['chain_recovery']['max_chain_depth'] = config.get('max_chain_depth', 2)
+            
+            # Update market regimes with recovery aggressiveness
+            if 'market_regimes' not in adaptive_config:
+                adaptive_config['market_regimes'] = {}
+            
+            # Update normal regime with recovery aggressiveness
+            if 'normal' not in adaptive_config['market_regimes']:
+                adaptive_config['market_regimes']['normal'] = {}
+            
+            adaptive_config['market_regimes']['normal']['recovery_aggressiveness'] = config.get('recovery_aggressiveness', 0.7)
+            
+            # Update arbitrage parameters
+            if 'arbitrage_params' not in adaptive_config:
+                adaptive_config['arbitrage_params'] = {}
+            
+            arb_params = adaptive_config['arbitrage_params']
+            
+            # Update detection parameters
+            if 'detection' not in arb_params:
+                arb_params['detection'] = {}
+            
+            arb_params['detection']['min_threshold'] = config.get('min_threshold', 0.00005)
+            arb_params['detection']['commission_rate'] = config.get('commission_rate', 0.00005)
+            
+            # Update triangles parameters
+            if 'triangles' not in arb_params:
+                arb_params['triangles'] = {}
+            
+            arb_params['triangles']['max_active_triangles'] = config.get('max_active_triangles', 3)
+            
+            # Update closing parameters
+            if 'closing' not in arb_params:
+                arb_params['closing'] = {}
+            
+            arb_params['closing']['trailing_stop_distance'] = config.get('trailing_stop_distance', 30.0)
+            
+            # Update position sizing parameters
+            if 'position_sizing' not in adaptive_config:
+                adaptive_config['position_sizing'] = {}
+            
+            pos_sizing = adaptive_config['position_sizing']
+            
+            # Update risk management
+            if 'risk_management' not in pos_sizing:
+                pos_sizing['risk_management'] = {}
+            
+            pos_sizing['risk_management']['max_concurrent_groups'] = config.get('max_active_triangles', 3)
+            
+            # Update lot calculation
+            if 'lot_calculation' not in pos_sizing:
+                pos_sizing['lot_calculation'] = {}
+            
+            # Risk per trade based on mode aggressiveness
+            risk_per_trade = 0.005  # Default 0.5%
+            if mode == "racing":
+                risk_per_trade = 0.01  # 1% for racing
+            elif mode == "fast":
+                risk_per_trade = 0.008  # 0.8% for fast
+            elif mode == "normal":
+                risk_per_trade = 0.005  # 0.5% for normal
+            elif mode == "safe":
+                risk_per_trade = 0.003  # 0.3% for safe
+            
+            pos_sizing['lot_calculation']['risk_per_trade_percent'] = risk_per_trade * 100
+            
+            # Save updated config
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(adaptive_config, f, indent=2, ensure_ascii=False)
+            
+            print(f"🔧 All settings updated for {mode} mode:")
+            print(f"   📊 Arbitrage:")
+            print(f"      - Min Threshold: {config.get('min_threshold', 0.00005)}")
+            print(f"      - Commission Rate: {config.get('commission_rate', 0.00005)}")
+            print(f"      - Max Active Triangles: {config.get('max_active_triangles', 3)}")
+            print(f"      - Trailing Stop Distance: ${config.get('trailing_stop_distance', 30.0)}")
+            print(f"   🔧 Recovery:")
+            print(f"      - Min Loss: {config.get('min_loss_percent', -5.0)}%")
+            print(f"      - Min Distance: {config.get('min_price_distance_pips', 30.0)} pips")
+            print(f"      - Aggressiveness: {config.get('recovery_aggressiveness', 0.7)}")
+            print(f"      - Max Chain Depth: {config.get('max_chain_depth', 2)} steps")
+            print(f"      - Enabled: {config.get('recovery_enabled', True)}")
+            print(f"   💰 Risk Management:")
+            print(f"      - Risk per Trade: {risk_per_trade*100:.1f}%")
+            print(f"      - Max Concurrent Groups: {config.get('max_active_triangles', 3)}")
+            
+        except Exception as e:
+            print(f"❌ Error updating recovery settings: {e}")
+    
+    def reload_trading_system_config(self):
+        """Reload configuration in all trading system components"""
+        try:
+            if not self.trading_system:
+                print("⚠️ Trading system not available - cannot reload config")
+                return
+            
+            print("🔄 Reloading configuration in all trading components...")
+            
+            # Reload config in arbitrage detector
+            if hasattr(self.trading_system, 'arbitrage_detector') and self.trading_system.arbitrage_detector:
+                if hasattr(self.trading_system.arbitrage_detector, 'reload_config'):
+                    self.trading_system.arbitrage_detector.reload_config()
+                    print("✅ Arbitrage detector config reloaded")
+            
+            # Reload config in correlation manager
+            if hasattr(self.trading_system, 'correlation_manager') and self.trading_system.correlation_manager:
+                if hasattr(self.trading_system.correlation_manager, 'reload_config'):
+                    self.trading_system.correlation_manager.reload_config()
+                    print("✅ Correlation manager config reloaded")
+            
+            # Reload config in adaptive engine
+            if hasattr(self.trading_system, 'adaptive_engine') and self.trading_system.adaptive_engine:
+                if hasattr(self.trading_system.adaptive_engine, 'reload_config'):
+                    self.trading_system.adaptive_engine.reload_config()
+                    print("✅ Adaptive engine config reloaded")
+            
+            # Reload config in risk manager
+            if hasattr(self.trading_system, 'risk_manager') and self.trading_system.risk_manager:
+                if hasattr(self.trading_system.risk_manager, 'reload_config'):
+                    self.trading_system.risk_manager.reload_config()
+                    print("✅ Risk manager config reloaded")
+            
+            print("🎯 All trading system components config reloaded successfully!")
+            
+        except Exception as e:
+            print(f"❌ Error reloading trading system config: {e}")
     
     def open_custom_settings(self):
         """Open custom settings window"""
@@ -437,7 +630,7 @@ class MainWindow:
             
             # Trailing Stop Distance
             stop_frame = tk.Frame(settings_frame, bg='#1a1a1a')
-            stop_frame.pack(fill='x', pady=(0, 20))
+            stop_frame.pack(fill='x', pady=(0, 15))
             
             tk.Label(
                 stop_frame,
@@ -458,6 +651,136 @@ class MainWindow:
                 width=15
             )
             stop_entry.pack(side='right')
+            
+            # Recovery Settings Section
+            recovery_title = tk.Label(
+                settings_frame,
+                text="🔧 การตั้งค่าระบบ Recovery (แก้ไม้)",
+                font=('Segoe UI', 14, 'bold'),
+                bg='#1a1a1a',
+                fg='#4ECDC4'
+            )
+            recovery_title.pack(pady=(20, 15))
+            
+            # Recovery Enabled
+            recovery_enabled_frame = tk.Frame(settings_frame, bg='#1a1a1a')
+            recovery_enabled_frame.pack(fill='x', pady=(0, 15))
+            
+            tk.Label(
+                recovery_enabled_frame,
+                text="เปิดใช้งาน Recovery:",
+                font=('Segoe UI', 12),
+                bg='#1a1a1a',
+                fg='#ffffff'
+            ).pack(side='left')
+            
+            self.recovery_enabled_var = tk.BooleanVar(value=True)
+            recovery_checkbox = tk.Checkbutton(
+                recovery_enabled_frame,
+                variable=self.recovery_enabled_var,
+                bg='#1a1a1a',
+                fg='#ffffff',
+                selectcolor='#2d3748',
+                activebackground='#1a1a1a',
+                activeforeground='#ffffff'
+            )
+            recovery_checkbox.pack(side='right')
+            
+            # Min Loss for Recovery
+            loss_frame = tk.Frame(settings_frame, bg='#1a1a1a')
+            loss_frame.pack(fill='x', pady=(0, 15))
+            
+            tk.Label(
+                loss_frame,
+                text="Min Loss for Recovery (%):",
+                font=('Segoe UI', 12),
+                bg='#1a1a1a',
+                fg='#ffffff'
+            ).pack(side='left')
+            
+            self.loss_var = tk.StringVar(value="3.0")
+            loss_entry = tk.Entry(
+                loss_frame,
+                textvariable=self.loss_var,
+                font=('Segoe UI', 12),
+                bg='#2d3748',
+                fg='#ffffff',
+                insertbackground='#ffffff',
+                width=15
+            )
+            loss_entry.pack(side='right')
+            
+            # Min Price Distance for Recovery
+            distance_frame = tk.Frame(settings_frame, bg='#1a1a1a')
+            distance_frame.pack(fill='x', pady=(0, 15))
+            
+            tk.Label(
+                distance_frame,
+                text="Min Price Distance (pips):",
+                font=('Segoe UI', 12),
+                bg='#1a1a1a',
+                fg='#ffffff'
+            ).pack(side='left')
+            
+            self.distance_var = tk.StringVar(value="30.0")
+            distance_entry = tk.Entry(
+                distance_frame,
+                textvariable=self.distance_var,
+                font=('Segoe UI', 12),
+                bg='#2d3748',
+                fg='#ffffff',
+                insertbackground='#ffffff',
+                width=15
+            )
+            distance_entry.pack(side='right')
+            
+            # Recovery Aggressiveness
+            aggressiveness_frame = tk.Frame(settings_frame, bg='#1a1a1a')
+            aggressiveness_frame.pack(fill='x', pady=(0, 15))
+            
+            tk.Label(
+                aggressiveness_frame,
+                text="Recovery Aggressiveness:",
+                font=('Segoe UI', 12),
+                bg='#1a1a1a',
+                fg='#ffffff'
+            ).pack(side='left')
+            
+            self.aggressiveness_var = tk.StringVar(value="0.7")
+            aggressiveness_entry = tk.Entry(
+                aggressiveness_frame,
+                textvariable=self.aggressiveness_var,
+                font=('Segoe UI', 12),
+                bg='#2d3748',
+                fg='#ffffff',
+                insertbackground='#ffffff',
+                width=15
+            )
+            aggressiveness_entry.pack(side='right')
+            
+            # Max Chain Depth
+            chain_frame = tk.Frame(settings_frame, bg='#1a1a1a')
+            chain_frame.pack(fill='x', pady=(0, 20))
+            
+            tk.Label(
+                chain_frame,
+                text="Max Chain Depth (steps):",
+                font=('Segoe UI', 12),
+                bg='#1a1a1a',
+                fg='#ffffff'
+            ).pack(side='left')
+            
+            self.chain_var = tk.StringVar(value="2")
+            chain_entry = tk.Entry(
+                chain_frame,
+                textvariable=self.chain_var,
+                font=('Segoe UI', 12),
+                bg='#2d3748',
+                fg='#ffffff',
+                insertbackground='#ffffff',
+                width=15
+            )
+            chain_entry.pack(side='right')
             
             # Buttons frame
             buttons_frame = tk.Frame(main_frame, bg='#1a1a1a')
@@ -521,6 +844,13 @@ class MainWindow:
             max_triangles = int(self.triangles_var.get())
             trailing_stop = float(self.stop_var.get())
             
+            # Get recovery settings
+            recovery_enabled = self.recovery_enabled_var.get()
+            min_loss = float(self.loss_var.get())
+            min_distance = float(self.distance_var.get())
+            aggressiveness = float(self.aggressiveness_var.get())
+            max_chain_depth = int(self.chain_var.get())
+            
             # Validate values
             if min_threshold <= 0 or commission_rate <= 0 or max_triangles <= 0 or trailing_stop <= 0:
                 messagebox.showerror("❌ Error", "กรุณากรอกค่าที่ถูกต้อง (มากกว่า 0)")
@@ -530,16 +860,35 @@ class MainWindow:
                 messagebox.showerror("❌ Error", "จำนวน Max Active Triangles ต้องไม่เกิน 10")
                 return
             
+            if min_loss < 0 or min_distance < 0 or aggressiveness < 0 or aggressiveness > 1:
+                messagebox.showerror("❌ Error", "ค่าการตั้งค่า Recovery ไม่ถูกต้อง")
+                return
+            
+            if max_chain_depth < 1 or max_chain_depth > 10:
+                messagebox.showerror("❌ Error", "Max Chain Depth ต้องอยู่ระหว่าง 1-10")
+                return
+            
             # Save to config
             config = {
                 "min_threshold": min_threshold,
                 "commission_rate": commission_rate,
                 "max_active_triangles": max_triangles,
                 "trailing_stop_distance": trailing_stop,
+                "recovery_enabled": recovery_enabled,
+                "min_loss_percent": min_loss,
+                "min_price_distance_pips": min_distance,
+                "recovery_aggressiveness": aggressiveness,
+                "max_chain_depth": max_chain_depth,
                 "description": "ปรับแต่งตามต้องการ"
             }
             
             self.save_mode_to_config("custom", config)
+            
+            # Update recovery settings
+            self.update_recovery_settings_for_mode("custom", config)
+            
+            # Reload trading system config
+            self.reload_trading_system_config()
             
             # Close window
             window.destroy()
@@ -547,11 +896,17 @@ class MainWindow:
             # Show success message
             messagebox.showinfo(
                 "✅ บันทึกสำเร็จ",
-                f"บันทึกการตั้งค่า Custom สำเร็จแล้ว!\n\n"
+                f"บันทึกการตั้งค่า Custom และ Recovery สำเร็จแล้ว!\n\n"
+                f"📊 Arbitrage:\n"
                 f"Min Threshold: {min_threshold}\n"
                 f"Commission Rate: {commission_rate}\n"
                 f"Max Active Triangles: {max_triangles}\n"
-                f"Trailing Stop: ${trailing_stop}"
+                f"Trailing Stop: ${trailing_stop}\n\n"
+                f"🔧 Recovery:\n"
+                f"Min Loss: {min_loss}%\n"
+                f"Min Distance: {min_distance} pips\n"
+                f"Aggressiveness: {aggressiveness}\n"
+                f"Max Chain Depth: {max_chain_depth} steps"
             )
             
             print(f"✅ Custom settings saved: {config}")
@@ -569,6 +924,11 @@ class MainWindow:
             self.commission_var.set("0.00005")
             self.triangles_var.set("3")
             self.stop_var.set("30.0")
+            self.recovery_enabled_var.set(True)
+            self.loss_var.set("5.0")
+            self.distance_var.set("30.0")
+            self.aggressiveness_var.set("0.7")
+            self.chain_var.set("2")
             
             messagebox.showinfo("🔄 ค่าเริ่มต้น", "รีเซ็ตค่าเริ่มต้นเรียบร้อยแล้ว")
             

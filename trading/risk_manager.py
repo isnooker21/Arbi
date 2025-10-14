@@ -61,6 +61,16 @@ class RiskManager:
             self.logger.error(f"Error loading config: {e}")
             return {}
     
+    def reload_config(self):
+        """Reload configuration from settings.json"""
+        try:
+            self.config = self._load_config("config/settings.json")
+            self.risk_limits = self.config.get('risk_management', {})
+            self.cooldown_minutes = self.risk_limits.get('cooldown_minutes', 30)
+            self.logger.info("✅ Risk Manager config reloaded successfully")
+        except Exception as e:
+            self.logger.error(f"❌ Error reloading risk manager config: {e}")
+    
     def should_trigger_stop_loss(self, position: Dict) -> bool:
         """Check if position should trigger stop loss - DISABLED for Never-Cut-Loss strategy"""
         # DISABLED: ระบบ Never-Cut-Loss ไม่ใช้ stop loss
