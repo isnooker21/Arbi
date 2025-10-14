@@ -99,19 +99,19 @@ class BrokerAPI:
             # Check if already connected
             account_info = mt5.account_info()
             if account_info is not None:
-                self.logger.info("MT5 already connected - using existing connection")
+                self.logger.info("✅ MT5 already connected - using existing connection")
                 self.account_info = account_info
                 self._connected = True
                 
                 # Auto-detect and save config
                 self.auto_detect_mt5_config()
                 
-                self.logger.info(f"Auto-connected to MT5 - Account: {account_info.login}, "
+                self.logger.info(f"📊 MT5 Connected - Account: {account_info.login}, "
                                f"Server: {account_info.server}, Balance: {account_info.balance}")
                 return True
             
             # Try to connect using terminal's connection
-            self.logger.info("Attempting to connect using MT5 terminal connection...")
+            self.logger.info("🔌 Attempting to connect using MT5 terminal connection...")
             if mt5.login():
                 account_info = mt5.account_info()
                 if account_info is not None:
@@ -121,7 +121,7 @@ class BrokerAPI:
                     # Auto-detect and save config
                     self.auto_detect_mt5_config()
                     
-                    self.logger.info(f"Auto-connected to MT5 - Account: {account_info.login}, "
+                    self.logger.info(f"✅ MT5 Connected - Account: {account_info.login}, "
                                    f"Server: {account_info.server}, Balance: {account_info.balance}")
                     return True
             
@@ -390,8 +390,15 @@ class BrokerAPI:
     def get_current_price(self, symbol: str) -> Optional[float]:
         """Get current price for a symbol"""
         try:
+            # 🔧 พยายามเชื่อมต่อก่อนถ้ายังไม่ได้เชื่อมต่อ
             if not self._connected:
-                return None
+                self.logger.info(f"🔌 Attempting to connect to broker for {symbol}...")
+                connect_result = self.connect()
+                if not connect_result:
+                    self.logger.warning(f"⚠️ Failed to connect to broker - cannot get price for {symbol}")
+                    return None
+                else:
+                    self.logger.info(f"✅ Connected to broker successfully")
             
             if self.broker_type == "MetaTrader5":
                 # 🆕 ใช้ real symbol จาก mapper
@@ -460,10 +467,15 @@ class BrokerAPI:
     def get_spread(self, symbol: str) -> Optional[float]:
         """Get current spread for a symbol in pips"""
         try:
+            # 🔧 พยายามเชื่อมต่อก่อนถ้ายังไม่ได้เชื่อมต่อ
             if not self._connected:
-                # 🔇 ไม่แสดง warning เมื่อ broker ไม่ได้เชื่อมต่อ (เป็นเรื่องปกติ)
-                self.logger.debug(f"Broker not connected - cannot get spread for {symbol}")
-                return None
+                self.logger.info(f"🔌 Attempting to connect to broker for {symbol}...")
+                connect_result = self.connect()
+                if not connect_result:
+                    self.logger.warning(f"⚠️ Failed to connect to broker - cannot get spread for {symbol}")
+                    return None
+                else:
+                    self.logger.info(f"✅ Connected to broker successfully")
             
             if self.broker_type == "MetaTrader5":
                 # 🆕 ใช้ real symbol จาก mapper

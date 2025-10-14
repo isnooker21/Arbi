@@ -2451,6 +2451,15 @@ class TriangleArbitrageDetector:
             try:
                 import MetaTrader5 as mt5
                 if mt5.initialize():
+                    # 🔧 Force login ถ้ายังไม่ได้เชื่อมต่อ
+                    account_info = mt5.account_info()
+                    if account_info is None:
+                        self.logger.info("🔌 MT5 not connected - attempting login...")
+                        if mt5.login():
+                            account_info = mt5.account_info()
+                            if account_info:
+                                self.logger.info(f"✅ MT5 Connected - Account: {account_info.login}")
+                    
                     # ลองดึงจาก real symbol
                     tick = mt5.symbol_info_tick(real_symbol)
                     if tick and tick.bid is not None and tick.ask is not None:
@@ -2470,6 +2479,7 @@ class TriangleArbitrageDetector:
                             if spread_pips > 0:
                                 # บันทึกลง cache
                                 self._update_spread_cache(base_symbol, spread_pips)
+                                self.logger.info(f"📊 Real spread from MT5: {base_symbol} = {spread_pips:.2f} pips")
                                 return spread_pips
                     
                     mt5.shutdown()
