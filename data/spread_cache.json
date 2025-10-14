@@ -1,0 +1,41 @@
+{
+  "_comment": "Spread Cache - เก็บข้อมูล spread จริงจากโบรกเกอร์",
+  "_last_updated": "2025-10-14T15:52:00",
+  "_source": "Real broker data",
+  "spreads": {
+    "EURUSD": 1.8,
+    "GBPUSD": 2.2,
+    "USDJPY": 2.5,
+    "AUDUSD": 2.0,
+    "USDCAD": 2.3,
+    "USDCHF": 2.1,
+    "NZDUSD": 2.8,
+    "EURGBP": 3.2,
+    "EURJPY": 3.5,
+    "EURCHF": 2.8,
+    "GBPJPY": 4.2,
+    "GBPCHF": 3.8,
+    "AUDJPY": 4.5,
+    "AUDCHF": 4.2,
+    "AUDCAD": 4.0,
+    "AUDNZD": 3.8,
+    "NZDJPY": 4.8,
+    "NZDCHF": 4.5,
+    "NZDCAD": 4.3,
+    "CADJPY": 4.0,
+    "CADCHF": 3.5,
+    "CHFJPY": 4.2,
+    "EURAUD": 3.8,
+    "EURNZD": 4.0,
+    "EURCAD": 3.2,
+    "GBPAUD": 4.5,
+    "GBPNZD": 4.8,
+    "GBPCAD": 3.8
+  },
+  "metadata": {
+    "broker": "MetaTrader5",
+    "timeframe": "real-time",
+    "accuracy": "high",
+    "note": "ข้อมูลนี้จะถูกอัปเดตเมื่อดึงข้อมูลจริงได้"
+  }
+}

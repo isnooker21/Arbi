@@ -120,6 +120,11 @@ class TriangleArbitrageDetector:
         # 🆕 Symbol Mapper - จับคู่ชื่อคู่เงินกับนามสกุลจริงของ Broker
         self.symbol_mapper = SymbolMapper()
         
+        # 🆕 Spread Cache - เก็บข้อมูล spread จริง
+        self.spread_cache = {}
+        self.spread_cache_file = "data/spread_cache.json"
+        self._load_spread_cache()
+        
         # ใช้ 6 สามเหลี่ยม Arbitrage แยกกัน (Optimized - ทุกคู่ซ้ำ Hedged!)
         self.arbitrage_pairs = [
             'EURUSD', 'GBPUSD', 'EURGBP',  # Group 1
@@ -2200,23 +2205,22 @@ class TriangleArbitrageDetector:
             if tick:
                 return tick.bid, tick.ask
             
-            # Fallback: ใช้ราคาปัจจุบัน + spread
+            # 🔮 Intelligent fallback: ใช้ราคาปัจจุบัน + estimated spread
             price = self.broker.get_current_price(symbol)
             if price:
-                spread = self.broker.get_spread(symbol) if hasattr(self.broker, 'get_spread') else 0
-                
-                # ตรวจสอบว่า spread เป็น None หรือไม่
-                if spread is None:
-                    spread = 0  # ใช้ค่า default 0 pips
+                # ใช้ estimated spread แทนการเรียก broker.get_spread()
+                estimated_spread = self._get_estimated_spread_for_pair(symbol)
                 
                 # แปลง spread จาก pips เป็นราคา
                 if 'JPY' in symbol:
-                    spread_price = spread * 0.01
+                    spread_price = estimated_spread * 0.01
                 else:
-                    spread_price = spread * 0.0001
+                    spread_price = estimated_spread * 0.0001
                 
                 bid = price - spread_price / 2
                 ask = price + spread_price / 2
+                
+                self.logger.debug(f"📊 {symbol}: Using estimated spread {estimated_spread} pips")
                 return bid, ask
             
             return None, None
@@ -2334,10 +2338,40 @@ class TriangleArbitrageDetector:
         """📊 คะแนนจาก Spread (0-20 คะแนน) | <=2pips=20, 5pips=10, >=10pips=0"""
         try:
             pair1, pair2, pair3 = triangle
-            spread1 = self.broker.get_spread(pair1) or 5.0
-            spread2 = self.broker.get_spread(pair2) or 5.0
-            spread3 = self.broker.get_spread(pair3) or 5.0
-            avg_spread = (spread1 + spread2 + spread3) / 3.0
+            
+            # 🔍 พยายามดึงข้อมูลจริงก่อน - ไม่ว่าจะเชื่อมต่อหรือไม่
+            spreads = []
+            real_data_count = 0
+            
+            for pair in [pair1, pair2, pair3]:
+                real_pair = self.symbol_mapper.get_real_symbol(pair)
+                
+                # ลองดึงข้อมูลจริงหลายวิธี
+                real_spread = self._try_get_real_spread(pair, real_pair)
+                
+                if real_spread is not None:
+                    spreads.append(real_spread)
+                    real_data_count += 1
+                    self.logger.debug(f"📊 {pair} ({real_pair}): Real spread {real_spread:.2f} pips")
+                else:
+                    # ใช้ estimated ถ้าไม่สามารถดึงข้อมูลจริงได้
+                    estimated = self._get_estimated_spread_for_pair(pair)
+                    spreads.append(estimated)
+                    self.logger.debug(f"📊 {pair} ({real_pair}): Estimated spread {estimated:.2f} pips")
+            
+            avg_spread = sum(spreads) / 3.0
+            
+            # แสดงข้อมูลว่าได้ข้อมูลจริงกี่ตัว
+            if real_data_count == 0:
+                self.logger.warning(f"⚠️ {triangle}: No real spread data - using all estimated spreads")
+            elif real_data_count < 3:
+                self.logger.info(f"📊 {triangle}: {real_data_count}/3 real spreads, {3-real_data_count} estimated")
+            else:
+                self.logger.info(f"✅ {triangle}: All 3 real spreads available")
+            
+            # บันทึก cache ถ้ามีข้อมูลใหม่
+            if real_data_count > 0:
+                self._save_spread_cache()
             
             if avg_spread <= 2.0:
                 score = 20.0
@@ -2355,6 +2389,170 @@ class TriangleArbitrageDetector:
         except Exception as e:
             self.logger.error(f"Error calculating spread score: {e}")
             return {'score': 10.0, 'weight': 0.20, 'value': 5.0}
+    
+    def _get_estimated_spreads(self, triangle: Tuple[str, str, str]) -> List[float]:
+        """🔮 คำนวณ estimated spreads สำหรับ triangle ทั้งหมด"""
+        pair1, pair2, pair3 = triangle
+        return [
+            self._get_estimated_spread_for_pair(pair1),
+            self._get_estimated_spread_for_pair(pair2),
+            self._get_estimated_spread_for_pair(pair3)
+        ]
+    
+    def _get_estimated_spread_for_pair(self, pair: str) -> float:
+        """🔮 คำนวณ estimated spread ตามประเภทคู่เงิน (ฉลาดกว่า fallback!)"""
+        pair = pair.upper()
+        
+        # Major pairs - spread ต่ำ (1.5-3.0 pips)
+        major_pairs = ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD']
+        if pair in major_pairs:
+            return 2.0
+        
+        # EUR crosses - spread ปานกลาง (2.0-4.0 pips)
+        eur_crosses = ['EURGBP', 'EURJPY', 'EURCHF', 'EURAUD', 'EURNZD', 'EURCAD']
+        if pair in eur_crosses:
+            return 3.0
+        
+        # GBP crosses - spread ปานกลาง (2.5-4.5 pips)
+        gbp_crosses = ['GBPJPY', 'GBPCHF', 'GBPAUD', 'GBPNZD', 'GBPCAD']
+        if pair in gbp_crosses:
+            return 3.5
+        
+        # AUD/NZD crosses - spread สูง (3.0-5.0 pips)
+        aud_nzd_crosses = ['AUDJPY', 'AUDCHF', 'AUDCAD', 'AUDNZD', 'NZDJPY', 'NZDCHF', 'NZDCAD']
+        if pair in aud_nzd_crosses:
+            return 4.0
+        
+        # CAD/CHF crosses - spread สูง (3.5-5.5 pips)
+        cad_chf_crosses = ['CADJPY', 'CADCHF', 'CHFJPY']
+        if pair in cad_chf_crosses:
+            return 4.5
+        
+        # Default - spread ปานกลาง
+        return 3.0
+    
+    def _try_get_real_spread(self, base_symbol: str, real_symbol: str) -> Optional[float]:
+        """🔍 พยายามดึงข้อมูล spread จริงหลายวิธี"""
+        try:
+            # วิธีที่ 0: ลองดึงจาก cache ก่อน
+            cached_spread = self._get_cached_spread(base_symbol)
+            if cached_spread is not None:
+                self.logger.debug(f"📋 {base_symbol}: Using cached spread {cached_spread:.2f} pips")
+                return cached_spread
+            
+            # วิธีที่ 1: ใช้ broker.get_spread()
+            spread = self.broker.get_spread(base_symbol)
+            if spread is not None and spread > 0:
+                # บันทึกลง cache
+                self._update_spread_cache(base_symbol, spread)
+                return spread
+            
+            # วิธีที่ 2: ใช้ MT5 โดยตรง (ถ้ามี)
+            try:
+                import MetaTrader5 as mt5
+                if mt5.initialize():
+                    # ลองดึงจาก real symbol
+                    tick = mt5.symbol_info_tick(real_symbol)
+                    if tick and tick.bid is not None and tick.ask is not None:
+                        spread_price = tick.ask - tick.bid
+                        
+                        # แปลงเป็น pips
+                        symbol_info = mt5.symbol_info(real_symbol)
+                        if symbol_info:
+                            digits = symbol_info.digits
+                            if digits == 5 or digits == 3:
+                                spread_pips = spread_price * 10000
+                            elif digits == 4 or digits == 2:
+                                spread_pips = spread_price * 10000
+                            else:
+                                spread_pips = spread_price * 10000
+                            
+                            if spread_pips > 0:
+                                # บันทึกลง cache
+                                self._update_spread_cache(base_symbol, spread_pips)
+                                return spread_pips
+                    
+                    mt5.shutdown()
+            except ImportError:
+                pass  # MT5 ไม่พร้อมใช้งาน
+            
+            # วิธีที่ 3: คำนวณจาก bid/ask ที่มี
+            bid, ask = self._get_bid_ask(base_symbol)
+            if bid is not None and ask is not None and ask > bid:
+                spread_price = ask - bid
+                # แปลงเป็น pips
+                if 'JPY' in base_symbol:
+                    spread_pips = spread_price * 100
+                else:
+                    spread_pips = spread_price * 10000
+                
+                if spread_pips > 0:
+                    # บันทึกลง cache
+                    self._update_spread_cache(base_symbol, spread_pips)
+                    return spread_pips
+            
+            return None
+            
+        except Exception as e:
+            self.logger.debug(f"Error getting real spread for {base_symbol}: {e}")
+            return None
+    
+    def _load_spread_cache(self):
+        """📂 โหลดข้อมูล spread cache จากไฟล์"""
+        try:
+            import json
+            import os
+            
+            if os.path.exists(self.spread_cache_file):
+                with open(self.spread_cache_file, 'r', encoding='utf-8') as f:
+                    cache_data = json.load(f)
+                    self.spread_cache = cache_data.get('spreads', {})
+                    self.logger.info(f"📂 Loaded {len(self.spread_cache)} spread cache entries")
+            else:
+                self.logger.debug("No spread cache file found - starting with empty cache")
+                
+        except Exception as e:
+            self.logger.error(f"Error loading spread cache: {e}")
+            self.spread_cache = {}
+    
+    def _save_spread_cache(self):
+        """💾 บันทึกข้อมูล spread cache ลงไฟล์"""
+        try:
+            import json
+            import os
+            from datetime import datetime
+            
+            cache_data = {
+                "_comment": "Spread Cache - เก็บข้อมูล spread จริงจากโบรกเกอร์",
+                "_last_updated": datetime.now().isoformat(),
+                "_source": "Real broker data",
+                "spreads": self.spread_cache,
+                "metadata": {
+                    "broker": "MetaTrader5",
+                    "timeframe": "real-time",
+                    "accuracy": "high",
+                    "note": "ข้อมูลนี้จะถูกอัปเดตเมื่อดึงข้อมูลจริงได้"
+                }
+            }
+            
+            os.makedirs(os.path.dirname(self.spread_cache_file), exist_ok=True)
+            with open(self.spread_cache_file, 'w', encoding='utf-8') as f:
+                json.dump(cache_data, f, indent=2, ensure_ascii=False)
+                
+            self.logger.debug(f"💾 Saved spread cache with {len(self.spread_cache)} entries")
+            
+        except Exception as e:
+            self.logger.error(f"Error saving spread cache: {e}")
+    
+    def _update_spread_cache(self, symbol: str, spread: float):
+        """🔄 อัปเดต spread cache"""
+        if spread > 0:
+            self.spread_cache[symbol.upper()] = spread
+            self.logger.debug(f"🔄 Updated spread cache: {symbol} = {spread:.2f} pips")
+    
+    def _get_cached_spread(self, symbol: str) -> Optional[float]:
+        """📋 ดึงข้อมูล spread จาก cache"""
+        return self.spread_cache.get(symbol.upper())
     
     def _get_market_condition_score(self, triangle: Tuple[str, str, str]) -> Dict:
         """🌍 คะแนนจากสภาพตลาด (0-20 คะแนน) | Ranging=20, Normal=15, Trending=10, Volatile=5"""

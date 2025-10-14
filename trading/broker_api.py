@@ -461,7 +461,8 @@ class BrokerAPI:
         """Get current spread for a symbol in pips"""
         try:
             if not self._connected:
-                self.logger.warning(f"Not connected to broker - cannot get spread for {symbol}")
+                # 🔇 ไม่แสดง warning เมื่อ broker ไม่ได้เชื่อมต่อ (เป็นเรื่องปกติ)
+                self.logger.debug(f"Broker not connected - cannot get spread for {symbol}")
                 return None
             
             if self.broker_type == "MetaTrader5":
@@ -471,7 +472,8 @@ class BrokerAPI:
                 # ดึงข้อมูล symbol info เพื่อรู้ digits
                 symbol_info = mt5.symbol_info(real_symbol)
                 if not symbol_info:
-                    self.logger.warning(f"Symbol info not found for {symbol} (real: {real_symbol})")
+                    # 🔇 ไม่แสดง warning สำหรับ symbol ที่ไม่มีใน MT5 (เป็นเรื่องปกติ)
+                    self.logger.debug(f"Symbol info not found for {symbol} (real: {real_symbol}) - using estimated")
                     return None
                 
                 # ดึงราคา tick
