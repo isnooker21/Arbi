@@ -31,6 +31,17 @@ from typing import Dict, List, Optional, Tuple
 import json
 import os
 import time
+import sys
+
+# Import SymbolMapper
+try:
+    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if PROJECT_ROOT not in sys.path:
+        sys.path.append(PROJECT_ROOT)
+    from utils.symbol_mapper import SymbolMapper
+except ImportError:
+    SymbolMapper = None
+    print("⚠️ SymbolMapper not available - using direct symbol names")
 
 class BrokerAPI:
     def __init__(self, broker_type: str = "MetaTrader5", config_file: str = "config/broker_config.json"):
@@ -39,6 +50,11 @@ class BrokerAPI:
         self.config = self._load_config(config_file)
         self._connected = False
         self.account_info = None
+        
+        # 🆕 Initialize SymbolMapper
+        self.symbol_mapper = SymbolMapper() if SymbolMapper else None
+        if self.symbol_mapper:
+            self.logger.info("✅ SymbolMapper initialized in BrokerAPI")
         
     def _load_config(self, config_file: str) -> Dict:
         """Load broker configuration from JSON file"""
@@ -365,6 +381,12 @@ class BrokerAPI:
         ]
         return fallback_pairs
     
+    def _get_real_symbol(self, symbol: str) -> str:
+        """🆕 แปลง base symbol เป็น real symbol ของ broker"""
+        if self.symbol_mapper:
+            return self.symbol_mapper.get_real_symbol(symbol)
+        return symbol
+    
     def get_current_price(self, symbol: str) -> Optional[float]:
         """Get current price for a symbol"""
         try:
@@ -372,7 +394,9 @@ class BrokerAPI:
                 return None
             
             if self.broker_type == "MetaTrader5":
-                tick = mt5.symbol_info_tick(symbol)
+                # 🆕 ใช้ real symbol จาก mapper
+                real_symbol = self._get_real_symbol(symbol)
+                tick = mt5.symbol_info_tick(real_symbol)
                 if tick:
                     return tick.bid  # Return bid price
             
@@ -441,14 +465,17 @@ class BrokerAPI:
                 return None
             
             if self.broker_type == "MetaTrader5":
+                # 🆕 ใช้ real symbol จาก mapper
+                real_symbol = self._get_real_symbol(symbol)
+                
                 # ดึงข้อมูล symbol info เพื่อรู้ digits
-                symbol_info = mt5.symbol_info(symbol)
+                symbol_info = mt5.symbol_info(real_symbol)
                 if not symbol_info:
-                    self.logger.warning(f"Symbol info not found for {symbol}")
+                    self.logger.warning(f"Symbol info not found for {symbol} (real: {real_symbol})")
                     return None
                 
                 # ดึงราคา tick
-                tick = mt5.symbol_info_tick(symbol)
+                tick = mt5.symbol_info_tick(real_symbol)
                 if not tick or tick.bid is None or tick.ask is None:
                     self.logger.warning(f"Tick data unavailable for {symbol}: bid={tick.bid if tick else None}, ask={tick.ask if tick else None}")
                     return None
@@ -482,6 +509,9 @@ class BrokerAPI:
                 return None
             
             if self.broker_type == "MetaTrader5":
+                # 🆕 ใช้ real symbol จาก mapper
+                real_symbol = self._get_real_symbol(symbol)
+                
                 # Convert timeframe string to MT5 constant
                 tf_map = {
                     'M1': mt5.TIMEFRAME_M1,
@@ -496,7 +526,7 @@ class BrokerAPI:
                 tf = tf_map.get(timeframe, mt5.TIMEFRAME_M1)
                 
                 # Get rates
-                rates = mt5.copy_rates_from_pos(symbol, tf, 0, count)
+                rates = mt5.copy_rates_from_pos(real_symbol, tf, 0, count)
                 
                 if rates is None or len(rates) == 0:
                     return None
@@ -596,16 +626,25 @@ class BrokerAPI:
                         'type': order_type
                     }
                 
-                # Check symbol info
+                # Check symbol info (symbol should already be real symbol from arbitrage_detector)
                 symbol_info = mt5.symbol_info(symbol)
                 if symbol_info is None:
                     self.logger.error(f"❌ Symbol {symbol} not found in MT5")
-                    return {
-                        'success': False,
-                        'error': f'Symbol {symbol} not found',
-                        'symbol': symbol,
-                        'type': order_type
-                    }
+                    # ลองใช้ mapper อีกครั้ง
+                    real_symbol = self._get_real_symbol(symbol)
+                    if real_symbol != symbol:
+                        symbol_info = mt5.symbol_info(real_symbol)
+                        if symbol_info:
+                            symbol = real_symbol  # อัปเดต symbol
+                            self.logger.info(f"✅ Found symbol using mapper: {real_symbol}")
+                    
+                    if symbol_info is None:
+                        return {
+                            'success': False,
+                            'error': f'Symbol {symbol} not found',
+                            'symbol': symbol,
+                            'type': order_type
+                        }
                 
                 # Check if symbol is tradeable
                 if not symbol_info.trade_mode:
