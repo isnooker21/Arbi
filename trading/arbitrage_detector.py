@@ -2154,14 +2154,10 @@ class TriangleArbitrageDetector:
             forward_net = forward_profit_percent - total_cost_percent
             reverse_net = reverse_profit_percent - total_cost_percent
             
-            # 6. Threshold ขั้นต่ำ (ดึงจาก config)
-            min_profit_threshold = self._get_config_value('arbitrage_params.detection.min_threshold', 0.000001) * 100
-            # ใช้ค่าจาก config file โดยตรง ไม่ hardcode
+            # 6. เลือกทิศทางที่ดีกว่า (ไม่ตัดสินใจ threshold ที่นี่)
+            self.logger.info(f"📊 {triangle}: Net profits - Forward: {forward_net:.4f}%, Reverse: {reverse_net:.4f}%")
             
-            # 7. ตัดสินใจ
-            self.logger.info(f"📊 {triangle}: Net profits - Forward: {forward_net:.4f}%, Reverse: {reverse_net:.4f}%, Min threshold: {min_profit_threshold:.4f}%")
-            
-            if forward_net > min_profit_threshold and forward_net >= reverse_net:
+            if forward_net >= reverse_net:
                 self.logger.info(f"✅ {triangle}: FORWARD path selected - Net profit: {forward_net:.4f}%")
                 return {
                     'direction': 'forward',
@@ -2174,7 +2170,7 @@ class TriangleArbitrageDetector:
                         pair3: 'SELL'
                     }
                 }
-            elif reverse_net > min_profit_threshold:
+            else:
                 self.logger.info(f"✅ {triangle}: REVERSE path selected - Net profit: {reverse_net:.4f}%")
                 return {
                     'direction': 'reverse',
@@ -2187,10 +2183,6 @@ class TriangleArbitrageDetector:
                         pair3: 'BUY'
                     }
                 }
-            else:
-                # ไม่มีโอกาสที่ทำกำไรได้
-                self.logger.info(f"❌ {triangle}: No profitable opportunity - Forward: {forward_net:.4f}%, Reverse: {reverse_net:.4f}% (min: {min_profit_threshold:.4f}%)")
-                return None
                 
         except Exception as e:
             self.logger.error(f"Error calculating arbitrage direction for {triangle}: {e}")
