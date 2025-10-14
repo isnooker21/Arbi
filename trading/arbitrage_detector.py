@@ -2156,8 +2156,8 @@ class TriangleArbitrageDetector:
             
             # 6. Threshold ขั้นต่ำ (ดึงจาก config)
             min_profit_threshold = self._get_config_value('arbitrage_params.detection.min_threshold', 0.0001) * 100
-            if min_profit_threshold < 0.01:  # ขั้นต่ำ 0.01% (0.1 pip) - ปรับให้ง่ายขึ้นมาก
-                min_profit_threshold = 0.01
+            if min_profit_threshold < 0.001:  # ขั้นต่ำ 0.001% (0.01 pip) - ปรับให้ง่ายขึ้นมาก
+                min_profit_threshold = 0.001
             
             # 7. ตัดสินใจ
             self.logger.info(f"📊 {triangle}: Net profits - Forward: {forward_net:.4f}%, Reverse: {reverse_net:.4f}%, Min threshold: {min_profit_threshold:.4f}%")
@@ -2287,8 +2287,8 @@ class TriangleArbitrageDetector:
             
             self.logger.info(f"💰 {triangle}: Raw profit: {raw_profit:.4f}%, Cost: {cost_percent:.4f}%, Net: {profit_percent:.4f}%")
             
-            # ต้องกำไรสุทธิอย่างน้อย 0.01% (0.1 pip) - ปรับให้ง่ายขึ้นมาก
-            min_threshold = 0.01
+            # ต้องกำไรสุทธิอย่างน้อย 0.001% (0.01 pip) - ปรับให้ง่ายขึ้นมาก
+            min_threshold = 0.001
             
             if profit_percent < min_threshold:
                 self.logger.info(f"❌ {triangle}: Profit too low ({profit_percent:.4f}% < {min_threshold}%)")
