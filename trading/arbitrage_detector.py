@@ -59,17 +59,17 @@ class TriangleArbitrageDetector:
         # Adaptive parameters - More strict and accurate
         # self.current_regime = 'normal'  # DISABLED - not used in simple trading
         # self.market_regime = 'normal'  # DISABLED - not used in simple trading
-        self.arbitrage_threshold = 0.008  # Higher threshold (0.8 pips) for better accuracy
-        self.volatility_threshold = 0.008  # Same as arbitrage_threshold for simple trading
+        self.arbitrage_threshold = 0.0001  # Lower threshold (0.01 pips) for easier detection
+        self.volatility_threshold = 0.0001  # Same as arbitrage_threshold for simple trading
         self.execution_timeout = 150  # Target execution speed
         self.position_size = 0.1  # Default position size
         
-        # Enhanced validation parameters
-        self.min_confidence_score = 0.75  # Minimum confidence score (75%)
-        self.max_spread_ratio = 0.3  # Maximum spread ratio (30%)
-        self.min_volume_threshold = 0.5  # Minimum volume threshold
-        self.price_stability_checks = 3  # Number of price stability checks
-        self.confirmation_delay = 2  # Seconds to wait for confirmation
+        # Enhanced validation parameters - ปรับให้ง่ายขึ้น
+        self.min_confidence_score = 0.5  # Minimum confidence score (50%) - ลดจาก 75%
+        self.max_spread_ratio = 0.5  # Maximum spread ratio (50%) - เพิ่มจาก 30%
+        self.min_volume_threshold = 0.1  # Minimum volume threshold - ลดจาก 0.5
+        self.price_stability_checks = 1  # Number of price stability checks - ลดจาก 3
+        self.confirmation_delay = 1  # Seconds to wait for confirmation - ลดจาก 2
         
         # Group management for multiple arbitrage triangles (แยกกัน)
         self.active_groups = {}  # เก็บข้อมูลกลุ่มที่เปิดอยู่ (รวมทุกสามเหลี่ยม)
@@ -2086,8 +2086,8 @@ class TriangleArbitrageDetector:
                 # เพราะระบบจะคำนวณต้นทุนจาก Bid-Ask ใน _calculate_total_cost แทน
                 return True
             
-            # Check if all spreads are below threshold
-            max_spread = self._get_config_value('arbitrage_params.detection.spread_tolerance', 3.0)  # ดึงจาก config
+            # Check if all spreads are below threshold - ปรับให้ยืดหยุ่นมากขึ้น
+            max_spread = self._get_config_value('arbitrage_params.detection.spread_tolerance', 10.0)  # เพิ่มจาก 3.0 เป็น 10.0
             acceptable = (spread1 < max_spread and 
                          spread2 < max_spread and 
                          spread3 < max_spread)
@@ -2156,8 +2156,8 @@ class TriangleArbitrageDetector:
             
             # 6. Threshold ขั้นต่ำ (ดึงจาก config)
             min_profit_threshold = self._get_config_value('arbitrage_params.detection.min_threshold', 0.0001) * 100
-            if min_profit_threshold < 0.1:  # ขั้นต่ำ 0.1% (1 pip) - ปรับให้ง่ายขึ้น
-                min_profit_threshold = 0.1
+            if min_profit_threshold < 0.01:  # ขั้นต่ำ 0.01% (0.1 pip) - ปรับให้ง่ายขึ้นมาก
+                min_profit_threshold = 0.01
             
             # 7. ตัดสินใจ
             self.logger.info(f"📊 {triangle}: Net profits - Forward: {forward_net:.4f}%, Reverse: {reverse_net:.4f}%, Min threshold: {min_profit_threshold:.4f}%")
@@ -2287,8 +2287,8 @@ class TriangleArbitrageDetector:
             
             self.logger.info(f"💰 {triangle}: Raw profit: {raw_profit:.4f}%, Cost: {cost_percent:.4f}%, Net: {profit_percent:.4f}%")
             
-            # ต้องกำไรสุทธิอย่างน้อย 0.1% (1 pip) - ปรับให้ง่ายขึ้น
-            min_threshold = 0.1
+            # ต้องกำไรสุทธิอย่างน้อย 0.01% (0.1 pip) - ปรับให้ง่ายขึ้นมาก
+            min_threshold = 0.01
             
             if profit_percent < min_threshold:
                 self.logger.info(f"❌ {triangle}: Profit too low ({profit_percent:.4f}% < {min_threshold}%)")

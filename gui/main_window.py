@@ -235,7 +235,7 @@ class MainWindow:
             # Mode configurations
             mode_configs = {
                 "racing": {
-                    "min_threshold": 0.00001,
+                    "min_threshold": 0.000001,
                     "commission_rate": 0.00001,
                     "max_active_triangles": 5,
                     "trailing_stop_distance": 20.0,
@@ -422,6 +422,29 @@ class MainWindow:
             arb_params['detection']['min_threshold'] = config.get('min_threshold', 0.00005)
             arb_params['detection']['commission_rate'] = config.get('commission_rate', 0.00005)
             
+            # Update execution parameters
+            if 'execution' not in arb_params:
+                arb_params['execution'] = {}
+            arb_params['execution']['commission_rate'] = config.get('commission_rate', 0.00005)
+            
+            # Update arbitrage section (top level)
+            if 'arbitrage' not in adaptive_config:
+                adaptive_config['arbitrage'] = {}
+            adaptive_config['arbitrage']['min_threshold'] = config.get('min_threshold', 0.00005)
+            adaptive_config['arbitrage']['commission_rate'] = config.get('commission_rate', 0.00005)
+            adaptive_config['arbitrage']['max_active_triangles'] = config.get('max_active_triangles', 3)
+            
+            # Update system_limits parameters
+            if 'system_limits' not in adaptive_config:
+                adaptive_config['system_limits'] = {}
+            adaptive_config['system_limits']['max_concurrent_groups'] = config.get('max_active_triangles', 3)
+            adaptive_config['system_limits']['max_active_triangles'] = config.get('max_active_triangles', 3)
+            
+            # Update risk section (top level)
+            if 'risk' not in adaptive_config:
+                adaptive_config['risk'] = {}
+            adaptive_config['risk']['trailing_stop_distance'] = config.get('trailing_stop_distance', 30.0)
+            
             # Update triangles parameters
             if 'triangles' not in arb_params:
                 arb_params['triangles'] = {}
@@ -467,6 +490,7 @@ class MainWindow:
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(adaptive_config, f, indent=2, ensure_ascii=False)
             
+            print(f"💾 Config file updated: {config_path}")
             print(f"🔧 All settings updated for {mode} mode:")
             print(f"   📊 Arbitrage:")
             print(f"      - Min Threshold: {config.get('min_threshold', 0.00005)}")

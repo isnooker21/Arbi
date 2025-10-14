@@ -395,15 +395,27 @@ class AdaptiveEngine:
     def _execute_adaptive_trading(self):
         """ดำเนินการ Adaptive Trading Logic"""
         try:
-            # ตรวจสอบว่ามีกลุ่ม arbitrage เปิดอยู่หรือไม่
-            if hasattr(self.arbitrage_detector, 'active_groups') and len(self.arbitrage_detector.active_groups) > 0:
-                self.logger.debug("⏸️ มีกลุ่ม arbitrage เปิดอยู่ - ข้ามการตรวจสอบใหม่")
-                return
+            # ตรวจสอบว่ามีกลุ่ม arbitrage เปิดอยู่หรือไม่ - แก้ไขให้เปิดได้ตาม max_active_triangles
+            if hasattr(self.arbitrage_detector, 'active_groups'):
+                current_groups = len(self.arbitrage_detector.active_groups)
+                max_groups = self.position_sizing.get('max_position_size', 5) / 2  # max_position_size = max_groups * 2
+                
+                if current_groups >= max_groups:
+                    self.logger.debug(f"⏸️ มีกลุ่ม arbitrage เปิดอยู่ {current_groups}/{max_groups} - ข้ามการตรวจสอบใหม่")
+                    return
+                else:
+                    self.logger.info(f"🔄 เปิดกลุ่มใหม่ได้ {current_groups}/{max_groups} - ตรวจสอบโอกาส arbitrage")
             
-            # ตรวจสอบว่ามีคู่เงินที่ถูกใช้แล้วหรือไม่
-            if hasattr(self.arbitrage_detector, 'used_currency_pairs') and len(self.arbitrage_detector.used_currency_pairs) > 0:
-                self.logger.debug("⏸️ มีคู่เงินที่ถูกใช้แล้ว - ข้ามการตรวจสอบใหม่")
-                return
+            # ตรวจสอบว่ามีคู่เงินที่ถูกใช้แล้วหรือไม่ - แก้ไขให้เปิดได้ตาม max_active_triangles
+            if hasattr(self.arbitrage_detector, 'used_currency_pairs'):
+                total_used_pairs = sum(len(pairs) for pairs in self.arbitrage_detector.used_currency_pairs.values())
+                max_pairs = self.position_sizing.get('max_position_size', 5) * 3  # 3 pairs per triangle
+                
+                if total_used_pairs >= max_pairs:
+                    self.logger.debug(f"⏸️ มีคู่เงินที่ถูกใช้แล้ว {total_used_pairs}/{max_pairs} - ข้ามการตรวจสอบใหม่")
+                    return
+                else:
+                    self.logger.info(f"🔄 เปิดคู่เงินใหม่ได้ {total_used_pairs}/{max_pairs} - ตรวจสอบโอกาส arbitrage")
             
             # Get current market regime - DISABLED for simple trading system
             # market_analysis = self.market_analyzer.analyze_market_conditions()
@@ -432,10 +444,16 @@ class AdaptiveEngine:
         try:
             self.logger.debug("Executing volatile market trading strategy")
             
-            # ตรวจสอบว่ามีกลุ่ม arbitrage เปิดอยู่หรือไม่
-            if hasattr(self.arbitrage_detector, 'active_groups') and len(self.arbitrage_detector.active_groups) > 0:
-                self.logger.debug("⏸️ มีกลุ่ม arbitrage เปิดอยู่ - ข้ามการตรวจสอบใหม่")
-                return
+            # ตรวจสอบว่ามีกลุ่ม arbitrage เปิดอยู่หรือไม่ - แก้ไขให้เปิดได้ตาม max_active_triangles
+            if hasattr(self.arbitrage_detector, 'active_groups'):
+                current_groups = len(self.arbitrage_detector.active_groups)
+                max_groups = self.position_sizing.get('max_position_size', 5) / 2
+                
+                if current_groups >= max_groups:
+                    self.logger.debug(f"⏸️ มีกลุ่ม arbitrage เปิดอยู่ {current_groups}/{max_groups} - ข้ามการตรวจสอบใหม่")
+                    return
+                else:
+                    self.logger.info(f"🔄 เปิดกลุ่มใหม่ได้ {current_groups}/{max_groups} - ตรวจสอบโอกาส arbitrage")
             
             # In volatile markets, be more conservative
             # Focus on high-confidence arbitrage opportunities only
@@ -456,10 +474,16 @@ class AdaptiveEngine:
         try:
             self.logger.debug("Executing trending market trading strategy")
             
-            # ตรวจสอบว่ามีกลุ่ม arbitrage เปิดอยู่หรือไม่
-            if hasattr(self.arbitrage_detector, 'active_groups') and len(self.arbitrage_detector.active_groups) > 0:
-                self.logger.debug("⏸️ มีกลุ่ม arbitrage เปิดอยู่ - ข้ามการตรวจสอบใหม่")
-                return
+            # ตรวจสอบว่ามีกลุ่ม arbitrage เปิดอยู่หรือไม่ - แก้ไขให้เปิดได้ตาม max_active_triangles
+            if hasattr(self.arbitrage_detector, 'active_groups'):
+                current_groups = len(self.arbitrage_detector.active_groups)
+                max_groups = self.position_sizing.get('max_position_size', 5) / 2
+                
+                if current_groups >= max_groups:
+                    self.logger.debug(f"⏸️ มีกลุ่ม arbitrage เปิดอยู่ {current_groups}/{max_groups} - ข้ามการตรวจสอบใหม่")
+                    return
+                else:
+                    self.logger.info(f"🔄 เปิดกลุ่มใหม่ได้ {current_groups}/{max_groups} - ตรวจสอบโอกาส arbitrage")
             
             # In trending markets, be more aggressive
             # Look for both arbitrage and recovery opportunities
@@ -480,10 +504,16 @@ class AdaptiveEngine:
         try:
             self.logger.debug("Executing ranging market trading strategy")
             
-            # ตรวจสอบว่ามีกลุ่ม arbitrage เปิดอยู่หรือไม่
-            if hasattr(self.arbitrage_detector, 'active_groups') and len(self.arbitrage_detector.active_groups) > 0:
-                self.logger.debug("⏸️ มีกลุ่ม arbitrage เปิดอยู่ - ข้ามการตรวจสอบใหม่")
-                return
+            # ตรวจสอบว่ามีกลุ่ม arbitrage เปิดอยู่หรือไม่ - แก้ไขให้เปิดได้ตาม max_active_triangles
+            if hasattr(self.arbitrage_detector, 'active_groups'):
+                current_groups = len(self.arbitrage_detector.active_groups)
+                max_groups = self.position_sizing.get('max_position_size', 5) / 2
+                
+                if current_groups >= max_groups:
+                    self.logger.debug(f"⏸️ มีกลุ่ม arbitrage เปิดอยู่ {current_groups}/{max_groups} - ข้ามการตรวจสอบใหม่")
+                    return
+                else:
+                    self.logger.info(f"🔄 เปิดกลุ่มใหม่ได้ {current_groups}/{max_groups} - ตรวจสอบโอกาส arbitrage")
             
             # In ranging markets, focus on arbitrage opportunities
             # Recovery opportunities are less reliable in ranging markets
@@ -500,10 +530,16 @@ class AdaptiveEngine:
         try:
             self.logger.debug("Executing normal market trading strategy")
             
-            # ตรวจสอบว่ามีกลุ่ม arbitrage เปิดอยู่หรือไม่
-            if hasattr(self.arbitrage_detector, 'active_groups') and len(self.arbitrage_detector.active_groups) > 0:
-                self.logger.debug("⏸️ มีกลุ่ม arbitrage เปิดอยู่ - ข้ามการตรวจสอบใหม่")
-                return
+            # ตรวจสอบว่ามีกลุ่ม arbitrage เปิดอยู่หรือไม่ - แก้ไขให้เปิดได้ตาม max_active_triangles
+            if hasattr(self.arbitrage_detector, 'active_groups'):
+                current_groups = len(self.arbitrage_detector.active_groups)
+                max_groups = self.position_sizing.get('max_position_size', 5) / 2
+                
+                if current_groups >= max_groups:
+                    self.logger.debug(f"⏸️ มีกลุ่ม arbitrage เปิดอยู่ {current_groups}/{max_groups} - ข้ามการตรวจสอบใหม่")
+                    return
+                else:
+                    self.logger.info(f"🔄 เปิดกลุ่มใหม่ได้ {current_groups}/{max_groups} - ตรวจสอบโอกาส arbitrage")
             
             # In normal markets, use balanced approach
             # Check for both arbitrage and recovery opportunities

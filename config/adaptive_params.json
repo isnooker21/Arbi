@@ -39,7 +39,7 @@
     },
     "risk_management": {
       "max_portfolio_risk": 0.02,
-      "max_concurrent_groups": 2,
+      "max_concurrent_groups": 5,
       "max_exposure_percent": 80,
       "reserve_percent": 20,
       "correlation_limit": 0.85,
@@ -153,7 +153,7 @@
       "min_profit_threshold": 0.0001
     },
     "triangles": {
-      "max_active_triangles": 3,
+      "max_active_triangles": 5,
       "triangle_hold_time_minutes": 720.0,
       "correlation_check_interval": 60.0,
       "balance_tolerance_percent": 25.0,
@@ -197,7 +197,7 @@
     "description": "Market analysis and regime detection parameters"
   },
   "system_limits": {
-    "max_concurrent_groups": 2,
+    "max_concurrent_groups": 5,
     "max_portfolio_risk": 0.02,
     "max_drawdown_percent": 20,
     "max_position_hold_hours": 12,
@@ -253,9 +253,9 @@
     "description": "System performance and threading settings"
   },
   "arbitrage": {
-    "min_threshold": 5e-05,
-    "commission_rate": 5e-05,
-    "max_active_triangles": 3
+    "min_threshold": 0.00001,
+    "commission_rate": 0.00001,
+    "max_active_triangles": 5
   },
   "risk": {
     "trailing_stop_distance": 30.0
